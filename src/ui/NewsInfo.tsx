@@ -21,7 +21,8 @@ const NewsInfo = React.memo(({appType, onAppConfigChange}: {
     }, []);
     const [dialogOpen, setDialogOpen] = React.useState(false);
     
-    const articles = News.getArticles(appType);
+    // TeamTimeline does not support News yet
+    const articles = appType === "TeamTimeline" ? [] : News.getArticles(appType);
     if (articles.length === 0) {
         return <></>;
     }

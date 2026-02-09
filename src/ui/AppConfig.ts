@@ -12,21 +12,22 @@ export default interface AppConfig {
     news: {
         ResearchCalc: string,
         IvCalc: string,
+        TeamTimeline: string,
     },
 }
 
-export type AppType = "ResearchCalc" | "IvCalc";
+export type AppType = "ResearchCalc" | "IvCalc" | "TeamTimeline";
 
 export const AppConfigContext = React.createContext<AppConfig>({
     iconUrl: null, language: "", pwacnt: 0,
-    news: {ResearchCalc: "", IvCalc: ""}});
+    news: {ResearchCalc: "", IvCalc: "", TeamTimeline: ""}});
 
 export function loadConfig(language:string): AppConfig {
     const config: AppConfig = {
         iconUrl: null,
         language,
         pwacnt: -1,
-        news: {ResearchCalc: "", IvCalc: ""},
+        news: {ResearchCalc: "", IvCalc: "", TeamTimeline: ""},
     };
 
     const data = localStorage.getItem("PokeSleepTool");
@@ -53,6 +54,9 @@ export function loadConfig(language:string): AppConfig {
         }
         if (typeof(json.news.IvCalc) === "string") {
             config.news.IvCalc = json.news.IvCalc;
+        }
+        if (typeof(json.news.TeamTimeline) === "string") {
+            config.news.TeamTimeline = json.news.TeamTimeline;
         }
     }
     return config;

@@ -1,0 +1,116 @@
+import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import type { TeamSummary } from '../types/TimeSlotTypes';
+import TeamSummaryRow from './TeamSummaryRow';
+
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({
+        t: (_key: string, defaultValue?: string) => defaultValue ?? _key,
+    }),
+}));
+
+vi.mock('../../../../ui/IvCalc/IngredientIcon', () => ({
+    default: ({ name }: { name: string }) => <span>{name}</span>,
+}));
+
+const TEAM_SUMMARY: TeamSummary = {
+    totalIngredients: [],
+    totalBerryEP: 1000,
+    totalIngredientEP: 2000,
+    totalSkillEP: 3000,
+    grandTotalEP: 6000,
+    totalPresentCandyCount: 0,
+    totalCookingPotCapacityIncrease: 0,
+    totalTastyChanceIncreasePercent: 0,
+    totalDreamShardCount: 0,
+};
+
+const TEAM_SUMMARY_WITH_INGREDIENTS: TeamSummary = {
+    ...TEAM_SUMMARY,
+    totalIngredients: [
+        { name: 'milk', count: 3 },
+        { name: 'apple', count: 12 },
+        { name: 'honey', count: 1 },
+        { name: 'mushroom', count: 6 },
+    ],
+};
+
+describe('TeamSummaryRow', () => {
+    it('shows label in details mode', () => {
+        render(<TeamSummaryRow teamSummary={TEAM_SUMMARY} layoutMode="details" />);
+        expect(screen.getByText('合計')).toBeDefined();
+    });
+
+    it('hides label in average mode', () => {
+        render(<TeamSummaryRow teamSummary={TEAM_SUMMARY} layoutMode="average" />);
+        expect(screen.queryByText('合計')).toBeNull();
+        expect(screen.getByText('total 6,000EP')).toBeDefined();
+    });
+
+    it('sorts ingredients by count descending and shows ingredient totals in details mode', () => {
+        const { container } = render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY_WITH_INGREDIENTS}
+                layoutMode="details"
+                simulationDays={2}
+            />
+        );
+
+        const content = container.textContent ?? '';
+        expect(content.indexOf('apple')).toBeLessThan(content.indexOf('mushroom'));
+        expect(content.indexOf('mushroom')).toBeLessThan(content.indexOf('milk'));
+        expect(content.indexOf('milk')).toBeLessThan(content.indexOf('honey'));
+        expect(content).toContain('食材合計: 22');
+        expect(content).toContain('1食平均 : 3.7');
+    });
+
+    it('renders EP panel before ingredient metadata', () => {
+        const { container } = render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY_WITH_INGREDIENTS}
+                layoutMode="details"
+                simulationDays={2}
+            />
+        );
+
+        const content = container.textContent ?? '';
+        expect(content.indexOf('total 6,000EP')).toBeLessThan(content.indexOf('食材合計: 22'));
+    });
+
+    it('always keeps top 3 ingredients visible and groups only low ingredients after 4th item', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY_WITH_INGREDIENTS}
+                layoutMode="average"
+                simulationDays={2}
+            />
+        );
+
+        const trigger = screen.getByRole('button', { name: '他 1' });
+        expect(trigger).toBeDefined();
+        expect(screen.getByText('milk')).toBeDefined();
+        fireEvent.click(trigger);
+
+        expect(screen.getByText('honey')).toBeDefined();
+    });
+
+    it('shows 食材合計 as integer', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={{
+                    ...TEAM_SUMMARY,
+                    totalIngredients: [
+                        { name: 'apple', count: 1000.4 },
+                        { name: 'milk', count: 944.5 },
+                    ],
+                }}
+                layoutMode="average"
+                simulationDays={7}
+            />
+        );
+
+        expect(screen.getByText('食材合計:')).toBeDefined();
+        expect((screen.getByText('食材合計:').parentElement?.textContent) ?? '').toContain('1,945');
+    });
+});

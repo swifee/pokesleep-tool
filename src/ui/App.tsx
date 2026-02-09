@@ -1,6 +1,7 @@
 import './App.css';
 import ResearchCalcApp from './ResearchCalc/ResearchCalcApp';
 import IvCalcApp from './IvCalc/IvCalcApp';
+import TeamTimelineApp from '../extensions/apps/TeamTimeline/TeamTimelineApp';
 import { useCallback, useEffect, useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material';
 import AppConfig, {
@@ -66,9 +67,11 @@ export default function App({config}: {config:AppConfig}) {
         <AppConfigContext.Provider value={appConfig}>
             <ToolBar app={curApp} onAppChange={onAppChange}
                 onAppConfigChange={onAppConfigChange}/>
-            <NewsInfo appType={curApp} onAppConfigChange={onAppConfigChange}/>
+            {curApp !== "TeamTimeline" &&
+                <NewsInfo appType={curApp} onAppConfigChange={onAppConfigChange}/>}
             {curApp === "ResearchCalc" && <ResearchCalcApp/>}
             {curApp === "IvCalc" && <IvCalcApp/>}
+            {curApp === "TeamTimeline" && <TeamTimelineApp/>}
             <PwaNotify app={curApp} pwaCount={config.pwacnt} onClose={onPwaBannerClose}/>
         </AppConfigContext.Provider>
     </ThemeProvider>);
@@ -106,8 +109,9 @@ function useMultilingual(config: AppConfig) {
  */
 function useRouter(language: string): [AppType, (v:AppType) => void] {
     const initialApp: AppType = (
-        window.location.pathname.startsWith("/pokesleep-tool/iv/") ?
-        "IvCalc" : "ResearchCalc");
+        window.location.pathname.startsWith("/pokesleep-tool/iv/") ? "IvCalc" :
+        window.location.pathname.startsWith("/pokesleep-tool/timeline/") ? "TeamTimeline" :
+        "ResearchCalc");
 
     const { t, i18n } = useTranslation();
     const [currentApp, setCurrentApp] = useState<AppType>(initialApp);
@@ -142,6 +146,8 @@ function useRouter(language: string): [AppType, (v:AppType) => void] {
         let url = document.location.origin + "/pokesleep-tool/";
         if (currentApp === "IvCalc") {
             url += 'iv/';
+        } else if (currentApp === "TeamTimeline") {
+            url += 'timeline/';
         }
         if (language !== "en") {
             url += `index.${language.toLowerCase()}.html`;
