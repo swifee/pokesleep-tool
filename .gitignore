@@ -9,9 +9,13 @@ src/data/spo.json
 .pnp.js
 *.tsv
 
-# claude code
-.claude/settings.local.json
-.claude/*.md
+# ai tool configs (local only)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.codex/
+.gemini/
 
 # testing
 /coverage
