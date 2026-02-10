@@ -31,6 +31,10 @@ export default function ToolBar({app, onAppChange, onAppConfigChange}: ToolBarPr
         onAppChange("IvCalc");
         setMoreMenuAnchor(null);
     };
+    const teamTimelineClick = () => {
+        onAppChange("TeamTimeline");
+        setMoreMenuAnchor(null);
+    };
     const moreButtonClick = (event: React.MouseEvent<HTMLElement>) => {
         setMoreMenuAnchor(event.currentTarget);
     };
@@ -77,6 +81,10 @@ export default function ToolBar({app, onAppChange, onAppConfigChange}: ToolBarPr
                 <MenuItem onClick={rpCalcClick}>
                     <ListItemIcon>{app === "IvCalc" ? <CheckIcon/> : <Icon/>}</ListItemIcon>
                     {t("IvCalc.short title")}
+                </MenuItem>
+                <MenuItem onClick={teamTimelineClick}>
+                    <ListItemIcon>{app === "TeamTimeline" ? <CheckIcon/> : <Icon/>}</ListItemIcon>
+                    {t("TeamTimeline.short title")}
                 </MenuItem>
                 <Divider/>
                 <MenuItem onClick={howToMenuClick}>

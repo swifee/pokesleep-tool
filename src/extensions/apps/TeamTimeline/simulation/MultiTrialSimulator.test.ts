@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DailySummary, SimulationResult, TeamSummary } from '../types/TimeSlotTypes';
-import { runMultiTrialSimulation } from './MultiTrialSimulator';
+import { runMultiTrialSimulation, runMultiTrialSimulationWithProgress } from './MultiTrialSimulator';
 import { createDefaultTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
 
 const runSimulationMock = vi.fn();
@@ -144,5 +144,29 @@ describe('runMultiTrialSimulation', () => {
         expect(runSimulationMock.mock.calls[0]?.[0]).toMatchObject({
             bonusSettings,
         });
+    });
+
+    it('reports progress until 100 in async simulation', async () => {
+        runSimulationMock
+            .mockReturnValue(createSimulationResult(
+                [createDailySummary(1, 1, 100)],
+                createTeamSummary(1000),
+            ));
+        const onProgress = vi.fn();
+
+        await runMultiTrialSimulationWithProgress({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 3,
+            initialSeed: 100,
+            onProgress,
+            yieldEvery: 1,
+        });
+
+        expect(onProgress).toHaveBeenCalled();
+        expect(onProgress.mock.calls[0]?.[0]).toBe(0);
+        expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]?.[0]).toBe(100);
     });
 });

@@ -9,21 +9,38 @@ vi.mock('react-i18next', () => ({
     }),
 }));
 
+vi.mock('../../../../ui/IvCalc/PokemonIcon', () => ({
+    default: ({ idForm }: { idForm: number }) => <span>{idForm}</span>,
+}));
+
 describe('SwapSupplementBar', () => {
     it('does not render when no swaps exist', () => {
-        const { container } = render(<SwapSupplementBar swapCount={0} onClear={vi.fn()} />);
+        const { container } = render(
+            <SwapSupplementBar
+                swapCount={0}
+                swappedPokemonIdForms={[]}
+                onClear={vi.fn()}
+            />
+        );
         expect(container.firstChild).toBeNull();
     });
 
     it('renders and clears all swaps when delete is clicked', () => {
         const onClear = vi.fn();
-        render(<SwapSupplementBar swapCount={3} onClear={onClear} />);
+        render(
+            <SwapSupplementBar
+                swapCount={3}
+                swappedPokemonIdForms={[10, 25]}
+                onClear={onClear}
+            />
+        );
 
         expect(screen.getByText('途中でのポケモン入れ替えが設定されています。')).toBeDefined();
         expect(screen.getByTestId('swap-supplement-bar')).toBeDefined();
         expect(screen.getByTestId('swap-supplement-delete-button')).toBeDefined();
+        expect(screen.getAllByTestId('swap-supplement-icon')).toHaveLength(2);
 
-        fireEvent.click(screen.getByRole('button', { name: '削除' }));
+        fireEvent.click(screen.getByRole('button', { name: 'リセット' }));
         expect(onClear).toHaveBeenCalledTimes(1);
     });
 });
