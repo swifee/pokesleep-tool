@@ -9,10 +9,17 @@ import IngredientOthersPopover from './IngredientOthersPopover';
 import {
     calculateIngredientTotalCount,
     formatIngredientCount,
-    formatIngredientIntegerCount,
     groupLowDailyIngredientsForAverage,
     sortIngredientsByCountDesc,
 } from '../utils/IngredientDisplayUtils';
+import {
+    formatSummaryEp,
+    formatSummaryInteger,
+    formatSummaryNumber,
+    resolveSummaryValueMode,
+    SummaryValueMode,
+    toSummaryModeValue,
+} from '../utils/SummaryValueModeUtils';
 
 export type SummaryLayoutMode = 'details' | 'average';
 
@@ -22,6 +29,7 @@ interface DailySummaryRowProps {
     label?: string;
     layoutMode?: SummaryLayoutMode;
     simulationDays?: number;
+    valueMode?: SummaryValueMode;
 }
 
 const SUMMARY_CARD_WIDTH = 96;
@@ -34,8 +42,14 @@ const DailySummaryRow = React.memo(({
     label,
     layoutMode = 'details',
     simulationDays = 1,
+    valueMode = 'periodTotal',
 }: DailySummaryRowProps) => {
     const { t } = useTranslation();
+    const resolvedValueMode = resolveSummaryValueMode(valueMode, simulationDays);
+    const convertedDayDivisor = resolvedValueMode === 'dailyAverage' ? 1 : Math.max(simulationDays, 1);
+    const convertByMode = (value: number): number => (
+        toSummaryModeValue(value, resolvedValueMode, simulationDays)
+    );
 
     const defaultSingleLineLabel = t('TeamTimeline.individual results', '個別成績');
     const defaultStackedLabel = t('TeamTimeline.individual results stacked', '個別\n成績');
@@ -58,17 +72,37 @@ const DailySummaryRow = React.memo(({
                 {dailySummaries.map(summary => {
                     const pokemon = box.getById(summary.pokemonId);
                     const pokemonName = pokemon?.filledNickname(t) ?? `ID: ${summary.pokemonId}`;
-                    const sortedIngredients = sortIngredientsByCountDesc(summary.totalIngredients.filter(i => i.count > 0));
-                    const groupedAverageIngredients = groupLowDailyIngredientsForAverage(sortedIngredients, simulationDays);
+                    const sortedIngredients = sortIngredientsByCountDesc(
+                        summary.totalIngredients
+                            .filter(i => i.count > 0)
+                            .map(i => ({ ...i, count: convertByMode(i.count) }))
+                    );
+                    const groupedAverageIngredients = groupLowDailyIngredientsForAverage(sortedIngredients, convertedDayDivisor);
                     const displayIngredients = layoutMode === 'average'
                         ? groupedAverageIngredients.visibleIngredients
                         : sortedIngredients;
-                    const overflowIngredients = sortIngredientsByCountDesc(summary.totalOverflowIngredients.filter(i => i.count > 0));
+                    const overflowIngredients = sortIngredientsByCountDesc(
+                        summary.totalOverflowIngredients
+                            .filter(i => i.count > 0)
+                            .map(i => ({ ...i, count: convertByMode(i.count) }))
+                    );
                     const ingredientTotalCount = calculateIngredientTotalCount(sortedIngredients);
-                    const hasOptionLine = summary.totalPresentCandyCount > 0
-                        || summary.totalCookingPotCapacityIncrease > 0
-                        || summary.totalTastyChanceIncreasePercent > 0
-                        || summary.totalDreamShardCount > 0;
+                    const totalHelpCount = convertByMode(summary.totalHelpCount);
+                    const totalSkillCount = convertByMode(summary.totalSkillCount);
+                    const totalBerryCount = convertByMode(summary.totalBerryCount);
+                    const skillEP = convertByMode(summary.skillEP);
+                    const berryEP = convertByMode(summary.berryEP);
+                    const ingredientEP = convertByMode(summary.ingredientEP);
+                    const totalEP = convertByMode(summary.totalEP);
+                    const totalSkillOverflowCount = convertByMode(summary.totalSkillOverflowCount);
+                    const totalPresentCandyCount = convertByMode(summary.totalPresentCandyCount);
+                    const totalCookingPotCapacityIncrease = convertByMode(summary.totalCookingPotCapacityIncrease);
+                    const totalTastyChanceIncreasePercent = convertByMode(summary.totalTastyChanceIncreasePercent);
+                    const totalDreamShardCount = convertByMode(summary.totalDreamShardCount);
+                    const hasOptionLine = totalPresentCandyCount > 0
+                        || totalCookingPotCapacityIncrease > 0
+                        || totalTastyChanceIncreasePercent > 0
+                        || totalDreamShardCount > 0;
                     return (
                         <SummaryCard key={`${layoutMode}-${summary.pokemonId}`} data-testid="daily-summary-cell">
                             <SummaryHeader>
@@ -82,30 +116,30 @@ const DailySummaryRow = React.memo(({
                             </SummaryHeader>
 
                             <EPBox>
-                                <EPLine>❗{summary.skillEP.toLocaleString()}EP</EPLine>
+                                <EPLine>❗{formatSummaryEp(skillEP)}EP</EPLine>
                                 <EPLine>
                                     <LocalFireDepartmentIcon sx={{ width: 12, height: 12, color: '#ff944b' }} />
-                                    {summary.berryEP.toLocaleString()}EP
+                                    {formatSummaryEp(berryEP)}EP
                                 </EPLine>
-                                <EPLine>🍴{summary.ingredientEP.toLocaleString()}EP</EPLine>
+                                <EPLine>🍴{formatSummaryEp(ingredientEP)}EP</EPLine>
                                 <Divider />
-                                <TotalLine>{summary.totalEP.toLocaleString()}EP</TotalLine>
+                                <TotalLine>{formatSummaryEp(totalEP)}EP</TotalLine>
                             </EPBox>
 
-                            <Line>🔍{summary.totalHelpCount}</Line>
+                            <Line>🔍{formatSummaryNumber(totalHelpCount)}</Line>
                             <Line>
-                                ❗{summary.totalSkillCount}
-                                {summary.totalSkillOverflowCount > 0 && (
-                                    <SkillOverflowIcon>❕{summary.totalSkillOverflowCount}</SkillOverflowIcon>
+                                ❗{formatSummaryNumber(totalSkillCount)}
+                                {totalSkillOverflowCount > 0 && (
+                                    <SkillOverflowIcon>❕{formatSummaryNumber(totalSkillOverflowCount)}</SkillOverflowIcon>
                                 )}
                             </Line>
                             <Line>
                                 <LocalFireDepartmentIcon sx={{ width: 14, height: 14, color: '#ff944b' }} />
-                                {summary.totalBerryCount}
+                                {formatSummaryNumber(totalBerryCount)}
                             </Line>
                             <IngredientLine>
                                 <IngredientTotalItem>
-                                    食材合計: <span className="value">{formatIngredientIntegerCount(ingredientTotalCount)}</span>
+                                    食材合計: <span className="value">{formatSummaryInteger(ingredientTotalCount)}</span>
                                 </IngredientTotalItem>
                                 {displayIngredients.map((ing) => (
                                     <IngredientItem key={`${summary.pokemonId}-${ing.name}`}>
@@ -133,10 +167,10 @@ const DailySummaryRow = React.memo(({
                             </OverflowContainer>
 
                             <OptionLine style={{ visibility: hasOptionLine ? 'visible' : 'hidden' }}>
-                                {summary.totalPresentCandyCount > 0 && <span>🍬{summary.totalPresentCandyCount}</span>}
-                                {summary.totalCookingPotCapacityIncrease > 0 && <span>鍋+{summary.totalCookingPotCapacityIncrease}</span>}
-                                {summary.totalTastyChanceIncreasePercent > 0 && <span>料理チャンス+{summary.totalTastyChanceIncreasePercent}%</span>}
-                                {summary.totalDreamShardCount > 0 && <span>夢+{summary.totalDreamShardCount}</span>}
+                                {totalPresentCandyCount > 0 && <span>🍬{formatSummaryNumber(totalPresentCandyCount)}</span>}
+                                {totalCookingPotCapacityIncrease > 0 && <span>鍋+{formatSummaryNumber(totalCookingPotCapacityIncrease)}</span>}
+                                {totalTastyChanceIncreasePercent > 0 && <span>料理チャンス+{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</span>}
+                                {totalDreamShardCount > 0 && <span>夢+{formatSummaryNumber(totalDreamShardCount)}</span>}
                             </OptionLine>
                         </SummaryCard>
                     );

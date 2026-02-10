@@ -28,10 +28,14 @@ import { SwapEnergyDialog } from './components/SwapEnergyDialog';
 import { TimeSlot, SimulationConfig, PokemonSwap, SWAP_NONE_POKEMON_ID } from './types/TimeSlotTypes';
 import { runSimulation } from './simulation/TimelineSimulator';
 import SimulationControls from './components/SimulationControls';
-import { runMultiTrialSimulation } from './simulation/MultiTrialSimulator';
-import { useSwapAutoRerun } from './utils/useSwapAutoRerun';
+import {
+    runMultiTrialSimulationWithProgress,
+} from './simulation/MultiTrialSimulator';
 import TimelineBonusSettingsPanel from './components/TimelineBonusSettingsPanel';
 import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
+import { SummaryValueMode } from './utils/SummaryValueModeUtils';
+import SummaryValueModeToggle from './components/SummaryValueModeToggle';
+import ResimulationNoticeBar from './components/ResimulationNoticeBar';
 import {
     loadTimelineBonusSettingsFromIvStorage,
     saveTimelineBonusSettingsToIvStorage,
@@ -119,6 +123,14 @@ function normalizeLoadedSwaps(
     });
 }
 
+function createSwapSignature(swaps: readonly PokemonSwap[]): string {
+    return swaps
+        .map(
+            swap => `${swap.dayIndex}:${swap.slotId}:${swap.teamSlotIndex}:${swap.newPokemonId}:${swap.initialEnergy}`
+        )
+        .join('|');
+}
+
 /**
  * チームタイムラインアプリのメインコンポーネント
  */
@@ -131,6 +143,9 @@ export default function TeamTimelineApp() {
 
     // 初期ロード完了フラグ
     const [isInitialized, setIsInitialized] = useState(false);
+    const [summaryValueMode, setSummaryValueMode] = useState<SummaryValueMode>('periodTotal');
+    const [simulationProgress, setSimulationProgress] = useState(0);
+    const [showResimulationNotice, setShowResimulationNotice] = useState(false);
 
     // ボックスのロード（初回のみ）
     const boxRef = useRef<PokemonBox | null>(null);
@@ -224,6 +239,31 @@ export default function TeamTimelineApp() {
         localStorage.setItem('PstTeamTimelineSwaps', JSON.stringify(state.swaps));
     }, [state.swaps, isInitialized]);
 
+    const previousSwapSignatureRef = useRef<string | null>(null);
+    useEffect(() => {
+        const signature = createSwapSignature(state.swaps);
+        if (!isInitialized) {
+            previousSwapSignatureRef.current = signature;
+            return;
+        }
+
+        const previousSignature = previousSwapSignatureRef.current;
+        previousSwapSignatureRef.current = signature;
+        if (previousSignature === null || previousSignature === signature) {
+            return;
+        }
+        if (state.simulationResult === null) {
+            return;
+        }
+        setShowResimulationNotice(true);
+    }, [state.swaps, state.simulationResult, isInitialized]);
+
+    useEffect(() => {
+        if (state.simulationConfig.simulationDays < 2) {
+            setSummaryValueMode('periodTotal');
+        }
+    }, [state.simulationConfig.simulationDays]);
+
     // 連動ON中は個体値計算機パラメーターの外部更新を取り込む
     useEffect(() => {
         if (!state.syncWithIvParameter) {
@@ -267,18 +307,6 @@ export default function TeamTimelineApp() {
         }
     }, [selectedSlotIndex]);
 
-    const displayedSeed = useMemo(() => {
-        if (
-            state.multiTrialResults &&
-            state.multiTrialSelectedIndex !== null &&
-            state.multiTrialSelectedIndex >= 0 &&
-            state.multiTrialSelectedIndex < state.multiTrialResults.length
-        ) {
-            return state.multiTrialResults[state.multiTrialSelectedIndex].seed;
-        }
-        return state.simulationConfig.seed;
-    }, [state.multiTrialResults, state.multiTrialSelectedIndex, state.simulationConfig.seed]);
-
     const runSingleSimulationWithSeed = useCallback((seed: number) => {
         const result = runSimulation({
             team: state.team,
@@ -303,8 +331,8 @@ export default function TeamTimelineApp() {
         state.swaps,
     ]);
 
-    const runMultiTrialWithSeed = useCallback((initialSeed?: number, preferredSeed?: number) => {
-        const multiResult = runMultiTrialSimulation({
+    const runMultiTrialWithSeed = useCallback(async (initialSeed?: number, preferredSeed?: number) => {
+        const multiResult = await runMultiTrialSimulationWithProgress({
             team: state.team,
             timeSlots: state.timeSlots,
             config: {
@@ -316,6 +344,9 @@ export default function TeamTimelineApp() {
             box: boxRef.current || undefined,
             trialCount: state.multiTrialCount,
             initialSeed,
+            onProgress: (progress) => {
+                setSimulationProgress(progress);
+            },
         });
 
         if (multiResult.trials.length === 0) {
@@ -363,7 +394,7 @@ export default function TeamTimelineApp() {
         state.multiTrialCount,
     ]);
 
-    const executeSimulation = useCallback((options?: {
+    const executeSimulation = useCallback(async (options?: {
         forcedInitialSeed?: number;
         preferredSeed?: number;
         forceMultiTrial?: boolean;
@@ -375,7 +406,9 @@ export default function TeamTimelineApp() {
 
         const forceMultiTrial = options?.forceMultiTrial === true;
         if (!forceMultiTrial && state.seedMode === 'fixed' && state.multiTrialCount === 1) {
+            setSimulationProgress(30);
             runSingleSimulationWithSeed(state.simulationConfig.seed);
+            setSimulationProgress(100);
             return;
         }
 
@@ -384,7 +417,8 @@ export default function TeamTimelineApp() {
                 ? state.simulationConfig.seed
                 : undefined
         );
-        runMultiTrialWithSeed(initialSeed, options?.preferredSeed);
+        await runMultiTrialWithSeed(initialSeed, options?.preferredSeed);
+        setSimulationProgress(100);
     }, [
         state.team,
         state.seedMode,
@@ -396,15 +430,16 @@ export default function TeamTimelineApp() {
 
     // シミュレーション実行ハンドラー（統合）
     const handleRunSimulation = useCallback(() => {
+        setShowResimulationNotice(false);
+        setSimulationProgress(0);
         dispatch({ type: 'startSimulation' });
 
         // Use setTimeout to allow React to render loading state before heavy computation
         setTimeout(() => {
-            try {
-                executeSimulation();
-            } catch (e) {
+            void executeSimulation().catch((e) => {
                 dispatch({ type: 'setSimulationError', error: String(e) });
-            }
+                setSimulationProgress(0);
+            });
         }, 0);
     }, [executeSimulation]);
 
@@ -442,31 +477,6 @@ export default function TeamTimelineApp() {
         state.swaps,
     ]);
 
-    const handleSwapAutoRerun = useCallback((seed: number) => {
-        dispatch({ type: 'startSimulation' });
-
-        setTimeout(() => {
-            try {
-                executeSimulation({
-                    forcedInitialSeed: seed,
-                    preferredSeed: seed,
-                    forceMultiTrial: true,
-                });
-            } catch (e) {
-                dispatch({ type: 'setSimulationError', error: String(e) });
-            }
-        }, 0);
-    }, [executeSimulation]);
-
-    useSwapAutoRerun({
-        swaps: state.swaps,
-        isInitialized,
-        hasSimulationResult: state.simulationResult !== null,
-        simulationLoading: state.simulationLoading,
-        currentSeed: displayedSeed,
-        onAutoRerun: handleSwapAutoRerun,
-    });
-
     // シードモード変更ハンドラー
     const handleSeedModeChange = useCallback((mode: 'random' | 'fixed') => {
         dispatch({ type: 'setSeedMode', mode });
@@ -484,6 +494,9 @@ export default function TeamTimelineApp() {
 
     const handleSimulationDaysChange = useCallback((simulationDays: number) => {
         dispatch({ type: 'updateSimulationConfig', config: { simulationDays } });
+    }, []);
+    const handleSummaryValueModeChange = useCallback((mode: SummaryValueMode) => {
+        setSummaryValueMode(mode);
     }, []);
 
     // タブ切り替えハンドラー
@@ -587,6 +600,26 @@ export default function TeamTimelineApp() {
         return pokemon.iv.idForm;
     }, [state.pendingSwapPokemonId]);
 
+    const swappedPokemonIdForms = useMemo(() => {
+        if (!boxRef.current) {
+            return [];
+        }
+        const uniqueIdForms = new Set<number>();
+        state.swaps.forEach((swap) => {
+            if (swap.newPokemonId === SWAP_NONE_POKEMON_ID) {
+                return;
+            }
+            const pokemon = boxRef.current!.items.find((item) => item.id === swap.newPokemonId);
+            if (!pokemon) {
+                return;
+            }
+            uniqueIdForms.add(pokemon.iv.idForm);
+        });
+        return [...uniqueIdForms];
+    }, [state.swaps]);
+
+    const showSummaryValueToggle = state.simulationConfig.simulationDays >= 2;
+
     const showAverageSection = useMemo(
         () => (
             state.multiTrialResults !== null
@@ -634,6 +667,7 @@ export default function TeamTimelineApp() {
 
                     <SwapSupplementBar
                         swapCount={state.swaps.length}
+                        swappedPokemonIdForms={swappedPokemonIdForms}
                         onClear={handleClearSwaps}
                     />
 
@@ -644,6 +678,7 @@ export default function TeamTimelineApp() {
                         simulationDays={state.simulationConfig.simulationDays}
                         multiTrialCount={state.multiTrialCount}
                         simulationLoading={state.simulationLoading}
+                        simulationProgress={simulationProgress}
                         isTeamEmpty={state.team.every(p => p === null)}
                         onSeedModeChange={handleSeedModeChange}
                         onSeedChange={handleSeedChange}
@@ -661,27 +696,46 @@ export default function TeamTimelineApp() {
 
                     {showAverageSection && boxRef.current && (
                         <Box sx={{ mt: '18px' }}>
-                            <Typography
+                            <Box
                                 sx={{
-                                    fontSize: '14px',
-                                    fontWeight: 700,
-                                    lineHeight: '18px',
-                                    letterSpacing: '0.4px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '8px',
+                                    flexWrap: 'wrap',
                                     mb: '5px',
                                 }}
                             >
-                                {t('TeamTimeline.simulation average', 'シミュレーション結果(平均)')}
-                            </Typography>
+                                <Typography
+                                    sx={{
+                                        fontSize: '14px',
+                                        fontWeight: 700,
+                                        lineHeight: '18px',
+                                        letterSpacing: '0.4px',
+                                    }}
+                                >
+                                    {t('TeamTimeline.simulation average', 'シミュレーション結果(平均)')}
+                                </Typography>
+                                {showSummaryValueToggle && (
+                                    <SummaryValueModeToggle
+                                        value={summaryValueMode}
+                                        onChange={handleSummaryValueModeChange}
+                                        orientation="horizontal"
+                                    />
+                                )}
+                            </Box>
                             <TeamSummaryRow
                                 teamSummary={state.multiTrialAverageTeamSummary!}
                                 layoutMode="average"
                                 simulationDays={state.simulationConfig.simulationDays}
+                                valueMode={summaryValueMode}
                             />
                             <DailySummaryRow
                                 dailySummaries={state.multiTrialAverageDailySummaries!}
                                 box={boxRef.current}
                                 layoutMode="average"
                                 simulationDays={state.simulationConfig.simulationDays}
+                                valueMode={summaryValueMode}
                             />
                         </Box>
                     )}
@@ -730,12 +784,16 @@ export default function TeamTimelineApp() {
                                 teamSummary={state.simulationResult.teamSummary}
                                 layoutMode="details"
                                 simulationDays={state.simulationConfig.simulationDays}
+                                valueMode={summaryValueMode}
+                                showValueModeToggle={showSummaryValueToggle}
+                                onValueModeChange={handleSummaryValueModeChange}
                             />
                             <DailySummaryRow
                                 dailySummaries={state.simulationResult.dailySummaries}
                                 box={boxRef.current}
                                 layoutMode="details"
                                 simulationDays={state.simulationConfig.simulationDays}
+                                valueMode={summaryValueMode}
                             />
                         </Box>
                     )}
@@ -803,6 +861,10 @@ export default function TeamTimelineApp() {
                 defaultEnergy={100}
                 onConfirm={handleEnergyConfirm}
                 onCancel={handleEnergyCancel}
+            />
+            <ResimulationNoticeBar
+                open={showResimulationNotice}
+                onResimulate={handleRunSimulation}
             />
         </div>
     );

@@ -205,4 +205,37 @@ describe('DailySummaryRow', () => {
         expect(screen.getByText('料理チャンス+12.5%')).toBeDefined();
         expect(screen.queryByText('料理+12.5%')).toBeNull();
     });
+
+    it('applies dailyAverage conversion and rounds EP to integer', () => {
+        const items = [createPokemon('Pikachu', 20, 'AverageMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+        summary.totalHelpCount = 5;
+        summary.totalSkillCount = 7;
+        summary.totalBerryCount = 9;
+        summary.berryEP = 1001;
+        summary.ingredientEP = 2002;
+        summary.skillEP = 3002;
+        summary.totalEP = 6005;
+        summary.totalIngredients = [{ name: 'apple', count: 10 }];
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+                simulationDays={2}
+                valueMode="dailyAverage"
+            />
+        );
+
+        const text = document.body.textContent ?? '';
+        expect(text).toContain('AverageMon');
+        expect(text).toContain('501EP');
+        expect(text).toContain('1,001EP');
+        expect(text).toContain('1,501EP');
+        expect(text).toContain('3,003EP');
+        expect(text).toContain('🔍2.5');
+        expect(text).toContain('食材合計: 5');
+    });
 });

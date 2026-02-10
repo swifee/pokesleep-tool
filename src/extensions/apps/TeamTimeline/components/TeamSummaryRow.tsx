@@ -5,20 +5,32 @@ import { TeamSummary } from '../types/TimeSlotTypes';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
 import type { SummaryLayoutMode } from './DailySummaryRow';
 import IngredientOthersPopover from './IngredientOthersPopover';
+import SummaryValueModeToggle from './SummaryValueModeToggle';
 import {
   calculateIngredientTotalCount,
   formatIngredientCount,
-  formatIngredientIntegerCount,
   groupLowDailyIngredientsForAverage,
-  MEALS_PER_DAY,
   sortIngredientsByCountDesc,
 } from '../utils/IngredientDisplayUtils';
+import {
+  formatSummaryEp,
+  formatSummaryInteger,
+  formatSummaryNumber,
+  resolveSummaryValueMode,
+  SummaryValueMode,
+  toSummaryModeValue,
+} from '../utils/SummaryValueModeUtils';
+
+const MEALS_PER_DAY = 3;
 
 interface TeamSummaryRowProps {
   teamSummary: TeamSummary;
   label?: string;
   layoutMode?: SummaryLayoutMode;
   simulationDays?: number;
+  valueMode?: SummaryValueMode;
+  showValueModeToggle?: boolean;
+  onValueModeChange?: (value: SummaryValueMode) => void;
 }
 
 const TeamSummaryRow = React.memo(({
@@ -26,43 +38,79 @@ const TeamSummaryRow = React.memo(({
   label,
   layoutMode = 'details',
   simulationDays = 1,
+  valueMode = 'periodTotal',
+  showValueModeToggle = false,
+  onValueModeChange,
 }: TeamSummaryRowProps) => {
   const { t } = useTranslation();
   const defaultLabel = layoutMode === 'average'
     ? t('TeamTimeline.team average', 'チーム平均')
     : t('TeamTimeline.total summary', '合計');
-  const sortedIngredients = sortIngredientsByCountDesc(teamSummary.totalIngredients.filter(i => i.count > 0));
-  const groupedAverageIngredients = groupLowDailyIngredientsForAverage(sortedIngredients, simulationDays);
+  const resolvedValueMode = resolveSummaryValueMode(valueMode, simulationDays);
+  const convertedDayDivisor = resolvedValueMode === 'dailyAverage' ? 1 : Math.max(simulationDays, 1);
+  const convertByMode = (value: number): number => (
+    toSummaryModeValue(value, resolvedValueMode, simulationDays)
+  );
+
+  const sortedIngredients = sortIngredientsByCountDesc(
+    teamSummary.totalIngredients
+      .filter(i => i.count > 0)
+      .map(i => ({ ...i, count: convertByMode(i.count) })),
+  );
+  const groupedAverageIngredients = groupLowDailyIngredientsForAverage(sortedIngredients, convertedDayDivisor);
   const displayIngredients = layoutMode === 'average'
     ? groupedAverageIngredients.visibleIngredients
     : sortedIngredients;
   const ingredientTotalCount = calculateIngredientTotalCount(sortedIngredients);
-  const mealDenominator = Math.max(simulationDays, 1) * MEALS_PER_DAY;
+  const mealDenominator = convertedDayDivisor * MEALS_PER_DAY;
   const ingredientPerMeal = ingredientTotalCount / mealDenominator;
+
+  const totalBerryEP = convertByMode(teamSummary.totalBerryEP);
+  const totalIngredientEP = convertByMode(teamSummary.totalIngredientEP);
+  const totalSkillEP = convertByMode(teamSummary.totalSkillEP);
+  const grandTotalEP = convertByMode(teamSummary.grandTotalEP);
+  const totalPresentCandyCount = convertByMode(teamSummary.totalPresentCandyCount);
+  const totalCookingPotCapacityIncrease = convertByMode(teamSummary.totalCookingPotCapacityIncrease);
+  const totalDreamShardCount = convertByMode(teamSummary.totalDreamShardCount);
+  const totalTastyChanceIncreasePercent = convertByMode(teamSummary.totalTastyChanceIncreasePercent);
   const hasOtherMeta =
-    teamSummary.totalPresentCandyCount > 0
-    || teamSummary.totalCookingPotCapacityIncrease > 0
-    || teamSummary.totalDreamShardCount > 0
-    || teamSummary.totalTastyChanceIncreasePercent > 0;
+    totalPresentCandyCount > 0
+    || totalCookingPotCapacityIncrease > 0
+    || totalDreamShardCount > 0
+    || totalTastyChanceIncreasePercent > 0;
+  const canShowToggle = layoutMode === 'details' && showValueModeToggle && onValueModeChange;
 
   return (
-    <Wrapper data-layout={layoutMode}>
-      {layoutMode === 'details' && <LabelCell>{label ?? defaultLabel}</LabelCell>}
+    <Wrapper data-layout={layoutMode} data-has-toggle={canShowToggle}>
+      {layoutMode === 'details' && (
+        <LabelCell>
+          <span className="label-text">{label ?? defaultLabel}</span>
+          {canShowToggle && (
+            <span className="toggle-wrap">
+              <SummaryValueModeToggle
+                value={resolvedValueMode}
+                onChange={onValueModeChange}
+                orientation="responsive"
+              />
+            </span>
+          )}
+        </LabelCell>
+      )}
       <ContentCell>
         <EPPanel>
           <EPLine>
-            きのみ : {teamSummary.totalBerryEP.toLocaleString()}EP
+            きのみ : {formatSummaryEp(totalBerryEP)}EP
             <span className="sep" />
-            食材 : {teamSummary.totalIngredientEP.toLocaleString()}EP
+            食材 : {formatSummaryEp(totalIngredientEP)}EP
             <span className="sep" />
-            スキル : {teamSummary.totalSkillEP.toLocaleString()}EP
+            スキル : {formatSummaryEp(totalSkillEP)}EP
           </EPLine>
-          <TotalLine>total {teamSummary.grandTotalEP.toLocaleString()}EP</TotalLine>
+          <TotalLine>total {formatSummaryEp(grandTotalEP)}EP</TotalLine>
         </EPPanel>
 
         <IngredientSection>
           <MetaItem>
-            食材合計: <span className="value">{formatIngredientIntegerCount(ingredientTotalCount)}</span>
+            食材合計: <span className="value">{formatSummaryInteger(ingredientTotalCount)}</span>
           </MetaItem>
           <MetaItem>
             1食平均 : <span className="value">{formatIngredientCount(ingredientPerMeal)}</span>
@@ -81,10 +129,10 @@ const TeamSummaryRow = React.memo(({
             />
           )}
           {hasOtherMeta && <MetaLineBreak aria-hidden />}
-          {teamSummary.totalPresentCandyCount > 0 && <MetaItem>🍬{teamSummary.totalPresentCandyCount}</MetaItem>}
-          {teamSummary.totalCookingPotCapacityIncrease > 0 && <MetaItem>鍋容量 : +{teamSummary.totalCookingPotCapacityIncrease}</MetaItem>}
-          {teamSummary.totalDreamShardCount > 0 && <MetaItem>ゆめのかけら : +{teamSummary.totalDreamShardCount}</MetaItem>}
-          {teamSummary.totalTastyChanceIncreasePercent > 0 && <MetaItem>料理チャンス : +{teamSummary.totalTastyChanceIncreasePercent}%</MetaItem>}
+          {totalPresentCandyCount > 0 && <MetaItem>🍬{formatSummaryNumber(totalPresentCandyCount)}</MetaItem>}
+          {totalCookingPotCapacityIncrease > 0 && <MetaItem>鍋容量 : +{formatSummaryNumber(totalCookingPotCapacityIncrease)}</MetaItem>}
+          {totalDreamShardCount > 0 && <MetaItem>ゆめのかけら : +{formatSummaryNumber(totalDreamShardCount)}</MetaItem>}
+          {totalTastyChanceIncreasePercent > 0 && <MetaItem>料理チャンス : +{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</MetaItem>}
         </IngredientSection>
       </ContentCell>
     </Wrapper>
@@ -101,20 +149,33 @@ const Wrapper = styled('div')({
   '&[data-layout="average"]': {
     gridTemplateColumns: 'minmax(0, 1fr)',
   },
+  '&[data-has-toggle="true"]': {
+    gridTemplateColumns: '132px minmax(0, 1fr)',
+  },
   '@media (max-width: 540px)': {
     gridTemplateColumns: 'minmax(0, 1fr)',
+    '&[data-has-toggle="true"]': {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+    },
   },
 });
 
 const LabelCell = styled('div')({
-  width: '40px',
-  minWidth: '40px',
+  width: '100%',
   padding: '3px',
   fontSize: '10px',
   lineHeight: '13px',
   letterSpacing: '-0.5px',
   color: '#000',
-  whiteSpace: 'pre-wrap',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+  '& .label-text': {
+    whiteSpace: 'pre-wrap',
+  },
+  '& .toggle-wrap': {
+    display: 'inline-flex',
+  },
 });
 
 const ContentCell = styled('div')({

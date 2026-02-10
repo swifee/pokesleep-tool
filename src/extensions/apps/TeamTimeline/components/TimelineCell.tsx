@@ -435,7 +435,8 @@ const StyledCell = styled('div')<{ $isSleeping: boolean; $hasSwap?: boolean; $sh
     gap: '1px',
     fontSize: '10px',
     fontFamily: '"M PLUS 1p", sans-serif',
-    cursor: 'pointer',
+    cursor: 'default',
+    WebkitTapHighlightColor: 'transparent',
     '& .swap-trigger': {
         opacity: 0,
         pointerEvents: 'none',

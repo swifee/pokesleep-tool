@@ -15,6 +15,13 @@ Even just pointing out a typo or a broken link is genuinely appreciated.
 If you're not sure where to start, feel free to open an issue and ask.  
 We're happy to help guide you!
 
+## Branch Workflow
+
+- Use `develop` as the primary working branch.
+- Do not push directly to `main`.
+- Use `feature/*` only when parallel or isolated work is needed.
+- Merge via Pull Request.
+
 ## Questions?
 
 If you have any questions or are unsure about something,  

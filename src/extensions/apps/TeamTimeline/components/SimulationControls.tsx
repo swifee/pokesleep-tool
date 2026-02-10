@@ -18,6 +18,7 @@ interface SimulationControlsProps {
   simulationDays: number;
   multiTrialCount: number;
   simulationLoading: boolean;
+  simulationProgress: number;
   isTeamEmpty: boolean;
   onSeedModeChange: (mode: 'random' | 'fixed') => void;
   onSeedChange: (seed: number) => void;
@@ -44,6 +45,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
   simulationDays,
   multiTrialCount,
   simulationLoading,
+  simulationProgress,
   isTeamEmpty,
   onSeedModeChange,
   onSeedChange,
@@ -52,6 +54,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
   onRunSimulation,
 }) => {
   const { t } = useTranslation();
+  const clampedProgress = Math.max(0, Math.min(100, simulationProgress));
 
   const handleSeedModeToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
     onSeedModeChange(event.target.checked ? 'fixed' : 'random');
@@ -187,19 +190,53 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         variant="contained"
         onClick={onRunSimulation}
         disabled={simulationLoading || isTeamEmpty}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={simulationLoading ? clampedProgress : undefined}
         sx={{
-          minWidth: '120px',
+          width: '136px',
+          minWidth: '136px',
           height: '34px',
           borderRadius: '6px',
           fontSize: '12px',
           lineHeight: '15px',
           fontWeight: 700,
-          background: 'linear-gradient(180deg, #4e8ce8 0%, #176eee 100%)',
+          color: '#fff',
+          position: 'relative',
+          overflow: 'hidden',
+          background: '#3c8af8',
+          transition: 'none',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: simulationLoading ? `${clampedProgress}%` : '100%',
+            background: 'linear-gradient(180deg, #4e8ce8 0%, #176eee 100%)',
+            transition: simulationLoading && clampedProgress > 0 ? 'width 140ms linear' : 'none',
+            zIndex: 0,
+          },
+          '& .button-label': {
+            position: 'relative',
+            zIndex: 1,
+            whiteSpace: 'nowrap',
+          },
+          '&.Mui-disabled': {
+            color: '#fff',
+            background: '#93afe3',
+            opacity: 1,
+          },
+          '&.Mui-disabled::before': {
+            width: simulationLoading ? `${clampedProgress}%` : '100%',
+          },
         }}
       >
-        {simulationLoading
-          ? t('TeamTimeline.simulating', '計算中...')
-          : t('TeamTimeline.run simulation', 'シミュレーション')}
+        <span className="button-label">
+          {simulationLoading
+            ? t('TeamTimeline.simulating', '計算中...')
+            : t('TeamTimeline.run simulation', 'シミュレーション')}
+        </span>
       </Button>
     </Box>
   );

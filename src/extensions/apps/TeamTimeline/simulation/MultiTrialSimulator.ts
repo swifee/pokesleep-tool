@@ -22,6 +22,11 @@ export interface MultiTrialInput {
     readonly initialSeed?: number;
 }
 
+export interface MultiTrialProgressInput extends MultiTrialInput {
+    readonly onProgress?: (progress: number) => void;
+    readonly yieldEvery?: number;
+}
+
 /** Merge ingredient counts into an accumulator map */
 function accumulateIngredients(
     acc: Map<string, number>,
@@ -32,136 +37,126 @@ function accumulateIngredients(
     }
 }
 
-/**
- * Run multi-trial simulation with different seeds.
- * Returns trials sorted by grandTotalEP (descending, highest first),
- * plus average DailySummary and TeamSummary across all trials.
- */
-export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResult {
-    const { team, timeSlots, config, bonusSettings, swaps, box, trialCount } = input;
-    const trials: TrialSummary[] = [];
+type DailyAccumulator = {
+    pokemonId: number;
+    totalHelpCount: number;
+    totalSkillCount: number;
+    totalBerryCount: number;
+    totalSkillOverflowCount: number;
+    ingredientSums: Map<string, number>;
+    overflowIngredientSums: Map<string, number>;
+    berryEP: number;
+    ingredientEP: number;
+    skillEP: number;
+    totalEP: number;
+    totalDirectSkillEP: number;
+    totalPresentCandyCount: number;
+    totalCookingPotCapacityIncrease: number;
+    totalTastyChanceIncreasePercent: number;
+    totalDreamShardCount: number;
+};
 
-    // Accumulators for daily summaries (per pokemon)
-    type DailyAccumulator = {
-        pokemonId: number;
-        totalHelpCount: number;
-        totalSkillCount: number;
-        totalBerryCount: number;
-        totalSkillOverflowCount: number;
+type AggregationState = {
+    dailyAccsByPokemonId: Map<number, DailyAccumulator>;
+    dailyOrder: number[];
+    teamAcc: {
         ingredientSums: Map<string, number>;
-        overflowIngredientSums: Map<string, number>;
-        berryEP: number;
-        ingredientEP: number;
-        skillEP: number;
-        totalEP: number;
-        totalDirectSkillEP: number;
+        totalBerryEP: number;
+        totalIngredientEP: number;
+        totalSkillEP: number;
+        grandTotalEP: number;
         totalPresentCandyCount: number;
         totalCookingPotCapacityIncrease: number;
         totalTastyChanceIncreasePercent: number;
         totalDreamShardCount: number;
     };
-    const dailyAccsByPokemonId = new Map<number, DailyAccumulator>();
-    const dailyOrder: number[] = [];
+};
 
-    // Accumulator for team summary
-    const teamAcc = {
-        ingredientSums: new Map<string, number>(),
-        totalBerryEP: 0,
-        totalIngredientEP: 0,
-        totalSkillEP: 0,
-        grandTotalEP: 0,
-        totalPresentCandyCount: 0,
-        totalCookingPotCapacityIncrease: 0,
-        totalTastyChanceIncreasePercent: 0,
-        totalDreamShardCount: 0,
+function createAggregationState(): AggregationState {
+    return {
+        dailyAccsByPokemonId: new Map<number, DailyAccumulator>(),
+        dailyOrder: [],
+        teamAcc: {
+            ingredientSums: new Map<string, number>(),
+            totalBerryEP: 0,
+            totalIngredientEP: 0,
+            totalSkillEP: 0,
+            grandTotalEP: 0,
+            totalPresentCandyCount: 0,
+            totalCookingPotCapacityIncrease: 0,
+            totalTastyChanceIncreasePercent: 0,
+            totalDreamShardCount: 0,
+        },
     };
+}
 
-    for (let i = 0; i < trialCount; i++) {
-        // Use sequential seeds if initialSeed is provided, otherwise random
-        const seed = input.initialSeed !== undefined
-            ? input.initialSeed + i
-            : Math.floor(Math.random() * 1_000_000);
-
-        const result = runSimulation({
-            team,
-            timeSlots,
-            config: { ...config, seed },
-            bonusSettings,
-            swaps,
-            box,
-        });
-
-        trials.push({
-            seed,
-            grandTotalEP: result.teamSummary.grandTotalEP,
-        });
-
-        // Accumulate daily summaries by pokemon ID
-        for (const ds of result.dailySummaries) {
-            let acc = dailyAccsByPokemonId.get(ds.pokemonId);
-            if (!acc) {
-                acc = {
-                    pokemonId: ds.pokemonId,
-                    totalHelpCount: 0,
-                    totalSkillCount: 0,
-                    totalBerryCount: 0,
-                    totalSkillOverflowCount: 0,
-                    ingredientSums: new Map(),
-                    overflowIngredientSums: new Map(),
-                    berryEP: 0,
-                    ingredientEP: 0,
-                    skillEP: 0,
-                    totalEP: 0,
-                    totalDirectSkillEP: 0,
-                    totalPresentCandyCount: 0,
-                    totalCookingPotCapacityIncrease: 0,
-                    totalTastyChanceIncreasePercent: 0,
-                    totalDreamShardCount: 0,
-                };
-                dailyAccsByPokemonId.set(ds.pokemonId, acc);
-                dailyOrder.push(ds.pokemonId);
-            }
-            acc.totalHelpCount += ds.totalHelpCount;
-            acc.totalSkillCount += ds.totalSkillCount;
-            acc.totalBerryCount += ds.totalBerryCount;
-            acc.totalSkillOverflowCount += ds.totalSkillOverflowCount;
-            acc.berryEP += ds.berryEP;
-            acc.ingredientEP += ds.ingredientEP;
-            acc.skillEP += ds.skillEP;
-            acc.totalEP += ds.totalEP;
-            acc.totalDirectSkillEP += ds.totalDirectSkillEP;
-            acc.totalPresentCandyCount += ds.totalPresentCandyCount;
-            acc.totalCookingPotCapacityIncrease += ds.totalCookingPotCapacityIncrease;
-            acc.totalTastyChanceIncreasePercent += ds.totalTastyChanceIncreasePercent;
-            acc.totalDreamShardCount += ds.totalDreamShardCount;
-            accumulateIngredients(acc.ingredientSums, ds.totalIngredients);
-            accumulateIngredients(acc.overflowIngredientSums, ds.totalOverflowIngredients);
-        }
-
-        // Accumulate team summary
-        const ts = result.teamSummary;
-        teamAcc.totalBerryEP += ts.totalBerryEP;
-        teamAcc.totalIngredientEP += ts.totalIngredientEP;
-        teamAcc.totalSkillEP += ts.totalSkillEP;
-        teamAcc.grandTotalEP += ts.grandTotalEP;
-        teamAcc.totalPresentCandyCount += ts.totalPresentCandyCount;
-        teamAcc.totalCookingPotCapacityIncrease += ts.totalCookingPotCapacityIncrease;
-        teamAcc.totalTastyChanceIncreasePercent += ts.totalTastyChanceIncreasePercent;
-        teamAcc.totalDreamShardCount += ts.totalDreamShardCount;
-        accumulateIngredients(teamAcc.ingredientSums, ts.totalIngredients);
+function createSeed(initialSeed: number | undefined, index: number): number {
+    if (initialSeed !== undefined) {
+        return initialSeed + index;
     }
+    return Math.floor(Math.random() * 1_000_000);
+}
 
-    // Sort descending by grandTotalEP (highest EP = rank 1)
-    trials.sort((a, b) => b.grandTotalEP - a.grandTotalEP);
+function accumulateDailySummary(state: AggregationState, dailySummary: DailySummary): void {
+    let acc = state.dailyAccsByPokemonId.get(dailySummary.pokemonId);
+    if (!acc) {
+        acc = {
+            pokemonId: dailySummary.pokemonId,
+            totalHelpCount: 0,
+            totalSkillCount: 0,
+            totalBerryCount: 0,
+            totalSkillOverflowCount: 0,
+            ingredientSums: new Map(),
+            overflowIngredientSums: new Map(),
+            berryEP: 0,
+            ingredientEP: 0,
+            skillEP: 0,
+            totalEP: 0,
+            totalDirectSkillEP: 0,
+            totalPresentCandyCount: 0,
+            totalCookingPotCapacityIncrease: 0,
+            totalTastyChanceIncreasePercent: 0,
+            totalDreamShardCount: 0,
+        };
+        state.dailyAccsByPokemonId.set(dailySummary.pokemonId, acc);
+        state.dailyOrder.push(dailySummary.pokemonId);
+    }
+    acc.totalHelpCount += dailySummary.totalHelpCount;
+    acc.totalSkillCount += dailySummary.totalSkillCount;
+    acc.totalBerryCount += dailySummary.totalBerryCount;
+    acc.totalSkillOverflowCount += dailySummary.totalSkillOverflowCount;
+    acc.berryEP += dailySummary.berryEP;
+    acc.ingredientEP += dailySummary.ingredientEP;
+    acc.skillEP += dailySummary.skillEP;
+    acc.totalEP += dailySummary.totalEP;
+    acc.totalDirectSkillEP += dailySummary.totalDirectSkillEP;
+    acc.totalPresentCandyCount += dailySummary.totalPresentCandyCount;
+    acc.totalCookingPotCapacityIncrease += dailySummary.totalCookingPotCapacityIncrease;
+    acc.totalTastyChanceIncreasePercent += dailySummary.totalTastyChanceIncreasePercent;
+    acc.totalDreamShardCount += dailySummary.totalDreamShardCount;
+    accumulateIngredients(acc.ingredientSums, dailySummary.totalIngredients);
+    accumulateIngredients(acc.overflowIngredientSums, dailySummary.totalOverflowIngredients);
+}
 
-    // Median index (0-based, lower-median)
-    const medianIndex = Math.floor((trials.length - 1) / 2);
+function accumulateTeamSummary(state: AggregationState, teamSummary: TeamSummary): void {
+    state.teamAcc.totalBerryEP += teamSummary.totalBerryEP;
+    state.teamAcc.totalIngredientEP += teamSummary.totalIngredientEP;
+    state.teamAcc.totalSkillEP += teamSummary.totalSkillEP;
+    state.teamAcc.grandTotalEP += teamSummary.grandTotalEP;
+    state.teamAcc.totalPresentCandyCount += teamSummary.totalPresentCandyCount;
+    state.teamAcc.totalCookingPotCapacityIncrease += teamSummary.totalCookingPotCapacityIncrease;
+    state.teamAcc.totalTastyChanceIncreasePercent += teamSummary.totalTastyChanceIncreasePercent;
+    state.teamAcc.totalDreamShardCount += teamSummary.totalDreamShardCount;
+    accumulateIngredients(state.teamAcc.ingredientSums, teamSummary.totalIngredients);
+}
 
-    // Compute averages
+function finalizeAverages(state: AggregationState, trialCount: number): {
+    averageDailySummaries: DailySummary[];
+    averageTeamSummary: TeamSummary;
+} {
     const n = trialCount;
-
-    const averageDailySummaries: DailySummary[] = dailyOrder
-        .map((pokemonId) => dailyAccsByPokemonId.get(pokemonId))
+    const averageDailySummaries: DailySummary[] = state.dailyOrder
+        .map((pokemonId) => state.dailyAccsByPokemonId.get(pokemonId))
         .filter((acc): acc is DailyAccumulator => acc !== undefined)
         .map((acc) => ({
             pokemonId: acc.pokemonId,
@@ -189,19 +184,132 @@ export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResul
         }));
 
     const averageTeamSummary: TeamSummary = {
-        totalIngredients: [...teamAcc.ingredientSums.entries()].map(([name, count]) => ({
+        totalIngredients: [...state.teamAcc.ingredientSums.entries()].map(([name, count]) => ({
             name: name as IngredientName,
             count: Math.round((count / n) * 10) / 10,
         })),
-        totalBerryEP: Math.round(teamAcc.totalBerryEP / n),
-        totalIngredientEP: Math.round(teamAcc.totalIngredientEP / n),
-        totalSkillEP: Math.round(teamAcc.totalSkillEP / n),
-        grandTotalEP: Math.round(teamAcc.grandTotalEP / n),
-        totalPresentCandyCount: Math.round((teamAcc.totalPresentCandyCount / n) * 10) / 10,
-        totalCookingPotCapacityIncrease: Math.round((teamAcc.totalCookingPotCapacityIncrease / n) * 10) / 10,
-        totalTastyChanceIncreasePercent: Math.round((teamAcc.totalTastyChanceIncreasePercent / n) * 10) / 10,
-        totalDreamShardCount: Math.round((teamAcc.totalDreamShardCount / n) * 10) / 10,
+        totalBerryEP: Math.round(state.teamAcc.totalBerryEP / n),
+        totalIngredientEP: Math.round(state.teamAcc.totalIngredientEP / n),
+        totalSkillEP: Math.round(state.teamAcc.totalSkillEP / n),
+        grandTotalEP: Math.round(state.teamAcc.grandTotalEP / n),
+        totalPresentCandyCount: Math.round((state.teamAcc.totalPresentCandyCount / n) * 10) / 10,
+        totalCookingPotCapacityIncrease: Math.round((state.teamAcc.totalCookingPotCapacityIncrease / n) * 10) / 10,
+        totalTastyChanceIncreasePercent: Math.round((state.teamAcc.totalTastyChanceIncreasePercent / n) * 10) / 10,
+        totalDreamShardCount: Math.round((state.teamAcc.totalDreamShardCount / n) * 10) / 10,
     };
 
-    return { trials, medianIndex, averageDailySummaries, averageTeamSummary };
+    return { averageDailySummaries, averageTeamSummary };
+}
+
+function finalizeMultiTrialResult(
+    trials: TrialSummary[],
+    state: AggregationState,
+    trialCount: number,
+): MultiTrialResult {
+    trials.sort((a, b) => b.grandTotalEP - a.grandTotalEP);
+    const medianIndex = Math.floor((trials.length - 1) / 2);
+    const { averageDailySummaries, averageTeamSummary } = finalizeAverages(state, trialCount);
+    return {
+        trials,
+        medianIndex,
+        averageDailySummaries,
+        averageTeamSummary,
+    };
+}
+
+/**
+ * Run multi-trial simulation with different seeds.
+ * Returns trials sorted by grandTotalEP (descending, highest first),
+ * plus average DailySummary and TeamSummary across all trials.
+ */
+export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResult {
+    const { team, timeSlots, config, bonusSettings, swaps, box, trialCount } = input;
+    const trials: TrialSummary[] = [];
+    const state = createAggregationState();
+
+    for (let i = 0; i < trialCount; i++) {
+        const seed = createSeed(input.initialSeed, i);
+        const result = runSimulation({
+            team,
+            timeSlots,
+            config: { ...config, seed },
+            bonusSettings,
+            swaps,
+            box,
+        });
+
+        trials.push({
+            seed,
+            grandTotalEP: result.teamSummary.grandTotalEP,
+        });
+
+        for (const dailySummary of result.dailySummaries) {
+            accumulateDailySummary(state, dailySummary);
+        }
+        accumulateTeamSummary(state, result.teamSummary);
+    }
+
+    return finalizeMultiTrialResult(trials, state, trialCount);
+}
+
+function waitNextTick(): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, 0);
+    });
+}
+
+/**
+ * Run multi-trial simulation with progress callback.
+ * This yields to the event loop periodically to allow UI progress updates.
+ */
+export async function runMultiTrialSimulationWithProgress(
+    input: MultiTrialProgressInput,
+): Promise<MultiTrialResult> {
+    const {
+        team,
+        timeSlots,
+        config,
+        bonusSettings,
+        swaps,
+        box,
+        trialCount,
+        onProgress,
+        yieldEvery = 20,
+    } = input;
+    const trials: TrialSummary[] = [];
+    const state = createAggregationState();
+
+    onProgress?.(0);
+
+    for (let i = 0; i < trialCount; i++) {
+        const seed = createSeed(input.initialSeed, i);
+        const result = runSimulation({
+            team,
+            timeSlots,
+            config: { ...config, seed },
+            bonusSettings,
+            swaps,
+            box,
+        });
+
+        trials.push({
+            seed,
+            grandTotalEP: result.teamSummary.grandTotalEP,
+        });
+
+        for (const dailySummary of result.dailySummaries) {
+            accumulateDailySummary(state, dailySummary);
+        }
+        accumulateTeamSummary(state, result.teamSummary);
+
+        const progress = Math.round(((i + 1) / trialCount) * 100);
+        onProgress?.(progress);
+
+        if (yieldEvery > 0 && (i + 1) % yieldEvery === 0 && i < trialCount - 1) {
+            await waitNextTick();
+        }
+    }
+
+    onProgress?.(100);
+    return finalizeMultiTrialResult(trials, state, trialCount);
 }

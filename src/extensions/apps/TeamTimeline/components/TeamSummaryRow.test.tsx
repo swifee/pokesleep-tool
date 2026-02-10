@@ -113,4 +113,29 @@ describe('TeamSummaryRow', () => {
         expect(screen.getByText('食材合計:')).toBeDefined();
         expect((screen.getByText('食材合計:').parentElement?.textContent) ?? '').toContain('1,945');
     });
+
+    it('switches to daily average values when valueMode is dailyAverage', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={{
+                    ...TEAM_SUMMARY,
+                    totalBerryEP: 3001,
+                    totalIngredientEP: 2001,
+                    totalSkillEP: 1001,
+                    grandTotalEP: 6003,
+                    totalIngredients: [{ name: 'apple', count: 10 }],
+                }}
+                layoutMode="details"
+                simulationDays={3}
+                valueMode="dailyAverage"
+            />
+        );
+
+        const text = document.body.textContent ?? '';
+        expect(text).toContain('きのみ : 1,000EP');
+        expect(text).toContain('食材 : 667EP');
+        expect(text).toContain('スキル : 334EP');
+        expect(text).toContain('total 2,001EP');
+        expect(text).toContain('食材合計: 3');
+    });
 });

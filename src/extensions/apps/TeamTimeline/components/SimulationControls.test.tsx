@@ -10,6 +10,9 @@ interface ChildrenProps {
 interface ButtonProps extends ChildrenProps {
     onClick?: React.MouseEventHandler<HTMLButtonElement>;
     disabled?: boolean;
+    ['aria-valuenow']?: number;
+    ['aria-valuemin']?: number;
+    ['aria-valuemax']?: number;
 }
 
 interface CheckboxProps {
@@ -42,8 +45,8 @@ interface MenuItemProps extends ChildrenProps {
 vi.mock('@mui/material', () => ({
     Box: ({ children }: ChildrenProps) => <div>{children}</div>,
     Typography: ({ children }: ChildrenProps) => <span>{children}</span>,
-    Button: ({ children, onClick, disabled }: ButtonProps) => (
-        <button type="button" onClick={onClick} disabled={disabled}>{children}</button>
+    Button: ({ children, onClick, disabled, ...rest }: ButtonProps) => (
+        <button type="button" onClick={onClick} disabled={disabled} {...rest}>{children}</button>
     ),
     Checkbox: ({ checked, onChange, disabled }: CheckboxProps) => (
         <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} aria-label="seed-checkbox" />
@@ -80,6 +83,7 @@ function renderControls(overrides?: Partial<React.ComponentProps<typeof Simulati
         simulationDays: 1,
         multiTrialCount: 100,
         simulationLoading: false,
+        simulationProgress: 0,
         isTeamEmpty: false,
         onSeedModeChange: vi.fn(),
         onSeedChange: vi.fn(),
@@ -124,6 +128,7 @@ describe('SimulationControls', () => {
                 simulationDays={1}
                 multiTrialCount={100}
                 simulationLoading={false}
+                simulationProgress={0}
                 isTeamEmpty={false}
                 onSeedModeChange={vi.fn()}
                 onSeedChange={vi.fn()}
@@ -142,6 +147,7 @@ describe('SimulationControls', () => {
                 simulationDays={1}
                 multiTrialCount={100}
                 simulationLoading
+                simulationProgress={40}
                 isTeamEmpty={false}
                 onSeedModeChange={vi.fn()}
                 onSeedChange={vi.fn()}
@@ -159,6 +165,7 @@ describe('SimulationControls', () => {
                 simulationDays={1}
                 multiTrialCount={100}
                 simulationLoading={false}
+                simulationProgress={100}
                 isTeamEmpty
                 onSeedModeChange={vi.fn()}
                 onSeedChange={vi.fn()}
@@ -168,5 +175,14 @@ describe('SimulationControls', () => {
             />
         );
         expect((screen.getByRole('button', { name: 'シミュレーション' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('passes progress value to run button while loading', () => {
+        renderControls({
+            simulationLoading: true,
+            simulationProgress: 65,
+        });
+
+        expect(screen.getByRole('button', { name: '計算中...' }).getAttribute('aria-valuenow')).toBe('65');
     });
 });
