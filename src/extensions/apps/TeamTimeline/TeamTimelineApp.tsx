@@ -101,6 +101,7 @@ const TIMELINE_WIPE_REVEAL_EASING_IN_QUAD = 'cubic-bezier(0.55, 0.085, 0.68, 0.5
 const TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 const TIMELINE_DETAILS_FADE_DURATION_MS = 450;
 const TIMELINE_PAGE_BOTTOM_PADDING = '3em';
+const TIME_SLOT_SETTINGS_SECTION_ID = 'team-timeline-time-slot-settings';
 const EMPTY_SIMULATION_RESULT: SimulationResult = {
     slotResults: new Map(),
     dailySummaries: [],
@@ -757,6 +758,14 @@ export default function TeamTimelineApp() {
     // タブ切り替えハンドラー
     const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings') => {
         dispatch({ type: 'selectTab', tab: newValue });
+    }, []);
+
+    const handleOpenTimeSlotSettings = useCallback(() => {
+        dispatch({ type: 'selectTab', tab: 'settings' });
+        window.setTimeout(() => {
+            const timeSlotSection = document.getElementById(TIME_SLOT_SETTINGS_SECTION_ID);
+            timeSlotSection?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+        }, 0);
     }, []);
 
     // 時間帯操作ハンドラー
@@ -2188,6 +2197,7 @@ export default function TeamTimelineApp() {
                                     box={boxRef.current!}
                                     onSwapClick={handleSwapClick}
                                     onHeaderSlotClick={handleSlotClick}
+                                    onOpenTimeSlotSettings={handleOpenTimeSlotSettings}
                                     showSummaryRows={false}
                                     compactEmptyCells
                                     alwaysShowSwapButton
@@ -2241,6 +2251,7 @@ export default function TeamTimelineApp() {
                                             swaps={state.swaps}
                                             box={boxRef.current!}
                                             onSwapClick={handleSwapClick}
+                                            onOpenTimeSlotSettings={handleOpenTimeSlotSettings}
                                             showSummaryRows={false}
                                         />
                                     </Box>
@@ -2272,7 +2283,12 @@ export default function TeamTimelineApp() {
 
             {/* 設定タブ */}
             {state.activeTab === 'settings' && (
-                <>
+                <Box
+                    sx={{
+                        width: '100%',
+                        maxWidth: isDesktop ? '960px' : '100%',
+                    }}
+                >
                     <TimelineBonusSettingsPanel
                         settings={state.bonusSettings}
                         syncWithIvParameter={state.syncWithIvParameter}
@@ -2292,14 +2308,16 @@ export default function TeamTimelineApp() {
                             valueLabelDisplay="auto"
                         />
                     </Box>
-                    <TimeSlotEditor
-                        timeSlots={state.timeSlots}
-                        onAdd={handleAddTimeSlot}
-                        onUpdate={handleUpdateTimeSlot}
-                        onRemove={handleRemoveTimeSlot}
-                        onReset={handleResetTimeSlots}
-                    />
-                </>
+                    <Box id={TIME_SLOT_SETTINGS_SECTION_ID}>
+                        <TimeSlotEditor
+                            timeSlots={state.timeSlots}
+                            onAdd={handleAddTimeSlot}
+                            onUpdate={handleUpdateTimeSlot}
+                            onRemove={handleRemoveTimeSlot}
+                            onReset={handleResetTimeSlots}
+                        />
+                    </Box>
+                </Box>
             )}
 
             {/* 既存: ボックス選択ダイアログ（チーム編成用） */}

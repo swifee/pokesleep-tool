@@ -81,8 +81,8 @@ const StyledSlot = styled('div')({
     },
     '& .slot-button.empty': {
         '& .icon-placeholder': {
-            width: '30px',
-            height: '30px',
+            width: '32px',
+            height: '32px',
             borderRadius: '6px',
             backgroundColor: '#d9d9d9',
             display: 'inline-flex',
@@ -105,10 +105,10 @@ const StyledSlot = styled('div')({
         color: '#62d540',
     },
     '& .icon-area': {
-        width: '30px',
-        height: '30px',
+        width: '32px',
+        height: '32px',
         borderRadius: '6px',
-        overflow: 'hidden',
+        overflow: 'visible',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',

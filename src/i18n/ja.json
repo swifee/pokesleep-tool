@@ -236,7 +236,9 @@
         "TeamTimeline": {
             "title": "チームタイムライン for ポケモンスリープ",
             "short title": "チームタイムライン",
-            "description": "チームのポケモンが1日の間にどのように動くかを可視化します。",
+            "description": "アプリ起動間隔、所持数溢れ、スキルの発動を含めたチームの獲得EPをシミュレーションします。",
+            "notice detail1": "まずは右上のメニューから個体値計算機に移動してポケモンを登録してください。",
+            "notice detail2": "",
             "tab team": "チーム",
             "tab settings": "設定",
             "select pokemon": "ポケモンを選択",

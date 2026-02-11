@@ -79,10 +79,12 @@ vi.mock('./components/TimelineTable', () => ({
         compactEmptyCells,
         alwaysShowSwapButton,
         onHeaderSlotClick,
+        onOpenTimeSlotSettings,
     }: {
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
         onHeaderSlotClick?: (index: number) => void;
+        onOpenTimeSlotSettings?: () => void;
     }) => (
         <div
             data-testid="timeline-table"
@@ -95,6 +97,13 @@ vi.mock('./components/TimelineTable', () => ({
                 onClick={() => onHeaderSlotClick?.(0)}
             >
                 header
+            </button>
+            <button
+                type="button"
+                data-testid="timeline-open-time-slot-settings-click"
+                onClick={() => onOpenTimeSlotSettings?.()}
+            >
+                open-time-slot-settings
             </button>
         </div>
     ),
@@ -126,5 +135,15 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
         fireEvent.click(screen.getByTestId('timeline-header-slot-click'));
 
         expect(screen.getByTestId('team-box-dialog').getAttribute('data-open')).toBe('true');
+    });
+
+    it('switches to settings tab when clicking timeline corner settings button', () => {
+        render(<TeamTimelineApp />);
+
+        expect(screen.queryByTestId('time-slot-editor')).toBeNull();
+
+        fireEvent.click(screen.getByTestId('timeline-open-time-slot-settings-click'));
+
+        expect(screen.getByTestId('time-slot-editor')).toBeDefined();
     });
 });

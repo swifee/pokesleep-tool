@@ -233,6 +233,8 @@
             "title": "팀 타임라인 for 포켓몬 슬립",
             "short title": "팀 타임라인",
             "description": "팀의 포켓몬이 하루 동안 어떻게 활동하는지 시각화합니다.",
+            "notice detail1": "앱 실행 간격, 소지 수 초과, 스킬 발동을 포함한 팀 획득 EP를 시뮬레이션합니다.",
+            "notice detail2": "먼저 오른쪽 상단 메뉴에서 개체값 계산기로 이동해 포켓몬을 등록해 주세요.",
             "select pokemon": "포켓몬 선택",
             "label custom": "사용자 지정 라벨",
             "daily summary": "일일 합계",

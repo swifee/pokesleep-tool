@@ -237,6 +237,8 @@
             "title": "团队时间线 for 宝可梦睡眠",
             "short title": "团队时间线",
             "description": "可视化您的团队宝可梦一天中的活动情况。",
+            "notice detail1": "将模拟包含应用启动间隔、持有数溢出与技能发动在内的队伍获EP表现。",
+            "notice detail2": "请先从右上角菜单进入个体值计算器并登记宝可梦。",
             "select pokemon": "选择宝可梦",
             "label custom": "自定义标签",
             "daily summary": "每日合计",
