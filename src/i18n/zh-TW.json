@@ -237,6 +237,8 @@
             "title": "團隊時間線 for 寶可夢睡眠",
             "short title": "團隊時間線",
             "description": "視覺化您的團隊寶可夢一天中的活動情況。",
+            "notice detail1": "將模擬包含應用啟動間隔、持有數溢出與技能發動在內的隊伍獲得 EP 表現。",
+            "notice detail2": "請先從右上角選單進入個體值計算機並登錄寶可夢。",
             "select pokemon": "選擇寶可夢",
             "label custom": "自訂標籤",
             "daily summary": "每日合計",

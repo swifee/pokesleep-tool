@@ -94,6 +94,26 @@ describe('TimelineTable', () => {
         expect(corner.textContent).toBe('');
     });
 
+    it('calls onOpenTimeSlotSettings when corner settings button is clicked', () => {
+        const onOpenTimeSlotSettings = vi.fn();
+
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={1}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                onOpenTimeSlotSettings={onOpenTimeSlotSettings}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('timeline-corner-settings-button'));
+
+        expect(onOpenTimeSlotSettings).toHaveBeenCalledTimes(1);
+    });
+
     it('shows day bands including day 1 when simulation days are 2 or more', () => {
         render(
             <TimelineTable

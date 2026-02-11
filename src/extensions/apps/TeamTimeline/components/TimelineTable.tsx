@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { styled } from '@mui/system';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useTranslation } from 'react-i18next';
 import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
@@ -18,6 +19,7 @@ interface TimelineTableProps {
   box: PokemonBox;
   onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
   onHeaderSlotClick?: (index: number) => void;
+  onOpenTimeSlotSettings?: () => void;
   showSummaryRows?: boolean;
   compactEmptyCells?: boolean;
   alwaysShowSwapButton?: boolean;
@@ -32,6 +34,7 @@ const TimelineTable = React.memo(({
   box,
   onSwapClick,
   onHeaderSlotClick,
+  onOpenTimeSlotSettings,
   showSummaryRows = true,
   compactEmptyCells = false,
   alwaysShowSwapButton = false,
@@ -52,7 +55,19 @@ const TimelineTable = React.memo(({
   return (
     <TableContainer>
       <HeaderRow>
-        <CornerHeaderCell aria-hidden="true" data-testid="timeline-corner-header-cell" />
+        <CornerHeaderCell data-testid="timeline-corner-header-cell">
+          {onOpenTimeSlotSettings && (
+            <CornerHeaderButton
+              type="button"
+              onClick={onOpenTimeSlotSettings}
+              data-testid="timeline-corner-settings-button"
+              title={t('TeamTimeline.open time slots', '時間帯設定へ移動')}
+              aria-label={t('TeamTimeline.open time slots', '時間帯設定へ移動')}
+            >
+              <SettingsIcon sx={{ fontSize: 18 }} />
+            </CornerHeaderButton>
+          )}
+        </CornerHeaderCell>
         {team.map((pokemon, index) => (
           <PokemonHeaderCell key={index}>
             {onHeaderSlotClick ? (
@@ -183,6 +198,28 @@ const CornerHeaderCell = styled('div')({
   borderRight: '0.5px solid #e2e2e2',
   fontFamily: '"M PLUS 1p", sans-serif',
   color: '#000',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+});
+
+const CornerHeaderButton = styled('button')({
+  width: '100%',
+  height: '100%',
+  border: 'none',
+  padding: 0,
+  margin: 0,
+  backgroundColor: 'transparent',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: '#3a4a62',
+  cursor: 'pointer',
+  borderRadius: '4px',
+  '&:hover': {
+    backgroundColor: '#f4f8ff',
+    color: '#1e64d6',
+  },
 });
 
 const PokemonHeaderCell = styled('div')({
@@ -222,10 +259,10 @@ const HeaderSlotButton = styled('button')({
 });
 
 const PokemonIconBox = styled('div')({
-  width: '30px',
-  height: '30px',
+  width: '32px',
+  height: '32px',
   borderRadius: '6px',
-  overflow: 'hidden',
+  overflow: 'visible',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',

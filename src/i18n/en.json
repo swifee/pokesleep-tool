@@ -237,6 +237,8 @@
             "title": "Team Timeline for Pokémon Sleep",
             "short title": "Team Timeline",
             "description": "Visualize how your team of Pokémon will work throughout the day.",
+            "notice detail1": "This simulates your team's earned EP, including app launch intervals, carry-limit overflow, and skill activations.",
+            "notice detail2": "First, open the IV Calculator from the top-right menu and register your Pokémon.",
             "tab team": "Team",
             "tab settings": "Settings",
             "select pokemon": "Select Pokémon",
