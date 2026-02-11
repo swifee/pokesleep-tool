@@ -165,6 +165,11 @@ export function teamTimelineReducer(
                 multiTrialAverageDailySummaries: null,
                 multiTrialAverageTeamSummary: null,
             };
+        case 'setSimulationPreviewResult':
+            return {
+                ...state,
+                simulationResult: action.result,
+            };
         case 'setSimulationResult':
             return {
                 ...state,

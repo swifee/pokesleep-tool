@@ -82,6 +82,7 @@ export type TeamTimelineAction =
     | { type: 'loadSimulationConfig'; config: SimulationConfig }
     // Phase 3: シミュレーション実行
     | { type: 'startSimulation' }
+    | { type: 'setSimulationPreviewResult'; result: SimulationResult }
     | { type: 'setSimulationResult'; result: SimulationResult }
     | { type: 'setSimulationError'; error: string }
     | { type: 'clearSimulationResult' }

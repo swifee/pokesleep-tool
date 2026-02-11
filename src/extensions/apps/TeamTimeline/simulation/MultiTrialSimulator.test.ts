@@ -169,4 +169,83 @@ describe('runMultiTrialSimulation', () => {
         expect(onProgress.mock.calls[0]?.[0]).toBe(0);
         expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]?.[0]).toBe(100);
     });
+
+    it('throttles progress updates by interval in async simulation', async () => {
+        runSimulationMock.mockReturnValue(createSimulationResult(
+            [createDailySummary(1, 1, 100)],
+            createTeamSummary(1000),
+        ));
+        const onProgress = vi.fn();
+
+        await runMultiTrialSimulationWithProgress({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 5,
+            initialSeed: 200,
+            onProgress,
+            progressUpdateIntervalMs: 60_000,
+            yieldEvery: 1,
+        });
+
+        expect(onProgress.mock.calls.map(call => call[0])).toEqual([0, 100]);
+    });
+
+    it('returns partial aggregates when aborted mid-way', async () => {
+        runSimulationMock.mockImplementation(({ config }: { config: { seed: number } }) => createSimulationResult(
+            [createDailySummary(1, config.seed, config.seed * 10)],
+            createTeamSummary(config.seed),
+        ));
+        const onProgress = vi.fn();
+
+        const result = await runMultiTrialSimulationWithProgress({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 5,
+            initialSeed: 10,
+            onProgress,
+            shouldAbort: () => runSimulationMock.mock.calls.length >= 3,
+            yieldEvery: 1,
+        });
+
+        expect(result.trials.map((trial) => trial.seed)).toEqual([12, 11, 10]);
+        expect(result.averageTeamSummary.grandTotalEP).toBe(11);
+        expect(result.averageDailySummaries[0]?.totalHelpCount).toBe(11);
+        expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]?.[0]).toBe(60);
+    });
+
+    it('notifies completed trials with full trial result payload', async () => {
+        runSimulationMock.mockImplementation(({ config }: { config: { seed: number } }) => createSimulationResult(
+            [createDailySummary(1, config.seed, config.seed * 10)],
+            createTeamSummary(config.seed),
+        ));
+        const onTrialComplete = vi.fn();
+
+        await runMultiTrialSimulationWithProgress({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 2,
+            initialSeed: 300,
+            onTrialComplete,
+            yieldEvery: 1,
+        });
+
+        expect(onTrialComplete).toHaveBeenCalledTimes(2);
+        expect(onTrialComplete.mock.calls[0]?.[0]).toMatchObject({
+            index: 0,
+            trialCount: 2,
+            seed: 300,
+        });
+        expect(onTrialComplete.mock.calls[0]?.[0].result.teamSummary.grandTotalEP).toBe(300);
+        expect(onTrialComplete.mock.calls[1]?.[0]).toMatchObject({
+            index: 1,
+            trialCount: 2,
+            seed: 301,
+        });
+    });
 });

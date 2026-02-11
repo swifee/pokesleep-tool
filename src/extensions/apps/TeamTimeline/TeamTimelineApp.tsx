@@ -36,6 +36,19 @@ import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
 import SummaryValueModeToggle from './components/SummaryValueModeToggle';
 import ResimulationNoticeBar from './components/ResimulationNoticeBar';
+import AdditionalAnalysisPanel from './components/AdditionalAnalysisPanel';
+import {
+    ContributionEpAnalysisResult,
+    EnergyRecoveryBonusContributionResult,
+    EnergySkillContributionResult,
+    EnergySkillContributionTarget,
+} from './types/AdditionalAnalysisTypes';
+import {
+    calculateDeltaPercent,
+    buildEnergySkillContributionTargets,
+    collectAppearingTimelineMembers,
+} from './utils/AdditionalAnalysisUtils';
+import { shouldShowAdditionalAnalysisPanel } from './utils/TeamTimelineDisplayUtils';
 import {
     loadTimelineBonusSettingsFromIvStorage,
     saveTimelineBonusSettingsToIvStorage,
@@ -45,6 +58,59 @@ import {
 interface TeamNormalizationResult {
     normalizedTeam: (PokemonBoxItem | null)[];
     idRemap: Map<number, number>;
+}
+
+interface AnalysisAverageMetrics {
+    averageTeamEP: number;
+    averageTeamHelpCount: number;
+    averageEPByPokemonId: Map<number, number>;
+    averageHelpByPokemonId: Map<number, number>;
+    trialCount: number;
+}
+
+const ANALYSIS_PROGRESS_UPDATE_INTERVAL_MS = 200;
+const ABORT_ERROR_NAME = 'AbortError';
+
+function createAbortError(): Error {
+    const error = new Error('Aborted');
+    error.name = ABORT_ERROR_NAME;
+    return error;
+}
+
+function isAbortError(error: unknown): boolean {
+    return error instanceof Error && error.name === ABORT_ERROR_NAME;
+}
+
+function buildAverageMetricsFromSummaries(
+    teamEP: number,
+    dailySummaries: readonly { pokemonId: number; totalHelpCount: number; totalEP: number }[],
+    trialCount: number
+): AnalysisAverageMetrics {
+    const averageEPByPokemonId = new Map<number, number>();
+    const averageHelpByPokemonId = new Map<number, number>();
+    let averageTeamHelpCount = 0;
+
+    dailySummaries.forEach((summary) => {
+        averageEPByPokemonId.set(summary.pokemonId, summary.totalEP);
+        averageHelpByPokemonId.set(summary.pokemonId, summary.totalHelpCount);
+        averageTeamHelpCount += summary.totalHelpCount;
+    });
+
+    return {
+        averageTeamEP: teamEP,
+        averageTeamHelpCount,
+        averageEPByPokemonId,
+        averageHelpByPokemonId,
+        trialCount,
+    };
+}
+
+function pickEveryTenthSeeds(sortedSeeds: readonly number[]): number[] {
+    const picked = sortedSeeds.filter((_, index) => (index + 1) % 10 === 0);
+    if (picked.length > 0) {
+        return picked;
+    }
+    return [...sortedSeeds];
 }
 
 function migrateSwap(rawSwap: unknown): PokemonSwap | null {
@@ -146,6 +212,65 @@ export default function TeamTimelineApp() {
     const [summaryValueMode, setSummaryValueMode] = useState<SummaryValueMode>('periodTotal');
     const [simulationProgress, setSimulationProgress] = useState(0);
     const [showResimulationNotice, setShowResimulationNotice] = useState(false);
+    const [analysisQuickModeEnabled, setAnalysisQuickModeEnabled] = useState(true);
+    const [analysisError, setAnalysisError] = useState<string | null>(null);
+    const [baseAverageMetrics, setBaseAverageMetrics] = useState<AnalysisAverageMetrics | null>(null);
+    const [contributionResults, setContributionResults] = useState<Map<number, ContributionEpAnalysisResult>>(new Map());
+    const [energySkillResults, setEnergySkillResults] = useState<Map<number, EnergySkillContributionResult>>(new Map());
+    const [energyRecoveryBonusResult, setEnergyRecoveryBonusResult] = useState<EnergyRecoveryBonusContributionResult | null>(null);
+    const [contributionLoadingIds, setContributionLoadingIds] = useState<Set<number>>(new Set());
+    const [energySkillLoadingIds, setEnergySkillLoadingIds] = useState<Set<number>>(new Set());
+    const [contributionBatchLoading, setContributionBatchLoading] = useState(false);
+    const [energySkillBatchLoading, setEnergySkillBatchLoading] = useState(false);
+    const [energyRecoveryBonusLoading, setEnergyRecoveryBonusLoading] = useState(false);
+    const [contributionProgressById, setContributionProgressById] = useState<Map<number, number>>(new Map());
+    const [energySkillProgressById, setEnergySkillProgressById] = useState<Map<number, number>>(new Map());
+    const [contributionBatchProgress, setContributionBatchProgress] = useState(0);
+    const [energySkillBatchProgress, setEnergySkillBatchProgress] = useState(0);
+    const [energyRecoveryBonusProgress, setEnergyRecoveryBonusProgress] = useState(0);
+    const simulationAbortControllerRef = useRef<AbortController | null>(null);
+    const analysisRunVersionRef = useRef(0);
+
+    const resetAdditionalAnalysisState = useCallback(() => {
+        analysisRunVersionRef.current += 1;
+        setAnalysisError(null);
+        setBaseAverageMetrics(null);
+        setContributionResults(new Map());
+        setEnergySkillResults(new Map());
+        setEnergyRecoveryBonusResult(null);
+        setContributionLoadingIds(new Set());
+        setEnergySkillLoadingIds(new Set());
+        setContributionBatchLoading(false);
+        setEnergySkillBatchLoading(false);
+        setEnergyRecoveryBonusLoading(false);
+        setContributionProgressById(new Map());
+        setEnergySkillProgressById(new Map());
+        setContributionBatchProgress(0);
+        setEnergySkillBatchProgress(0);
+        setEnergyRecoveryBonusProgress(0);
+    }, []);
+
+    const cancelRunningAnalysisIfAny = useCallback((): boolean => {
+        const hasRunningAnalysis = (
+            contributionLoadingIds.size > 0
+            || energySkillLoadingIds.size > 0
+            || contributionBatchLoading
+            || energySkillBatchLoading
+            || energyRecoveryBonusLoading
+        );
+        if (!hasRunningAnalysis) {
+            return false;
+        }
+        resetAdditionalAnalysisState();
+        return true;
+    }, [
+        contributionLoadingIds,
+        energySkillLoadingIds,
+        contributionBatchLoading,
+        energySkillBatchLoading,
+        energyRecoveryBonusLoading,
+        resetAdditionalAnalysisState,
+    ]);
 
     // ボックスのロード（初回のみ）
     const boxRef = useRef<PokemonBox | null>(null);
@@ -284,6 +409,11 @@ export default function TeamTimelineApp() {
         };
     }, [state.syncWithIvParameter]);
 
+    useEffect(() => () => {
+        simulationAbortControllerRef.current?.abort();
+        analysisRunVersionRef.current += 1;
+    }, []);
+
     // スロットクリック時のハンドラ
     const handleSlotClick = useCallback((index: number) => {
         dispatch({ type: 'openSlotDialog', index });
@@ -331,7 +461,12 @@ export default function TeamTimelineApp() {
         state.swaps,
     ]);
 
-    const runMultiTrialWithSeed = useCallback(async (initialSeed?: number, preferredSeed?: number) => {
+    const runMultiTrialWithSeed = useCallback(async (
+        initialSeed?: number,
+        preferredSeed?: number,
+        abortSignal?: AbortSignal
+    ) => {
+        let hasShownFirstTrialPreview = false;
         const multiResult = await runMultiTrialSimulationWithProgress({
             team: state.team,
             timeSlots: state.timeSlots,
@@ -347,6 +482,18 @@ export default function TeamTimelineApp() {
             onProgress: (progress) => {
                 setSimulationProgress(progress);
             },
+            onTrialComplete: ({ index, trialCount, seed, result }) => {
+                if (abortSignal?.aborted) {
+                    return;
+                }
+                if (trialCount < 2 || index !== 0 || hasShownFirstTrialPreview) {
+                    return;
+                }
+                hasShownFirstTrialPreview = true;
+                dispatch({ type: 'setSimulationPreviewResult', result });
+                dispatch({ type: 'updateSimulationConfig', config: { seed } });
+            },
+            shouldAbort: () => abortSignal?.aborted === true,
         });
 
         if (multiResult.trials.length === 0) {
@@ -398,6 +545,7 @@ export default function TeamTimelineApp() {
         forcedInitialSeed?: number;
         preferredSeed?: number;
         forceMultiTrial?: boolean;
+        abortSignal?: AbortSignal;
     }) => {
         const validTeam = state.team.filter(p => p !== null);
         if (validTeam.length === 0) {
@@ -406,6 +554,9 @@ export default function TeamTimelineApp() {
 
         const forceMultiTrial = options?.forceMultiTrial === true;
         if (!forceMultiTrial && state.seedMode === 'fixed' && state.multiTrialCount === 1) {
+            if (options?.abortSignal?.aborted) {
+                return;
+            }
             setSimulationProgress(30);
             runSingleSimulationWithSeed(state.simulationConfig.seed);
             setSimulationProgress(100);
@@ -417,7 +568,7 @@ export default function TeamTimelineApp() {
                 ? state.simulationConfig.seed
                 : undefined
         );
-        await runMultiTrialWithSeed(initialSeed, options?.preferredSeed);
+        await runMultiTrialWithSeed(initialSeed, options?.preferredSeed, options?.abortSignal);
         setSimulationProgress(100);
     }, [
         state.team,
@@ -430,18 +581,36 @@ export default function TeamTimelineApp() {
 
     // シミュレーション実行ハンドラー（統合）
     const handleRunSimulation = useCallback(() => {
+        if (state.simulationLoading) {
+            simulationAbortControllerRef.current?.abort();
+            resetAdditionalAnalysisState();
+            return;
+        }
+
         setShowResimulationNotice(false);
+        resetAdditionalAnalysisState();
         setSimulationProgress(0);
         dispatch({ type: 'startSimulation' });
+        const abortController = new AbortController();
+        simulationAbortControllerRef.current = abortController;
 
         // Use setTimeout to allow React to render loading state before heavy computation
         setTimeout(() => {
-            void executeSimulation().catch((e) => {
-                dispatch({ type: 'setSimulationError', error: String(e) });
-                setSimulationProgress(0);
-            });
+            void executeSimulation({ abortSignal: abortController.signal })
+                .catch((e) => {
+                    if (isAbortError(e)) {
+                        return;
+                    }
+                    dispatch({ type: 'setSimulationError', error: String(e) });
+                    setSimulationProgress(0);
+                })
+                .finally(() => {
+                    if (simulationAbortControllerRef.current === abortController) {
+                        simulationAbortControllerRef.current = null;
+                    }
+                });
         }, 0);
-    }, [executeSimulation]);
+    }, [executeSimulation, resetAdditionalAnalysisState, state.simulationLoading]);
 
     // スライダー変更ハンドラー（結果切り替え）
     const handleSliderChange = useCallback((index: number) => {
@@ -618,7 +787,800 @@ export default function TeamTimelineApp() {
         return [...uniqueIdForms];
     }, [state.swaps]);
 
+    const appearingTimelineMembers = useMemo(() => {
+        if (!boxRef.current) {
+            return [];
+        }
+        return collectAppearingTimelineMembers(state.team, state.swaps, boxRef.current);
+    }, [state.team, state.swaps]);
+
+    const baseSortedSeeds = useMemo(() => {
+        if (state.multiTrialResults && state.multiTrialResults.length > 0) {
+            return state.multiTrialResults.map(trial => trial.seed);
+        }
+        return [state.simulationConfig.seed];
+    }, [state.multiTrialResults, state.simulationConfig.seed]);
+
+    const analysisSeeds = useMemo(() => (
+        analysisQuickModeEnabled
+            ? pickEveryTenthSeeds(baseSortedSeeds)
+            : [...baseSortedSeeds]
+    ), [analysisQuickModeEnabled, baseSortedSeeds]);
+
+    const memberDisplayNameById = useMemo(() => {
+        const map = new Map<number, string>();
+        appearingTimelineMembers.forEach((member) => {
+            map.set(member.id, member.filledNickname(t));
+        });
+        return map;
+    }, [appearingTimelineMembers, t]);
+
+    const energySkillTargets = useMemo(
+        () => buildEnergySkillContributionTargets(appearingTimelineMembers).map((target) => ({
+            ...target,
+            pokemonName: memberDisplayNameById.get(target.pokemonId) ?? target.pokemonName,
+        })),
+        [appearingTimelineMembers, memberDisplayNameById]
+    );
+
+    const hasEnergyRecoveryBonusMember = useMemo(
+        () => appearingTimelineMembers.some(member =>
+            member.iv.activeSubSkills.some(subSkill => subSkill.name === 'Energy Recovery Bonus')
+        ),
+        [appearingTimelineMembers]
+    );
+
+    const baseAverageMetricsFromSimulation = useMemo<AnalysisAverageMetrics | null>(() => {
+        if (!state.simulationResult) {
+            return null;
+        }
+        if (
+            state.multiTrialResults !== null
+            && state.multiTrialResults.length > 0
+            && state.multiTrialAverageDailySummaries !== null
+            && state.multiTrialAverageTeamSummary !== null
+        ) {
+            return buildAverageMetricsFromSummaries(
+                state.multiTrialAverageTeamSummary.grandTotalEP,
+                state.multiTrialAverageDailySummaries,
+                state.multiTrialResults.length
+            );
+        }
+        return buildAverageMetricsFromSummaries(
+            state.simulationResult.teamSummary.grandTotalEP,
+            state.simulationResult.dailySummaries,
+            1
+        );
+    }, [
+        state.simulationResult,
+        state.multiTrialResults,
+        state.multiTrialAverageDailySummaries,
+        state.multiTrialAverageTeamSummary,
+    ]);
+
+    const hasResolvedBaseMetrics = baseAverageMetrics !== null || baseAverageMetricsFromSimulation !== null;
+
+    const runAverageMetricsWithSeeds = useCallback(async (options: {
+        disabledPokemonIds?: readonly number[];
+        suppressEnergyDeltaSkillPokemonIds?: readonly number[];
+        disableEnergyRecoveryBonus?: boolean;
+    }, onProgress?: (progress: number) => void, shouldAbort?: () => boolean): Promise<AnalysisAverageMetrics> => {
+        const totalEPByPokemonId = new Map<number, number>();
+        const totalHelpByPokemonId = new Map<number, number>();
+        let totalTeamEP = 0;
+        let totalTeamHelpCount = 0;
+        let lastProgressUpdateAt = 0;
+        let lastEmittedProgress = 0;
+        const throwIfAborted = (): void => {
+            if (shouldAbort?.()) {
+                throw createAbortError();
+            }
+        };
+
+        const emitProgress = async (progress: number, force = false): Promise<void> => {
+            throwIfAborted();
+            if (!onProgress) {
+                return;
+            }
+            const normalizedProgress = Math.max(lastEmittedProgress, Math.max(0, Math.min(100, progress)));
+            const now = Date.now();
+            if (!force && now - lastProgressUpdateAt < ANALYSIS_PROGRESS_UPDATE_INTERVAL_MS) {
+                return;
+            }
+            onProgress(normalizedProgress);
+            lastEmittedProgress = normalizedProgress;
+            lastProgressUpdateAt = now;
+            // Yield only when we actually update progress UI.
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            throwIfAborted();
+        };
+
+        throwIfAborted();
+        const trialCount = Math.max(analysisSeeds.length, 1);
+        for (let index = 0; index < analysisSeeds.length; index += 1) {
+            throwIfAborted();
+            const seed = analysisSeeds[index];
+            const result = runSimulation({
+                team: state.team,
+                timeSlots: state.timeSlots,
+                config: {
+                    seed,
+                    initialEnergy: state.simulationConfig.initialEnergy,
+                    simulationDays: state.simulationConfig.simulationDays,
+                },
+                bonusSettings: state.bonusSettings,
+                swaps: state.swaps,
+                box: boxRef.current || undefined,
+                analysisOptions: {
+                    disabledPokemonIds: options.disabledPokemonIds,
+                    keepDisabledPokemonTargetable: true,
+                    suppressEnergyDeltaSkillPokemonIds: options.suppressEnergyDeltaSkillPokemonIds,
+                    disableEnergyRecoveryBonus: options.disableEnergyRecoveryBonus,
+                },
+            });
+
+            totalTeamEP += result.teamSummary.grandTotalEP;
+            let trialTeamHelpCount = 0;
+            result.dailySummaries.forEach((summary) => {
+                totalEPByPokemonId.set(
+                    summary.pokemonId,
+                    (totalEPByPokemonId.get(summary.pokemonId) ?? 0) + summary.totalEP
+                );
+                trialTeamHelpCount += summary.totalHelpCount;
+                totalHelpByPokemonId.set(
+                    summary.pokemonId,
+                    (totalHelpByPokemonId.get(summary.pokemonId) ?? 0) + summary.totalHelpCount
+                );
+            });
+            totalTeamHelpCount += trialTeamHelpCount;
+            await emitProgress(((index + 1) / trialCount) * 100, index + 1 === analysisSeeds.length);
+        }
+
+        throwIfAborted();
+        if (analysisSeeds.length === 0) {
+            await emitProgress(100, true);
+        }
+
+        const divisor = trialCount;
+        const averageEPByPokemonId = new Map<number, number>();
+        totalEPByPokemonId.forEach((total, pokemonId) => {
+            averageEPByPokemonId.set(pokemonId, total / divisor);
+        });
+        const averageHelpByPokemonId = new Map<number, number>();
+        totalHelpByPokemonId.forEach((total, pokemonId) => {
+            averageHelpByPokemonId.set(pokemonId, total / divisor);
+        });
+        throwIfAborted();
+
+        return {
+            averageTeamEP: totalTeamEP / divisor,
+            averageTeamHelpCount: totalTeamHelpCount / divisor,
+            averageEPByPokemonId,
+            averageHelpByPokemonId,
+            trialCount: divisor,
+        };
+    }, [
+        analysisSeeds,
+        state.team,
+        state.timeSlots,
+        state.simulationConfig.initialEnergy,
+        state.simulationConfig.simulationDays,
+        state.bonusSettings,
+        state.swaps,
+    ]);
+
+    const resolveBaseAverageMetrics = useCallback(async (
+        onProgress?: (progress: number) => void,
+        shouldAbort?: () => boolean
+    ): Promise<AnalysisAverageMetrics> => {
+        if (shouldAbort?.()) {
+            throw createAbortError();
+        }
+        if (baseAverageMetrics) {
+            onProgress?.(100);
+            return baseAverageMetrics;
+        }
+        if (baseAverageMetricsFromSimulation) {
+            onProgress?.(100);
+            if (shouldAbort?.()) {
+                throw createAbortError();
+            }
+            setBaseAverageMetrics(baseAverageMetricsFromSimulation);
+            return baseAverageMetricsFromSimulation;
+        }
+        const computed = await runAverageMetricsWithSeeds({}, onProgress, shouldAbort);
+        if (shouldAbort?.()) {
+            throw createAbortError();
+        }
+        setBaseAverageMetrics(computed);
+        return computed;
+    }, [baseAverageMetrics, baseAverageMetricsFromSimulation, runAverageMetricsWithSeeds]);
+
+    const runContributionAnalysis = useCallback((pokemon: PokemonBoxItem) => {
+        if (!state.simulationResult) {
+            return;
+        }
+        if (cancelRunningAnalysisIfAny()) {
+            return;
+        }
+        const runVersion = analysisRunVersionRef.current;
+        const shouldAbort = () => analysisRunVersionRef.current !== runVersion;
+        setAnalysisError(null);
+        setContributionLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.add(pokemon.id);
+            return next;
+        });
+        setContributionProgressById((prev) => {
+            const next = new Map(prev);
+            next.set(pokemon.id, 0);
+            return next;
+        });
+        setTimeout(() => {
+            void (async () => {
+                const seedUnitCount = Math.max(analysisSeeds.length, 1);
+                const hasBaseMetrics = hasResolvedBaseMetrics;
+                const totalUnits = seedUnitCount * (hasBaseMetrics ? 1 : 2);
+                let processedUnits = 0;
+                const updateContributionProgress = (nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setContributionProgressById((prev) => {
+                        const current = prev.get(pokemon.id) ?? 0;
+                        if (clamped <= current) {
+                            return prev;
+                        }
+                        const next = new Map(prev);
+                        next.set(pokemon.id, clamped);
+                        return next;
+                    });
+                };
+                try {
+                    const baseMetrics = await resolveBaseAverageMetrics(
+                        hasBaseMetrics
+                            ? undefined
+                            : (baseProgress) => {
+                                if (shouldAbort()) {
+                                    return;
+                                }
+                                updateContributionProgress(((baseProgress / 100) * seedUnitCount / totalUnits) * 100);
+                            },
+                        shouldAbort
+                    );
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    if (!hasBaseMetrics) {
+                        processedUnits += seedUnitCount;
+                    }
+                    const scenarioMetrics = await runAverageMetricsWithSeeds({
+                        disabledPokemonIds: [pokemon.id],
+                    }, (scenarioProgress) => {
+                        if (shouldAbort()) {
+                            return;
+                        }
+                        const progress =
+                            ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                        updateContributionProgress(progress);
+                    }, shouldAbort);
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    const analysisResult: ContributionEpAnalysisResult = {
+                        pokemonId: pokemon.id,
+                        pokemonName: pokemon.filledNickname(t),
+                        baseTeamEP: baseMetrics.averageTeamEP,
+                        scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                        deltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
+                        deltaPercent: calculateDeltaPercent(baseMetrics.averageTeamEP, scenarioMetrics.averageTeamEP),
+                    };
+                    setContributionResults((prev) => {
+                        const next = new Map(prev);
+                        next.set(pokemon.id, analysisResult);
+                        return next;
+                    });
+                } catch (e) {
+                    if (!isAbortError(e)) {
+                        setAnalysisError(String(e));
+                    }
+                } finally {
+                    if (!shouldAbort()) {
+                        setContributionLoadingIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(pokemon.id);
+                            return next;
+                        });
+                        setContributionProgressById((prev) => {
+                            const next = new Map(prev);
+                            next.set(pokemon.id, 100);
+                            return next;
+                        });
+                    }
+                }
+            })();
+        }, 0);
+    }, [
+        cancelRunningAnalysisIfAny,
+        analysisSeeds.length,
+        hasResolvedBaseMetrics,
+        resolveBaseAverageMetrics,
+        runAverageMetricsWithSeeds,
+        state.simulationResult,
+        t,
+    ]);
+
+    const runContributionAnalysisAll = useCallback(() => {
+        if (!state.simulationResult || appearingTimelineMembers.length === 0) {
+            return;
+        }
+        if (cancelRunningAnalysisIfAny()) {
+            return;
+        }
+        const runVersion = analysisRunVersionRef.current;
+        const shouldAbort = () => analysisRunVersionRef.current !== runVersion;
+        setAnalysisError(null);
+        setContributionBatchLoading(true);
+        setContributionBatchProgress(0);
+        setContributionProgressById(new Map());
+        setTimeout(() => {
+            void (async () => {
+                const seedUnitCount = Math.max(analysisSeeds.length, 1);
+                const hasBaseMetrics = hasResolvedBaseMetrics;
+                const totalUnits = seedUnitCount * (appearingTimelineMembers.length + (hasBaseMetrics ? 0 : 1));
+                let processedUnits = 0;
+                const updateBatchProgress = (nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setContributionBatchProgress(prev => Math.max(prev, clamped));
+                };
+                const updateMemberProgress = (pokemonId: number, nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setContributionProgressById((prev) => {
+                        const current = prev.get(pokemonId) ?? 0;
+                        if (clamped <= current) {
+                            return prev;
+                        }
+                        const next = new Map(prev);
+                        next.set(pokemonId, clamped);
+                        return next;
+                    });
+                };
+                try {
+                    const baseMetrics = await resolveBaseAverageMetrics(
+                        hasBaseMetrics
+                            ? undefined
+                            : (baseProgress) => {
+                                if (shouldAbort()) {
+                                    return;
+                                }
+                                const progress = ((baseProgress / 100) * seedUnitCount / totalUnits) * 100;
+                                updateBatchProgress(progress);
+                            },
+                        shouldAbort
+                    );
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    if (!hasBaseMetrics) {
+                        processedUnits += seedUnitCount;
+                    }
+                    for (let index = 0; index < appearingTimelineMembers.length; index += 1) {
+                        if (shouldAbort()) {
+                            throw createAbortError();
+                        }
+                        const pokemon = appearingTimelineMembers[index];
+                        updateMemberProgress(pokemon.id, 1);
+                        const scenarioMetrics = await runAverageMetricsWithSeeds({
+                            disabledPokemonIds: [pokemon.id],
+                        }, (scenarioProgress) => {
+                            if (shouldAbort()) {
+                                return;
+                            }
+                            const progress =
+                                ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                            updateBatchProgress(progress);
+                            updateMemberProgress(pokemon.id, Math.max(1, scenarioProgress));
+                        }, shouldAbort);
+                        if (shouldAbort()) {
+                            throw createAbortError();
+                        }
+                        const nextResult: ContributionEpAnalysisResult = {
+                            pokemonId: pokemon.id,
+                            pokemonName: pokemon.filledNickname(t),
+                            baseTeamEP: baseMetrics.averageTeamEP,
+                            scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                            deltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
+                            deltaPercent: calculateDeltaPercent(baseMetrics.averageTeamEP, scenarioMetrics.averageTeamEP),
+                        };
+                        setContributionResults((prev) => {
+                            const next = new Map(prev);
+                            next.set(pokemon.id, nextResult);
+                            return next;
+                        });
+                        updateMemberProgress(pokemon.id, 100);
+                        processedUnits += seedUnitCount;
+                    }
+                } catch (e) {
+                    if (!isAbortError(e)) {
+                        setAnalysisError(String(e));
+                    }
+                } finally {
+                    if (!shouldAbort()) {
+                        setContributionBatchLoading(false);
+                        setContributionBatchProgress(0);
+                    }
+                }
+            })();
+        }, 0);
+    }, [
+        cancelRunningAnalysisIfAny,
+        analysisSeeds.length,
+        hasResolvedBaseMetrics,
+        appearingTimelineMembers,
+        resolveBaseAverageMetrics,
+        runAverageMetricsWithSeeds,
+        state.simulationResult,
+        t,
+    ]);
+
+    const runEnergySkillAnalysis = useCallback((target: EnergySkillContributionTarget) => {
+        if (!state.simulationResult) {
+            return;
+        }
+        if (cancelRunningAnalysisIfAny()) {
+            return;
+        }
+        const runVersion = analysisRunVersionRef.current;
+        const shouldAbort = () => analysisRunVersionRef.current !== runVersion;
+        setAnalysisError(null);
+        setEnergySkillLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.add(target.pokemonId);
+            return next;
+        });
+        setEnergySkillProgressById((prev) => {
+            const next = new Map(prev);
+            next.set(target.pokemonId, 0);
+            return next;
+        });
+        setTimeout(() => {
+            void (async () => {
+                const seedUnitCount = Math.max(analysisSeeds.length, 1);
+                const hasBaseMetrics = hasResolvedBaseMetrics;
+                const totalUnits = seedUnitCount * (hasBaseMetrics ? 1 : 2);
+                let processedUnits = 0;
+                const updateEnergySkillProgress = (nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setEnergySkillProgressById((prev) => {
+                        const current = prev.get(target.pokemonId) ?? 0;
+                        if (clamped <= current) {
+                            return prev;
+                        }
+                        const next = new Map(prev);
+                        next.set(target.pokemonId, clamped);
+                        return next;
+                    });
+                };
+                try {
+                    const baseMetrics = await resolveBaseAverageMetrics(
+                        hasBaseMetrics
+                            ? undefined
+                            : (baseProgress) => {
+                                if (shouldAbort()) {
+                                    return;
+                                }
+                                updateEnergySkillProgress(((baseProgress / 100) * seedUnitCount / totalUnits) * 100);
+                            },
+                        shouldAbort
+                    );
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    if (!hasBaseMetrics) {
+                        processedUnits += seedUnitCount;
+                    }
+                    const scenarioMetrics = await runAverageMetricsWithSeeds({
+                        suppressEnergyDeltaSkillPokemonIds: [target.pokemonId],
+                    }, (scenarioProgress) => {
+                        if (shouldAbort()) {
+                            return;
+                        }
+                        const progress =
+                            ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                        updateEnergySkillProgress(progress);
+                    }, shouldAbort);
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    const baseSelfEP = baseMetrics.averageEPByPokemonId.get(target.pokemonId) ?? 0;
+                    const scenarioSelfEP = scenarioMetrics.averageEPByPokemonId.get(target.pokemonId) ?? 0;
+                    const baseSelfHelpCount = baseMetrics.averageHelpByPokemonId.get(target.pokemonId) ?? 0;
+                    const scenarioSelfHelpCount = scenarioMetrics.averageHelpByPokemonId.get(target.pokemonId) ?? 0;
+                    const analysisResult: EnergySkillContributionResult = {
+                        pokemonId: target.pokemonId,
+                        pokemonName: target.pokemonName,
+                        skillName: target.skillName,
+                        category: target.category,
+                        baseSelfEP,
+                        scenarioSelfEP,
+                        selfDeltaEP: scenarioSelfEP - baseSelfEP,
+                        selfDeltaPercent: calculateDeltaPercent(baseSelfEP, scenarioSelfEP),
+                        baseTeamEP: baseMetrics.averageTeamEP,
+                        scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                        teamDeltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
+                        teamDeltaPercent: calculateDeltaPercent(
+                            baseMetrics.averageTeamEP,
+                            scenarioMetrics.averageTeamEP
+                        ),
+                        baseSelfHelpCount,
+                        scenarioSelfHelpCount,
+                        baseTeamHelpCount: baseMetrics.averageTeamHelpCount,
+                        scenarioTeamHelpCount: scenarioMetrics.averageTeamHelpCount,
+                    };
+                    setEnergySkillResults((prev) => {
+                        const next = new Map(prev);
+                        next.set(target.pokemonId, analysisResult);
+                        return next;
+                    });
+                } catch (e) {
+                    if (!isAbortError(e)) {
+                        setAnalysisError(String(e));
+                    }
+                } finally {
+                    if (!shouldAbort()) {
+                        setEnergySkillLoadingIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(target.pokemonId);
+                            return next;
+                        });
+                        setEnergySkillProgressById((prev) => {
+                            const next = new Map(prev);
+                            next.set(target.pokemonId, 100);
+                            return next;
+                        });
+                    }
+                }
+            })();
+        }, 0);
+    }, [
+        cancelRunningAnalysisIfAny,
+        analysisSeeds.length,
+        hasResolvedBaseMetrics,
+        resolveBaseAverageMetrics,
+        runAverageMetricsWithSeeds,
+        state.simulationResult,
+    ]);
+
+    const runEnergySkillAnalysisAll = useCallback(() => {
+        if (!state.simulationResult || energySkillTargets.length === 0) {
+            return;
+        }
+        if (cancelRunningAnalysisIfAny()) {
+            return;
+        }
+        const runVersion = analysisRunVersionRef.current;
+        const shouldAbort = () => analysisRunVersionRef.current !== runVersion;
+        setAnalysisError(null);
+        setEnergySkillBatchLoading(true);
+        setEnergySkillBatchProgress(0);
+        setEnergySkillProgressById(new Map());
+        setTimeout(() => {
+            void (async () => {
+                const seedUnitCount = Math.max(analysisSeeds.length, 1);
+                const hasBaseMetrics = hasResolvedBaseMetrics;
+                const totalUnits = seedUnitCount * (energySkillTargets.length + (hasBaseMetrics ? 0 : 1));
+                let processedUnits = 0;
+                const updateBatchProgress = (nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setEnergySkillBatchProgress(prev => Math.max(prev, clamped));
+                };
+                const updateMemberProgress = (pokemonId: number, nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setEnergySkillProgressById((prev) => {
+                        const current = prev.get(pokemonId) ?? 0;
+                        if (clamped <= current) {
+                            return prev;
+                        }
+                        const next = new Map(prev);
+                        next.set(pokemonId, clamped);
+                        return next;
+                    });
+                };
+                try {
+                    const baseMetrics = await resolveBaseAverageMetrics(
+                        hasBaseMetrics
+                            ? undefined
+                            : (baseProgress) => {
+                                if (shouldAbort()) {
+                                    return;
+                                }
+                                const progress = ((baseProgress / 100) * seedUnitCount / totalUnits) * 100;
+                                updateBatchProgress(progress);
+                            },
+                        shouldAbort
+                    );
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    if (!hasBaseMetrics) {
+                        processedUnits += seedUnitCount;
+                    }
+                    for (let index = 0; index < energySkillTargets.length; index += 1) {
+                        if (shouldAbort()) {
+                            throw createAbortError();
+                        }
+                        const target = energySkillTargets[index];
+                        updateMemberProgress(target.pokemonId, 1);
+                        const scenarioMetrics = await runAverageMetricsWithSeeds({
+                            suppressEnergyDeltaSkillPokemonIds: [target.pokemonId],
+                        }, (scenarioProgress) => {
+                            if (shouldAbort()) {
+                                return;
+                            }
+                            const progress =
+                                ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                            updateBatchProgress(progress);
+                            updateMemberProgress(target.pokemonId, Math.max(1, scenarioProgress));
+                        }, shouldAbort);
+                        if (shouldAbort()) {
+                            throw createAbortError();
+                        }
+                        const baseSelfEP = baseMetrics.averageEPByPokemonId.get(target.pokemonId) ?? 0;
+                        const scenarioSelfEP = scenarioMetrics.averageEPByPokemonId.get(target.pokemonId) ?? 0;
+                        const baseSelfHelpCount = baseMetrics.averageHelpByPokemonId.get(target.pokemonId) ?? 0;
+                        const scenarioSelfHelpCount = scenarioMetrics.averageHelpByPokemonId.get(target.pokemonId) ?? 0;
+                        const nextResult: EnergySkillContributionResult = {
+                            pokemonId: target.pokemonId,
+                            pokemonName: target.pokemonName,
+                            skillName: target.skillName,
+                            category: target.category,
+                            baseSelfEP,
+                            scenarioSelfEP,
+                            selfDeltaEP: scenarioSelfEP - baseSelfEP,
+                            selfDeltaPercent: calculateDeltaPercent(baseSelfEP, scenarioSelfEP),
+                            baseTeamEP: baseMetrics.averageTeamEP,
+                            scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                            teamDeltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
+                            teamDeltaPercent: calculateDeltaPercent(
+                                baseMetrics.averageTeamEP,
+                                scenarioMetrics.averageTeamEP
+                            ),
+                            baseSelfHelpCount,
+                            scenarioSelfHelpCount,
+                            baseTeamHelpCount: baseMetrics.averageTeamHelpCount,
+                            scenarioTeamHelpCount: scenarioMetrics.averageTeamHelpCount,
+                        };
+                        setEnergySkillResults((prev) => {
+                            const next = new Map(prev);
+                            next.set(target.pokemonId, nextResult);
+                            return next;
+                        });
+                        updateMemberProgress(target.pokemonId, 100);
+                        processedUnits += seedUnitCount;
+                    }
+                } catch (e) {
+                    if (!isAbortError(e)) {
+                        setAnalysisError(String(e));
+                    }
+                } finally {
+                    if (!shouldAbort()) {
+                        setEnergySkillBatchLoading(false);
+                        setEnergySkillBatchProgress(0);
+                    }
+                }
+            })();
+        }, 0);
+    }, [
+        cancelRunningAnalysisIfAny,
+        analysisSeeds.length,
+        hasResolvedBaseMetrics,
+        energySkillTargets,
+        resolveBaseAverageMetrics,
+        runAverageMetricsWithSeeds,
+        state.simulationResult,
+    ]);
+
+    const runEnergyRecoveryBonusAnalysis = useCallback(() => {
+        if (!state.simulationResult || !hasEnergyRecoveryBonusMember) {
+            return;
+        }
+        if (cancelRunningAnalysisIfAny()) {
+            return;
+        }
+        const runVersion = analysisRunVersionRef.current;
+        const shouldAbort = () => analysisRunVersionRef.current !== runVersion;
+        setAnalysisError(null);
+        setEnergyRecoveryBonusLoading(true);
+        setEnergyRecoveryBonusProgress(0);
+        setTimeout(() => {
+            void (async () => {
+                const seedUnitCount = Math.max(analysisSeeds.length, 1);
+                const hasBaseMetrics = hasResolvedBaseMetrics;
+                const totalUnits = seedUnitCount * (hasBaseMetrics ? 1 : 2);
+                let processedUnits = 0;
+                const updateErbProgress = (nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setEnergyRecoveryBonusProgress(prev => Math.max(prev, clamped));
+                };
+                try {
+                    const baseMetrics = await resolveBaseAverageMetrics(
+                        hasBaseMetrics
+                            ? undefined
+                            : (baseProgress) => {
+                                if (shouldAbort()) {
+                                    return;
+                                }
+                                updateErbProgress(((baseProgress / 100) * seedUnitCount / totalUnits) * 100);
+                            },
+                        shouldAbort
+                    );
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    if (!hasBaseMetrics) {
+                        processedUnits += seedUnitCount;
+                    }
+                    const scenarioMetrics = await runAverageMetricsWithSeeds({
+                        disableEnergyRecoveryBonus: true,
+                    }, (scenarioProgress) => {
+                        if (shouldAbort()) {
+                            return;
+                        }
+                        const progress =
+                            ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                        updateErbProgress(progress);
+                    }, shouldAbort);
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    setEnergyRecoveryBonusResult({
+                        baseTeamHelpCount: baseMetrics.averageTeamHelpCount,
+                        scenarioTeamHelpCount: scenarioMetrics.averageTeamHelpCount,
+                        teamDeltaPercent: calculateDeltaPercent(
+                            baseMetrics.averageTeamHelpCount,
+                            scenarioMetrics.averageTeamHelpCount
+                        ),
+                    });
+                } catch (e) {
+                    if (!isAbortError(e)) {
+                        setAnalysisError(String(e));
+                    }
+                } finally {
+                    if (!shouldAbort()) {
+                        setEnergyRecoveryBonusLoading(false);
+                        setEnergyRecoveryBonusProgress(0);
+                    }
+                }
+            })();
+        }, 0);
+    }, [
+        cancelRunningAnalysisIfAny,
+        analysisSeeds.length,
+        hasResolvedBaseMetrics,
+        hasEnergyRecoveryBonusMember,
+        resolveBaseAverageMetrics,
+        runAverageMetricsWithSeeds,
+        state.simulationResult,
+    ]);
+
+    useEffect(() => {
+        resetAdditionalAnalysisState();
+    }, [
+        resetAdditionalAnalysisState,
+        state.simulationResult,
+        state.multiTrialResults,
+        state.team,
+        state.timeSlots,
+        state.swaps,
+        state.simulationConfig.seed,
+        state.simulationConfig.initialEnergy,
+        state.simulationConfig.simulationDays,
+        state.bonusSettings,
+    ]);
+
     const showSummaryValueToggle = state.simulationConfig.simulationDays >= 2;
+    const showAdditionalAnalysis = shouldShowAdditionalAnalysisPanel(
+        state.simulationResult,
+        state.simulationLoading
+    );
 
     const showAverageSection = useMemo(
         () => (
@@ -700,7 +1662,7 @@ export default function TeamTimelineApp() {
                                 sx={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'space-between',
+                                    justifyContent: 'flex-start',
                                     gap: '8px',
                                     flexWrap: 'wrap',
                                     mb: '5px',
@@ -720,6 +1682,7 @@ export default function TeamTimelineApp() {
                                     <SummaryValueModeToggle
                                         value={summaryValueMode}
                                         onChange={handleSummaryValueModeChange}
+                                        simulationDays={state.simulationConfig.simulationDays}
                                         orientation="horizontal"
                                     />
                                 )}
@@ -738,6 +1701,37 @@ export default function TeamTimelineApp() {
                                 valueMode={summaryValueMode}
                             />
                         </Box>
+                    )}
+
+                    {showAdditionalAnalysis && (
+                        <AdditionalAnalysisPanel
+                            quickModeEnabled={analysisQuickModeEnabled}
+                            onQuickModeChange={setAnalysisQuickModeEnabled}
+                            simulationDays={state.simulationConfig.simulationDays}
+                            valueMode={summaryValueMode}
+                            contributionMembers={appearingTimelineMembers}
+                            contributionResults={contributionResults}
+                            contributionLoadingIds={contributionLoadingIds}
+                            contributionBatchLoading={contributionBatchLoading}
+                            contributionBatchProgress={contributionBatchProgress}
+                            contributionProgressById={contributionProgressById}
+                            onRunContribution={runContributionAnalysis}
+                            onRunContributionAll={runContributionAnalysisAll}
+                            energySkillTargets={energySkillTargets}
+                            energySkillResults={energySkillResults}
+                            energySkillLoadingIds={energySkillLoadingIds}
+                            energySkillBatchLoading={energySkillBatchLoading}
+                            energySkillBatchProgress={energySkillBatchProgress}
+                            energySkillProgressById={energySkillProgressById}
+                            onRunEnergySkill={runEnergySkillAnalysis}
+                            onRunEnergySkillAll={runEnergySkillAnalysisAll}
+                            hasEnergyRecoveryBonusMember={hasEnergyRecoveryBonusMember}
+                            energyRecoveryBonusResult={energyRecoveryBonusResult}
+                            energyRecoveryBonusLoading={energyRecoveryBonusLoading}
+                            energyRecoveryBonusProgress={energyRecoveryBonusProgress}
+                            onRunEnergyRecoveryBonus={runEnergyRecoveryBonusAnalysis}
+                            errorMessage={analysisError}
+                        />
                     )}
 
                     {state.simulationResult && boxRef.current && (

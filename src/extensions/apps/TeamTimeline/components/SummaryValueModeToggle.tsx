@@ -6,15 +6,27 @@ import { SummaryValueMode } from '../utils/SummaryValueModeUtils';
 interface SummaryValueModeToggleProps {
     value: SummaryValueMode;
     onChange: (value: SummaryValueMode) => void;
+    simulationDays?: number;
     orientation?: 'horizontal' | 'vertical' | 'responsive';
 }
 
 const SummaryValueModeToggle = React.memo(({
     value,
     onChange,
+    simulationDays = 1,
     orientation = 'horizontal',
 }: SummaryValueModeToggleProps) => {
     const { t } = useTranslation();
+    const safeSimulationDays = Math.max(Math.floor(simulationDays), 1);
+    const periodTotalLabel = t(
+        'TeamTimeline.value mode period total days',
+        '{{days}}日',
+        { days: safeSimulationDays },
+    );
+    const dailyAverageLabel = t(
+        'TeamTimeline.value mode daily average day',
+        '1日',
+    );
 
     return (
         <Container data-orientation={orientation}>
@@ -23,14 +35,14 @@ const SummaryValueModeToggle = React.memo(({
                 data-active={value === 'periodTotal'}
                 onClick={() => onChange('periodTotal')}
             >
-                {t('TeamTimeline.value mode period total', '期間合計')}
+                {periodTotalLabel}
             </ModeButton>
             <ModeButton
                 type="button"
                 data-active={value === 'dailyAverage'}
                 onClick={() => onChange('dailyAverage')}
             >
-                {t('TeamTimeline.value mode daily average', '1日平均')}
+                {dailyAverageLabel}
             </ModeButton>
         </Container>
     );

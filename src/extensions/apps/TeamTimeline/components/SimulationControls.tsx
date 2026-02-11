@@ -189,7 +189,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
       <Button
         variant="contained"
         onClick={onRunSimulation}
-        disabled={simulationLoading || isTeamEmpty}
+        disabled={isTeamEmpty}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={simulationLoading ? clampedProgress : undefined}

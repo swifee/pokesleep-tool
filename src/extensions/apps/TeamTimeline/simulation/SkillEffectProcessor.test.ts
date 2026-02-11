@@ -1442,4 +1442,131 @@ describe('SkillEffectProcessor', () => {
         expect(result.supportHelpEvents.every(event => event.helpCount === expectedHelpCount)).toBe(true);
         expect(result.supportSkillBerryEP).toBe(result.directEP);
     });
+
+    it('Extra Helpful S: 無効対象が選ばれた場合は成果0になる', () => {
+        const caster = createExtraHelpfulPokemon(4);
+        const disabledTarget = createPokemonByType('water', 4);
+        const teamMembers = [caster, disabledTarget];
+        const random = new SeededRandom(60001);
+        const nextIntSpy = vi.spyOn(random, 'nextInt');
+        nextIntSpy.mockReturnValue(1);
+
+        const result = processSkillTriggers(
+            caster,
+            1,
+            50,
+            random,
+            [disabledTarget],
+            0,
+            teamMembers,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            false,
+            undefined,
+            {
+                activeTeamMemberIds: new Set([caster.id]),
+                targetableTeamMembers: teamMembers,
+            }
+        );
+
+        expect(result.supportHelpEvents).toHaveLength(1);
+        expect(result.supportHelpEvents[0]?.targetPokemonId).toBe(disabledTarget.id);
+        expect(result.supportHelpEvents[0]?.berryEP).toBe(0);
+        expect(result.supportHelpEvents[0]?.berryCount).toBe(0);
+        expect(result.skillIngredients).toHaveLength(0);
+    });
+
+    it('回復/減少量0化オプションでEnergy for Everyoneの回復だけを0化する', () => {
+        const caster = createBerryJuicePokemon(5);
+        const random = new SeededRandom(60002);
+        const chanceSpy = vi.spyOn(random, 'chance');
+        chanceSpy.mockReturnValue(true);
+
+        const result = processSkillTriggers(
+            caster,
+            3,
+            50,
+            random,
+            [],
+            0,
+            [caster],
+            undefined,
+            false,
+            undefined,
+            undefined,
+            false,
+            undefined,
+            {
+                suppressEnergyDelta: true,
+            }
+        );
+
+        expect(result.teamEnergyRecoveryPerMember).toBe(0);
+        expect(result.berryJuiceCount).toBeGreaterThan(0);
+    });
+
+    it('回復/減少量0化オプションでBad Dreams減少を0化する', () => {
+        const caster = createBadDreamsPokemon(4);
+        const teammate = createPokemonByType('water', 4);
+        const teamMembers = [caster, teammate];
+
+        const result = processSkillTriggers(
+            caster,
+            2,
+            50,
+            new SeededRandom(60003),
+            [teammate],
+            0,
+            teamMembers,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            false,
+            undefined,
+            {
+                suppressEnergyDelta: true,
+                targetableTeamMembers: teamMembers,
+            }
+        );
+
+        expect(result.badDreamsDamagePerTarget).toBe(0);
+        expect(result.badDreamsHitCount).toBe(0);
+        expect(result.badDreamsTotalDamage).toBe(0);
+        expect(result.directEP).toBeGreaterThan(0);
+    });
+
+    it('Nuzzle: 無効対象に当たった場合は連鎖発動しない', () => {
+        const caster = createNuzzlePokemon(6);
+        const disabledTarget = createEnergyForEveryonePokemon(6);
+        const teamMembers = [caster, disabledTarget];
+        const random = new SeededRandom(60004);
+        const nextIntSpy = vi.spyOn(random, 'nextInt');
+        nextIntSpy.mockReturnValue(1);
+
+        const result = processSkillTriggers(
+            caster,
+            2,
+            50,
+            random,
+            [disabledTarget],
+            0,
+            teamMembers,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            false,
+            undefined,
+            {
+                activeTeamMemberIds: new Set([caster.id]),
+                targetableTeamMembers: teamMembers,
+            }
+        );
+
+        expect(result.energizingCheerEvents).toHaveLength(2);
+        expect(result.nuzzleTriggeredSkillEvents).toHaveLength(0);
+    });
 });

@@ -120,7 +120,7 @@ describe('SimulationControls', () => {
         expect(props.onTrialCountChange).toHaveBeenCalledWith(1000);
     });
 
-    it('disables run button while loading or team is empty', () => {
+    it('keeps run button enabled while loading and disables only when team is empty', () => {
         const { rerender } = render(
             <SimulationControls
                 seedMode="random"
@@ -156,7 +156,7 @@ describe('SimulationControls', () => {
                 onRunSimulation={vi.fn()}
             />
         );
-        expect((screen.getByRole('button', { name: '計算中...' }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole('button', { name: '計算中...' }) as HTMLButtonElement).disabled).toBe(false);
 
         rerender(
             <SimulationControls
