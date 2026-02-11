@@ -278,6 +278,8 @@
         "seed fixed": "シード値",
             "trial count prefix": "{{count}}回中、上から",
             "trial count suffix": "番目の結果を表示中",
+            "show distribution": "分布を表示",
+            "hide distribution": "分布を閉じる",
             "individual results": "個別成績",
             "individual results stacked": "個別\n成績",
             "team average": "チーム平均",

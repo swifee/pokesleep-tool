@@ -30,11 +30,37 @@ interface DailySummaryRowProps {
     layoutMode?: SummaryLayoutMode;
     simulationDays?: number;
     valueMode?: SummaryValueMode;
+    showTimelineDurationShare?: boolean;
+    timelineDurationByPokemonId?: ReadonlyMap<number, number>;
+    totalTimelineDurationMinutes?: number;
 }
 
 const SUMMARY_CARD_WIDTH = 96;
 const SUMMARY_COLUMN_GAP = 4;
 const SUMMARY_GRID_MAX_WIDTH = SUMMARY_CARD_WIDTH * 5 + SUMMARY_COLUMN_GAP * 4;
+
+function formatTimelineDurationMetric(value: number): string {
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
+}
+
+function formatTimelineDurationShare(
+    activeMinutes: number,
+    totalTimelineMinutes: number,
+    durationDivisor: number
+): string {
+    if (totalTimelineMinutes <= 0) {
+        return '';
+    }
+    const normalizedDivisor = durationDivisor > 0 ? durationDivisor : 1;
+    const normalizedActiveMinutes = activeMinutes / normalizedDivisor;
+    const normalizedTotalMinutes = totalTimelineMinutes / normalizedDivisor;
+    const activeHours = normalizedActiveMinutes / 60;
+    const ratioPercent = normalizedTotalMinutes > 0
+        ? (normalizedActiveMinutes / normalizedTotalMinutes) * 100
+        : 0;
+    return `${formatTimelineDurationMetric(activeHours)}H (${formatTimelineDurationMetric(ratioPercent)}％)`;
+}
 
 const DailySummaryRow = React.memo(({
     dailySummaries,
@@ -43,13 +69,20 @@ const DailySummaryRow = React.memo(({
     layoutMode = 'details',
     simulationDays = 1,
     valueMode = 'periodTotal',
+    showTimelineDurationShare = false,
+    timelineDurationByPokemonId,
+    totalTimelineDurationMinutes = 0,
 }: DailySummaryRowProps) => {
     const { t } = useTranslation();
     const resolvedValueMode = resolveSummaryValueMode(valueMode, simulationDays);
     const convertedDayDivisor = resolvedValueMode === 'dailyAverage' ? 1 : Math.max(simulationDays, 1);
+    const timelineDurationDivisor = resolvedValueMode === 'dailyAverage'
+        ? Math.max(simulationDays, 1)
+        : 1;
     const convertByMode = (value: number): number => (
         toSummaryModeValue(value, resolvedValueMode, simulationDays)
     );
+    const shouldShowTimelineDurationShare = showTimelineDurationShare && totalTimelineDurationMinutes > 0;
 
     const defaultSingleLineLabel = t('TeamTimeline.individual results', '個別成績');
     const defaultStackedLabel = t('TeamTimeline.individual results stacked', '個別\n成績');
@@ -99,6 +132,13 @@ const DailySummaryRow = React.memo(({
                     const totalCookingPotCapacityIncrease = convertByMode(summary.totalCookingPotCapacityIncrease);
                     const totalTastyChanceIncreasePercent = convertByMode(summary.totalTastyChanceIncreasePercent);
                     const totalDreamShardCount = convertByMode(summary.totalDreamShardCount);
+                    const durationShareLabel = shouldShowTimelineDurationShare
+                        ? formatTimelineDurationShare(
+                            timelineDurationByPokemonId?.get(summary.pokemonId) ?? 0,
+                            totalTimelineDurationMinutes,
+                            timelineDurationDivisor
+                        )
+                        : null;
                     const hasOptionLine = totalPresentCandyCount > 0
                         || totalCookingPotCapacityIncrease > 0
                         || totalTastyChanceIncreasePercent > 0
@@ -106,12 +146,17 @@ const DailySummaryRow = React.memo(({
                     return (
                         <SummaryCard key={`${layoutMode}-${summary.pokemonId}`} data-testid="daily-summary-cell">
                             <SummaryHeader>
-                                <span className="name">{pokemonName}</span>
-                                {pokemon && (
-                                    <span className="level">
-                                        <span className="lv">Lv.</span>
-                                        {pokemon.iv.level}
-                                    </span>
+                                <div className="top-row">
+                                    <span className="name">{pokemonName}</span>
+                                    {pokemon && (
+                                        <span className="level">
+                                            <span className="lv">Lv.</span>
+                                            {pokemon.iv.level}
+                                        </span>
+                                    )}
+                                </div>
+                                {durationShareLabel && (
+                                    <span className="duration-share">{durationShareLabel}</span>
                                 )}
                             </SummaryHeader>
 
@@ -248,12 +293,22 @@ const SummaryCard = styled('div')({
 
 const SummaryHeader = styled('div')({
     width: '96px',
-    height: '24px',
-    position: 'relative',
+    minHeight: '24px',
+    padding: '4px 4px 0 5px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+    '& .top-row': {
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: '2px',
+        minWidth: 0,
+    },
     '& .name': {
-        position: 'absolute',
-        left: '5px',
-        top: '5px',
+        minWidth: 0,
+        flex: '1 1 auto',
         fontSize: '12px',
         lineHeight: '15px',
         letterSpacing: '-0.48px',
@@ -263,9 +318,8 @@ const SummaryHeader = styled('div')({
         textOverflow: 'ellipsis',
     },
     '& .level': {
-        position: 'absolute',
-        right: '4px',
-        top: '7px',
+        flex: '0 0 auto',
+        marginTop: '2px',
         display: 'inline-flex',
         gap: '1px',
         fontSize: '10px',
@@ -274,6 +328,13 @@ const SummaryHeader = styled('div')({
     },
     '& .lv': {
         color: '#62d540',
+    },
+    '& .duration-share': {
+        fontSize: '10px',
+        lineHeight: '13px',
+        letterSpacing: '-0.5px',
+        color: '#666',
+        whiteSpace: 'nowrap',
     },
 });
 

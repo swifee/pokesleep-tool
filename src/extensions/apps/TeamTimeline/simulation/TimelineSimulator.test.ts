@@ -370,6 +370,40 @@ describe('TimelineSimulator', () => {
         expect(withHelpingBonusHelpCount).toBeGreaterThan(withoutHelpingBonusHelpCount);
     });
 
+    it('おてつだいボーナス無効化オプションでおてつだい回数が減少する', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const basePokemon = createBerryBurstDisguisePokemon(3);
+        const pokemonWithHelpingBonus = createPokemonWithHelpingBonus(basePokemon);
+        const timeSlots: TimeSlot[] = [
+            { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+            { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+        ];
+
+        const normal = runSimulation({
+            team: [pokemonWithHelpingBonus, null, null, null, null],
+            timeSlots,
+            config: { seed: 90234, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+        const disabledHelpingBonus = runSimulation({
+            team: [pokemonWithHelpingBonus, null, null, null, null],
+            timeSlots,
+            config: { seed: 90234, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            analysisOptions: {
+                disableHelpingBonus: true,
+            },
+        });
+
+        const normalHelpCount = sumHelpCount(normal, pokemonWithHelpingBonus.id);
+        const disabledHelpCount = sumHelpCount(disabledHelpingBonus, pokemonWithHelpingBonus.id);
+        expect(normalHelpCount).toBeGreaterThan(disabledHelpCount);
+    });
+
     it('いいキャンプチケット有効時はおてつだい回数が増える', () => {
         processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
             const energy = typeof args[2] === 'number' ? args[2] : 50;

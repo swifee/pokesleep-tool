@@ -257,6 +257,8 @@
         "seed fixed": "種子值",
             "trial count prefix": "{{count}}次中，顯示第",
             "trial count suffix": "位結果",
+            "show distribution": "顯示分布",
+            "hide distribution": "關閉分布",
             "individual results": "個別成績",
             "individual results stacked": "個別\n成績",
             "team average": "團隊平均",

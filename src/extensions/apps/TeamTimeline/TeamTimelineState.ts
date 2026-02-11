@@ -16,6 +16,8 @@ import {
     STORAGE_KEY_CONFIG,
     migrateTimeSlot,
 } from './types/TimeSlotTypes';
+import { SummaryValueMode } from './utils/SummaryValueModeUtils';
+import { TRIAL_COUNT_OPTIONS } from './types/MultiTrialTypes';
 import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
 import {
     createDefaultTimelineBonusSettings,
@@ -24,6 +26,30 @@ import {
 
 export const STORAGE_KEY_BONUS_SETTINGS = 'PstTeamTimelineBonusSettings';
 export const STORAGE_KEY_SYNC_IV_PARAMETER = 'PstTeamTimelineSyncIvParam';
+export const STORAGE_KEY_SUMMARY_VALUE_MODE = 'PstTeamTimelineSummaryValueMode';
+export const STORAGE_KEY_SEED_MODE = 'PstTeamTimelineSeedMode';
+export const STORAGE_KEY_TRIAL_COUNT = 'PstTeamTimelineTrialCount';
+
+function getResetSimulationFields(): Pick<
+    TeamTimelineState,
+    | 'simulationLoading'
+    | 'simulationResult'
+    | 'simulationError'
+    | 'multiTrialResults'
+    | 'multiTrialSelectedIndex'
+    | 'multiTrialAverageDailySummaries'
+    | 'multiTrialAverageTeamSummary'
+> {
+    return {
+        simulationLoading: false,
+        simulationResult: null,
+        simulationError: null,
+        multiTrialResults: null,
+        multiTrialSelectedIndex: null,
+        multiTrialAverageDailySummaries: null,
+        multiTrialAverageTeamSummary: null,
+    };
+}
 
 /**
  * 初期状態を生成
@@ -51,13 +77,13 @@ export function createInitialState(): TeamTimelineState {
         energyDialogOpen: false,
         pendingSwapPokemonId: null,
         seedMode: 'random' as const,
-        multiTrialCount: 100,
+        multiTrialCount: 1000,
         multiTrialResults: null,
         multiTrialSelectedIndex: null,
         multiTrialAverageDailySummaries: null,
         multiTrialAverageTeamSummary: null,
         bonusSettings: createDefaultTimelineBonusSettings(),
-        syncWithIvParameter: false,
+        syncWithIvParameter: true,
     };
 }
 
@@ -86,6 +112,7 @@ export function teamTimelineReducer(
             newTeam[action.index] = action.item;
             return {
                 ...state,
+                ...getResetSimulationFields(),
                 team: newTeam,
                 selectedSlotIndex: null,
                 boxSelectDialogOpen: false,
@@ -96,6 +123,7 @@ export function teamTimelineReducer(
             newTeam[action.index] = null;
             return {
                 ...state,
+                ...getResetSimulationFields(),
                 team: newTeam,
             };
         }
@@ -515,7 +543,63 @@ export function saveSyncWithIvParameterToStorage(enabled: boolean): void {
  */
 export function loadSyncWithIvParameterFromStorage(): boolean {
     const raw = localStorage.getItem(STORAGE_KEY_SYNC_IV_PARAMETER);
+    if (raw === null) {
+        return true;
+    }
     return raw === '1';
+}
+
+/**
+ * サマリー表示モードを localStorage に保存
+ */
+export function saveSummaryValueModeToStorage(mode: SummaryValueMode): void {
+    localStorage.setItem(STORAGE_KEY_SUMMARY_VALUE_MODE, mode);
+}
+
+/**
+ * サマリー表示モードを localStorage から読み込み
+ */
+export function loadSummaryValueModeFromStorage(): SummaryValueMode {
+    const raw = localStorage.getItem(STORAGE_KEY_SUMMARY_VALUE_MODE);
+    return raw === 'dailyAverage' ? 'dailyAverage' : 'periodTotal';
+}
+
+/**
+ * シード固定モードを localStorage に保存
+ */
+export function saveSeedModeToStorage(mode: 'random' | 'fixed'): void {
+    localStorage.setItem(STORAGE_KEY_SEED_MODE, mode);
+}
+
+/**
+ * シード固定モードを localStorage から読み込み
+ */
+export function loadSeedModeFromStorage(): 'random' | 'fixed' {
+    const raw = localStorage.getItem(STORAGE_KEY_SEED_MODE);
+    return raw === 'fixed' ? 'fixed' : 'random';
+}
+
+/**
+ * 試行回数を localStorage に保存
+ */
+export function saveTrialCountToStorage(count: number): void {
+    localStorage.setItem(STORAGE_KEY_TRIAL_COUNT, String(count));
+}
+
+/**
+ * 試行回数を localStorage から読み込み
+ */
+export function loadTrialCountFromStorage(defaultCount: number = 1000): number {
+    const raw = localStorage.getItem(STORAGE_KEY_TRIAL_COUNT);
+    if (raw === null) {
+        return defaultCount;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    const availableTrialCounts = TRIAL_COUNT_OPTIONS as readonly number[];
+    if (!Number.isFinite(parsed) || !availableTrialCounts.includes(parsed)) {
+        return defaultCount;
+    }
+    return parsed;
 }
 
 // PokemonBoxItemをエクスポート（型用に別ファイルで使えるように）

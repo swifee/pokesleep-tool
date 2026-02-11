@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { shouldShowAdditionalAnalysisPanel } from './TeamTimelineDisplayUtils';
+import {
+    shouldShowAdditionalAnalysisPanel,
+    shouldSkipTeamResultEntryAnimation,
+} from './TeamTimelineDisplayUtils';
 import { SimulationResult } from '../types/TimeSlotTypes';
 
 function createSimulationResult(): SimulationResult {
@@ -26,5 +29,12 @@ describe('TeamTimelineDisplayUtils', () => {
         expect(shouldShowAdditionalAnalysisPanel(null, false)).toBe(false);
         expect(shouldShowAdditionalAnalysisPanel(result, true)).toBe(false);
         expect(shouldShowAdditionalAnalysisPanel(result, false)).toBe(true);
+    });
+
+    it('skips result entry animation only when tab transitions from settings to team', () => {
+        expect(shouldSkipTeamResultEntryAnimation('settings', 'team')).toBe(true);
+        expect(shouldSkipTeamResultEntryAnimation('team', 'settings')).toBe(false);
+        expect(shouldSkipTeamResultEntryAnimation('team', 'team')).toBe(false);
+        expect(shouldSkipTeamResultEntryAnimation('settings', 'settings')).toBe(false);
     });
 });

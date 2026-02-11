@@ -1,7 +1,7 @@
 import React from 'react';
 import { styled } from '@mui/system';
 import { useTranslation } from 'react-i18next';
-import { TimeSlot, TimeSlotResult, PokemonSwap, getDisplayLabel, SWAP_NONE_POKEMON_ID } from '../types/TimeSlotTypes';
+import { TimeSlot, TimeSlotResult, PokemonSwap, SWAP_NONE_POKEMON_ID } from '../types/TimeSlotTypes';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineCell from './TimelineCell';
 
@@ -15,6 +15,9 @@ interface TimelineRowProps {
     box: PokemonBox;
     onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
     isFirstSlot?: boolean;
+    compactEmptyCells?: boolean;
+    alwaysShowSwapButton?: boolean;
+    isFirstTimelineSlot?: boolean;
 }
 
 function formatDuration(minutes: number): string {
@@ -36,6 +39,9 @@ const TimelineRow = React.memo(({
     box,
     onSwapClick,
     isFirstSlot,
+    compactEmptyCells = false,
+    alwaysShowSwapButton = false,
+    isFirstTimelineSlot = false,
 }: TimelineRowProps) => {
     const { t } = useTranslation();
 
@@ -43,11 +49,16 @@ const TimelineRow = React.memo(({
     const durationMinutes = results.length > 0 ? results[0].durationMinutes : 0;
 
     const getLabelText = (): string => {
-        const displayLabel = getDisplayLabel(slot);
-        if (displayLabel === 'custom') {
-            return slot.customLabel || '';
+        if (slot.sleepState === 'wake') {
+            return slot.hasMeal ? '⏰🍴' : '⏰';
         }
-        return t(`TeamTimeline.label ${displayLabel}`);
+        if (slot.sleepState === 'sleep') {
+            return '🛌';
+        }
+        if (slot.hasMeal) {
+            return '🍴';
+        }
+        return slot.customLabel || '';
     };
 
     const resultMap = new Map<number, TimeSlotResult>();
@@ -97,6 +108,10 @@ const TimelineRow = React.memo(({
                         swappedPokemonName={swappedPokemonName}
                         onSwapClick={() => onSwapClick?.(originalSlotId, index, dayIndex)}
                         isFirstSlot={isFirstSlot}
+                        compactEmpty={compactEmptyCells}
+                        alwaysShowSwapButton={alwaysShowSwapButton}
+                        compactFirstSlot={isFirstTimelineSlot}
+                        disableSwapUi={isFirstTimelineSlot}
                     />
                 );
             })}
@@ -142,7 +157,9 @@ const TimeInfoCell = styled('div')({
         fontSize: '10px',
         lineHeight: '13px',
         letterSpacing: '-0.5px',
-        whiteSpace: 'pre-wrap',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
     },
 });
 

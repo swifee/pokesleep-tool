@@ -37,8 +37,26 @@ export interface EnergySkillContributionResult {
     scenarioTeamHelpCount: number;
 }
 
+export interface EnergySkillTeamContributionResult {
+    baseTeamEP: number;
+    scenarioTeamEP: number;
+    teamDeltaEP: number;
+    teamDeltaPercent: number | null;
+}
+
 export interface EnergyRecoveryBonusContributionResult {
-    baseTeamHelpCount: number;
-    scenarioTeamHelpCount: number;
+    baseTeamEP: number;
+    scenarioTeamEP: number;
+    teamDeltaEP: number;
+    teamDeltaPercent: number | null;
+    wakeErbMemberCountMin: number;
+    wakeErbMemberCountMax: number;
+    wakeSlotCount: number;
+}
+
+export interface HelpingBonusContributionResult {
+    baseTeamEP: number;
+    scenarioTeamEP: number;
+    teamDeltaEP: number;
     teamDeltaPercent: number | null;
 }

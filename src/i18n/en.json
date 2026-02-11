@@ -278,6 +278,8 @@
         "seed fixed": "Seed",
             "trial count prefix": "{{count}} trials, showing rank",
             "trial count suffix": "result",
+            "show distribution": "Show Distribution",
+            "hide distribution": "Hide Distribution",
             "individual results": "Individual Results",
             "individual results stacked": "Individual\nResults",
             "team average": "Team Average",

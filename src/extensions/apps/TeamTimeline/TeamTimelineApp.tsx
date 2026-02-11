@@ -1,5 +1,5 @@
 import React, { useReducer, useEffect, useCallback, useState, useRef, useMemo } from 'react';
-import { Tabs, Tab, Box, Typography, Slider, useMediaQuery, useTheme } from '@mui/material';
+import { Tabs, Tab, Box, Typography, Slider, Fade, useMediaQuery, useTheme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PokemonBox, { PokemonBoxItem } from '../../../util/PokemonBox';
 import {
@@ -15,6 +15,12 @@ import {
     loadBonusSettingsFromStorage,
     saveSyncWithIvParameterToStorage,
     loadSyncWithIvParameterFromStorage,
+    saveSummaryValueModeToStorage,
+    loadSummaryValueModeFromStorage,
+    saveSeedModeToStorage,
+    loadSeedModeFromStorage,
+    saveTrialCountToStorage,
+    loadTrialCountFromStorage,
 } from './TeamTimelineState';
 import TimelineHeader from './components/TimelineHeader';
 import BoxSelectDialog from './components/BoxSelectDialog';
@@ -25,7 +31,13 @@ import TeamSummaryRow from './components/TeamSummaryRow';
 import SwapSupplementBar from './components/SwapSupplementBar';
 import TrialResultSelector from './components/TrialResultSelector';
 import { SwapEnergyDialog } from './components/SwapEnergyDialog';
-import { TimeSlot, SimulationConfig, PokemonSwap, SWAP_NONE_POKEMON_ID } from './types/TimeSlotTypes';
+import {
+    TimeSlot,
+    SimulationConfig,
+    PokemonSwap,
+    SWAP_NONE_POKEMON_ID,
+    SimulationResult,
+} from './types/TimeSlotTypes';
 import { runSimulation } from './simulation/TimelineSimulator';
 import SimulationControls from './components/SimulationControls';
 import {
@@ -37,18 +49,32 @@ import { SummaryValueMode } from './utils/SummaryValueModeUtils';
 import SummaryValueModeToggle from './components/SummaryValueModeToggle';
 import ResimulationNoticeBar from './components/ResimulationNoticeBar';
 import AdditionalAnalysisPanel from './components/AdditionalAnalysisPanel';
+import WipeReveal from './components/WipeReveal';
 import {
     ContributionEpAnalysisResult,
+    HelpingBonusContributionResult,
     EnergyRecoveryBonusContributionResult,
     EnergySkillContributionResult,
+    EnergySkillTeamContributionResult,
     EnergySkillContributionTarget,
 } from './types/AdditionalAnalysisTypes';
 import {
     calculateDeltaPercent,
     buildEnergySkillContributionTargets,
     collectAppearingTimelineMembers,
+    collectAverageHelpingBonusMemberCountByDuration,
+    collectAverageEnergyRecoveryBonusMemberCountByDuration,
+    collectTimelineDurationSummaryByPokemon,
+    collectWakeErbMemberCountRange,
 } from './utils/AdditionalAnalysisUtils';
-import { shouldShowAdditionalAnalysisPanel } from './utils/TeamTimelineDisplayUtils';
+import {
+    AnalysisBaseMetricsCache,
+    resolvePrecomputedBaseAverageMetrics,
+} from './utils/AnalysisBaseMetricsUtils';
+import {
+    shouldShowAdditionalAnalysisPanel,
+    shouldSkipTeamResultEntryAnimation,
+} from './utils/TeamTimelineDisplayUtils';
 import {
     loadTimelineBonusSettingsFromIvStorage,
     saveTimelineBonusSettingsToIvStorage,
@@ -70,6 +96,26 @@ interface AnalysisAverageMetrics {
 
 const ANALYSIS_PROGRESS_UPDATE_INTERVAL_MS = 200;
 const ABORT_ERROR_NAME = 'AbortError';
+const TIMELINE_WIPE_REVEAL_DURATION_MS = 800;
+const TIMELINE_WIPE_REVEAL_EASING_IN_QUAD = 'cubic-bezier(0.55, 0.085, 0.68, 0.53)';
+const TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+const TIMELINE_DETAILS_FADE_DURATION_MS = 450;
+const TIMELINE_PAGE_BOTTOM_PADDING = '3em';
+const EMPTY_SIMULATION_RESULT: SimulationResult = {
+    slotResults: new Map(),
+    dailySummaries: [],
+    teamSummary: {
+        totalIngredients: [],
+        totalBerryEP: 0,
+        totalIngredientEP: 0,
+        totalSkillEP: 0,
+        grandTotalEP: 0,
+        totalPresentCandyCount: 0,
+        totalCookingPotCapacityIncrease: 0,
+        totalTastyChanceIncreasePercent: 0,
+        totalDreamShardCount: 0,
+    },
+};
 
 function createAbortError(): Error {
     const error = new Error('Aborted');
@@ -214,39 +260,53 @@ export default function TeamTimelineApp() {
     const [showResimulationNotice, setShowResimulationNotice] = useState(false);
     const [analysisQuickModeEnabled, setAnalysisQuickModeEnabled] = useState(true);
     const [analysisError, setAnalysisError] = useState<string | null>(null);
-    const [baseAverageMetrics, setBaseAverageMetrics] = useState<AnalysisAverageMetrics | null>(null);
+    const [baseAverageMetricsCache, setBaseAverageMetricsCache]
+        = useState<AnalysisBaseMetricsCache<AnalysisAverageMetrics> | null>(null);
     const [contributionResults, setContributionResults] = useState<Map<number, ContributionEpAnalysisResult>>(new Map());
     const [energySkillResults, setEnergySkillResults] = useState<Map<number, EnergySkillContributionResult>>(new Map());
+    const [energySkillTeamResult, setEnergySkillTeamResult] = useState<EnergySkillTeamContributionResult | null>(null);
+    const [helpingBonusResult, setHelpingBonusResult] = useState<HelpingBonusContributionResult | null>(null);
     const [energyRecoveryBonusResult, setEnergyRecoveryBonusResult] = useState<EnergyRecoveryBonusContributionResult | null>(null);
     const [contributionLoadingIds, setContributionLoadingIds] = useState<Set<number>>(new Set());
     const [energySkillLoadingIds, setEnergySkillLoadingIds] = useState<Set<number>>(new Set());
     const [contributionBatchLoading, setContributionBatchLoading] = useState(false);
     const [energySkillBatchLoading, setEnergySkillBatchLoading] = useState(false);
+    const [energySkillTeamLoading, setEnergySkillTeamLoading] = useState(false);
+    const [helpingBonusLoading, setHelpingBonusLoading] = useState(false);
     const [energyRecoveryBonusLoading, setEnergyRecoveryBonusLoading] = useState(false);
     const [contributionProgressById, setContributionProgressById] = useState<Map<number, number>>(new Map());
     const [energySkillProgressById, setEnergySkillProgressById] = useState<Map<number, number>>(new Map());
     const [contributionBatchProgress, setContributionBatchProgress] = useState(0);
     const [energySkillBatchProgress, setEnergySkillBatchProgress] = useState(0);
+    const [energySkillTeamProgress, setEnergySkillTeamProgress] = useState(0);
+    const [helpingBonusProgress, setHelpingBonusProgress] = useState(0);
     const [energyRecoveryBonusProgress, setEnergyRecoveryBonusProgress] = useState(0);
     const simulationAbortControllerRef = useRef<AbortController | null>(null);
     const analysisRunVersionRef = useRef(0);
+    const previousActiveTabRef = useRef(state.activeTab);
 
     const resetAdditionalAnalysisState = useCallback(() => {
         analysisRunVersionRef.current += 1;
         setAnalysisError(null);
-        setBaseAverageMetrics(null);
+        setBaseAverageMetricsCache(null);
         setContributionResults(new Map());
         setEnergySkillResults(new Map());
+        setEnergySkillTeamResult(null);
+        setHelpingBonusResult(null);
         setEnergyRecoveryBonusResult(null);
         setContributionLoadingIds(new Set());
         setEnergySkillLoadingIds(new Set());
         setContributionBatchLoading(false);
         setEnergySkillBatchLoading(false);
+        setEnergySkillTeamLoading(false);
+        setHelpingBonusLoading(false);
         setEnergyRecoveryBonusLoading(false);
         setContributionProgressById(new Map());
         setEnergySkillProgressById(new Map());
         setContributionBatchProgress(0);
         setEnergySkillBatchProgress(0);
+        setEnergySkillTeamProgress(0);
+        setHelpingBonusProgress(0);
         setEnergyRecoveryBonusProgress(0);
     }, []);
 
@@ -256,6 +316,8 @@ export default function TeamTimelineApp() {
             || energySkillLoadingIds.size > 0
             || contributionBatchLoading
             || energySkillBatchLoading
+            || energySkillTeamLoading
+            || helpingBonusLoading
             || energyRecoveryBonusLoading
         );
         if (!hasRunningAnalysis) {
@@ -268,6 +330,8 @@ export default function TeamTimelineApp() {
         energySkillLoadingIds,
         contributionBatchLoading,
         energySkillBatchLoading,
+        energySkillTeamLoading,
+        helpingBonusLoading,
         energyRecoveryBonusLoading,
         resetAdditionalAnalysisState,
     ]);
@@ -297,6 +361,9 @@ export default function TeamTimelineApp() {
 
         const savedConfig = loadConfigFromStorage();
         dispatch({ type: 'loadSimulationConfig', config: savedConfig });
+        dispatch({ type: 'setSeedMode', mode: loadSeedModeFromStorage() });
+        dispatch({ type: 'setMultiTrialCount', count: loadTrialCountFromStorage() });
+        setSummaryValueMode(loadSummaryValueModeFromStorage());
         const savedBonusSettings = loadBonusSettingsFromStorage();
         dispatch({ type: 'loadBonusSettings', settings: savedBonusSettings });
         const syncWithIvParameter = loadSyncWithIvParameterFromStorage();
@@ -389,6 +456,21 @@ export default function TeamTimelineApp() {
         }
     }, [state.simulationConfig.simulationDays]);
 
+    useEffect(() => {
+        if (!isInitialized) return;
+        saveSummaryValueModeToStorage(summaryValueMode);
+    }, [summaryValueMode, isInitialized]);
+
+    useEffect(() => {
+        if (!isInitialized) return;
+        saveSeedModeToStorage(state.seedMode);
+    }, [state.seedMode, isInitialized]);
+
+    useEffect(() => {
+        if (!isInitialized) return;
+        saveTrialCountToStorage(state.multiTrialCount);
+    }, [state.multiTrialCount, isInitialized]);
+
     // 連動ON中は個体値計算機パラメーターの外部更新を取り込む
     useEffect(() => {
         if (!state.syncWithIvParameter) {
@@ -413,6 +495,10 @@ export default function TeamTimelineApp() {
         simulationAbortControllerRef.current?.abort();
         analysisRunVersionRef.current += 1;
     }, []);
+
+    useEffect(() => {
+        previousActiveTabRef.current = state.activeTab;
+    }, [state.activeTab]);
 
     // スロットクリック時のハンドラ
     const handleSlotClick = useCallback((index: number) => {
@@ -786,6 +872,7 @@ export default function TeamTimelineApp() {
         });
         return [...uniqueIdForms];
     }, [state.swaps]);
+    const hasConfiguredSwap = state.swaps.length > 0;
 
     const appearingTimelineMembers = useMemo(() => {
         if (!boxRef.current) {
@@ -793,6 +880,22 @@ export default function TeamTimelineApp() {
         }
         return collectAppearingTimelineMembers(state.team, state.swaps, boxRef.current);
     }, [state.team, state.swaps]);
+
+    const timelineDurationSummary = useMemo(
+        () => collectTimelineDurationSummaryByPokemon(
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+            boxRef.current ?? undefined
+        ),
+        [
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+        ]
+    );
 
     const baseSortedSeeds = useMemo(() => {
         if (state.multiTrialResults && state.multiTrialResults.length > 0) {
@@ -816,11 +919,34 @@ export default function TeamTimelineApp() {
     }, [appearingTimelineMembers, t]);
 
     const energySkillTargets = useMemo(
-        () => buildEnergySkillContributionTargets(appearingTimelineMembers).map((target) => ({
+        () => buildEnergySkillContributionTargets(
+            appearingTimelineMembers,
+            {
+                team: state.team,
+                timeSlots: state.timeSlots,
+                simulationDays: state.simulationConfig.simulationDays,
+                swaps: state.swaps,
+                box: boxRef.current ?? undefined,
+            }
+        ).map((target) => ({
             ...target,
             pokemonName: memberDisplayNameById.get(target.pokemonId) ?? target.pokemonName,
         })),
-        [appearingTimelineMembers, memberDisplayNameById]
+        [
+            appearingTimelineMembers,
+            memberDisplayNameById,
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+        ]
+    );
+
+    const hasHelpingBonusMember = useMemo(
+        () => appearingTimelineMembers.some(member =>
+            member.iv.activeSubSkills.some(subSkill => subSkill.name === 'Helping Bonus')
+        ),
+        [appearingTimelineMembers]
     );
 
     const hasEnergyRecoveryBonusMember = useMemo(
@@ -828,6 +954,54 @@ export default function TeamTimelineApp() {
             member.iv.activeSubSkills.some(subSkill => subSkill.name === 'Energy Recovery Bonus')
         ),
         [appearingTimelineMembers]
+    );
+
+    const averageHelpingBonusMemberCount = useMemo(
+        () => collectAverageHelpingBonusMemberCountByDuration(
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+            boxRef.current ?? undefined
+        ),
+        [
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+        ]
+    );
+
+    const averageEnergyRecoveryBonusMemberCount = useMemo(
+        () => collectAverageEnergyRecoveryBonusMemberCountByDuration(
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+            boxRef.current ?? undefined
+        ),
+        [
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+        ]
+    );
+
+    const wakeErbMemberCountRange = useMemo(
+        () => collectWakeErbMemberCountRange(
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+            boxRef.current ?? undefined
+        ),
+        [
+            state.team,
+            state.timeSlots,
+            state.simulationConfig.simulationDays,
+            state.swaps,
+        ]
     );
 
     const baseAverageMetricsFromSimulation = useMemo<AnalysisAverageMetrics | null>(() => {
@@ -858,12 +1032,21 @@ export default function TeamTimelineApp() {
         state.multiTrialAverageTeamSummary,
     ]);
 
-    const hasResolvedBaseMetrics = baseAverageMetrics !== null || baseAverageMetricsFromSimulation !== null;
+    const baseAverageMetrics = useMemo(
+        () => resolvePrecomputedBaseAverageMetrics(
+            baseAverageMetricsCache,
+            analysisQuickModeEnabled,
+            baseAverageMetricsFromSimulation
+        ),
+        [analysisQuickModeEnabled, baseAverageMetricsCache, baseAverageMetricsFromSimulation]
+    );
+    const hasResolvedBaseMetrics = baseAverageMetrics !== null;
 
     const runAverageMetricsWithSeeds = useCallback(async (options: {
         disabledPokemonIds?: readonly number[];
         suppressEnergyDeltaSkillPokemonIds?: readonly number[];
         disableEnergyRecoveryBonus?: boolean;
+        disableHelpingBonus?: boolean;
     }, onProgress?: (progress: number) => void, shouldAbort?: () => boolean): Promise<AnalysisAverageMetrics> => {
         const totalEPByPokemonId = new Map<number, number>();
         const totalHelpByPokemonId = new Map<number, number>();
@@ -916,6 +1099,7 @@ export default function TeamTimelineApp() {
                     keepDisabledPokemonTargetable: true,
                     suppressEnergyDeltaSkillPokemonIds: options.suppressEnergyDeltaSkillPokemonIds,
                     disableEnergyRecoveryBonus: options.disableEnergyRecoveryBonus,
+                    disableHelpingBonus: options.disableHelpingBonus,
                 },
             });
 
@@ -980,21 +1164,16 @@ export default function TeamTimelineApp() {
             onProgress?.(100);
             return baseAverageMetrics;
         }
-        if (baseAverageMetricsFromSimulation) {
-            onProgress?.(100);
-            if (shouldAbort?.()) {
-                throw createAbortError();
-            }
-            setBaseAverageMetrics(baseAverageMetricsFromSimulation);
-            return baseAverageMetricsFromSimulation;
-        }
         const computed = await runAverageMetricsWithSeeds({}, onProgress, shouldAbort);
         if (shouldAbort?.()) {
             throw createAbortError();
         }
-        setBaseAverageMetrics(computed);
+        setBaseAverageMetricsCache({
+            quickModeEnabled: analysisQuickModeEnabled,
+            metrics: computed,
+        });
         return computed;
-    }, [baseAverageMetrics, baseAverageMetricsFromSimulation, runAverageMetricsWithSeeds]);
+    }, [analysisQuickModeEnabled, baseAverageMetrics, runAverageMetricsWithSeeds]);
 
     const runContributionAnalysis = useCallback((pokemon: PokemonBoxItem) => {
         if (!state.simulationResult) {
@@ -1362,15 +1541,29 @@ export default function TeamTimelineApp() {
         setEnergySkillBatchLoading(true);
         setEnergySkillBatchProgress(0);
         setEnergySkillProgressById(new Map());
+        const shouldRunTeamOverall = energySkillTargets.length >= 2;
+        if (shouldRunTeamOverall) {
+            setEnergySkillTeamResult(null);
+            setEnergySkillTeamLoading(true);
+            setEnergySkillTeamProgress(0);
+        }
         setTimeout(() => {
             void (async () => {
                 const seedUnitCount = Math.max(analysisSeeds.length, 1);
                 const hasBaseMetrics = hasResolvedBaseMetrics;
-                const totalUnits = seedUnitCount * (energySkillTargets.length + (hasBaseMetrics ? 0 : 1));
+                const scenarioUnitCount = energySkillTargets.length + (shouldRunTeamOverall ? 1 : 0);
+                const totalUnits = seedUnitCount * (scenarioUnitCount + (hasBaseMetrics ? 0 : 1));
                 let processedUnits = 0;
                 const updateBatchProgress = (nextProgress: number): void => {
                     const clamped = Math.max(0, Math.min(100, nextProgress));
                     setEnergySkillBatchProgress(prev => Math.max(prev, clamped));
+                };
+                const updateTeamProgress = (nextProgress: number): void => {
+                    if (!shouldRunTeamOverall) {
+                        return;
+                    }
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setEnergySkillTeamProgress(prev => Math.max(prev, clamped));
                 };
                 const updateMemberProgress = (pokemonId: number, nextProgress: number): void => {
                     const clamped = Math.max(0, Math.min(100, nextProgress));
@@ -1456,6 +1649,34 @@ export default function TeamTimelineApp() {
                         updateMemberProgress(target.pokemonId, 100);
                         processedUnits += seedUnitCount;
                     }
+                    if (shouldRunTeamOverall) {
+                        const allEnergySkillIds = energySkillTargets.map(target => target.pokemonId);
+                        const scenarioMetrics = await runAverageMetricsWithSeeds({
+                            suppressEnergyDeltaSkillPokemonIds: allEnergySkillIds,
+                        }, (scenarioProgress) => {
+                            if (shouldAbort()) {
+                                return;
+                            }
+                            const progress =
+                                ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                            updateBatchProgress(progress);
+                            updateTeamProgress(scenarioProgress);
+                        }, shouldAbort);
+                        if (shouldAbort()) {
+                            throw createAbortError();
+                        }
+                        setEnergySkillTeamResult({
+                            baseTeamEP: baseMetrics.averageTeamEP,
+                            scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                            teamDeltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
+                            teamDeltaPercent: calculateDeltaPercent(
+                                baseMetrics.averageTeamEP,
+                                scenarioMetrics.averageTeamEP
+                            ),
+                        });
+                        updateTeamProgress(100);
+                        processedUnits += seedUnitCount;
+                    }
                 } catch (e) {
                     if (!isAbortError(e)) {
                         setAnalysisError(String(e));
@@ -1464,6 +1685,10 @@ export default function TeamTimelineApp() {
                     if (!shouldAbort()) {
                         setEnergySkillBatchLoading(false);
                         setEnergySkillBatchProgress(0);
+                        if (shouldRunTeamOverall) {
+                            setEnergySkillTeamLoading(false);
+                            setEnergySkillTeamProgress(0);
+                        }
                     }
                 }
             })();
@@ -1473,6 +1698,178 @@ export default function TeamTimelineApp() {
         analysisSeeds.length,
         hasResolvedBaseMetrics,
         energySkillTargets,
+        resolveBaseAverageMetrics,
+        runAverageMetricsWithSeeds,
+        state.simulationResult,
+    ]);
+
+    const runEnergySkillTeamAnalysis = useCallback(() => {
+        if (!state.simulationResult || energySkillTargets.length < 2) {
+            return;
+        }
+        if (cancelRunningAnalysisIfAny()) {
+            return;
+        }
+        const runVersion = analysisRunVersionRef.current;
+        const shouldAbort = () => analysisRunVersionRef.current !== runVersion;
+        setAnalysisError(null);
+        setEnergySkillTeamLoading(true);
+        setEnergySkillTeamProgress(0);
+        setTimeout(() => {
+            void (async () => {
+                const seedUnitCount = Math.max(analysisSeeds.length, 1);
+                const hasBaseMetrics = hasResolvedBaseMetrics;
+                const totalUnits = seedUnitCount * (hasBaseMetrics ? 1 : 2);
+                let processedUnits = 0;
+                const updateTeamProgress = (nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setEnergySkillTeamProgress(prev => Math.max(prev, clamped));
+                };
+                try {
+                    const baseMetrics = await resolveBaseAverageMetrics(
+                        hasBaseMetrics
+                            ? undefined
+                            : (baseProgress) => {
+                                if (shouldAbort()) {
+                                    return;
+                                }
+                                updateTeamProgress(
+                                    ((baseProgress / 100) * seedUnitCount / totalUnits) * 100
+                                );
+                            },
+                        shouldAbort
+                    );
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    if (!hasBaseMetrics) {
+                        processedUnits += seedUnitCount;
+                    }
+                    const scenarioMetrics = await runAverageMetricsWithSeeds({
+                        suppressEnergyDeltaSkillPokemonIds: energySkillTargets.map(target => target.pokemonId),
+                    }, (scenarioProgress) => {
+                        if (shouldAbort()) {
+                            return;
+                        }
+                        const progress =
+                            ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                        updateTeamProgress(progress);
+                    }, shouldAbort);
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    setEnergySkillTeamResult({
+                        baseTeamEP: baseMetrics.averageTeamEP,
+                        scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                        teamDeltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
+                        teamDeltaPercent: calculateDeltaPercent(
+                            baseMetrics.averageTeamEP,
+                            scenarioMetrics.averageTeamEP
+                        ),
+                    });
+                } catch (e) {
+                    if (!isAbortError(e)) {
+                        setAnalysisError(String(e));
+                    }
+                } finally {
+                    if (!shouldAbort()) {
+                        setEnergySkillTeamLoading(false);
+                        setEnergySkillTeamProgress(0);
+                    }
+                }
+            })();
+        }, 0);
+    }, [
+        cancelRunningAnalysisIfAny,
+        analysisSeeds.length,
+        hasResolvedBaseMetrics,
+        energySkillTargets,
+        resolveBaseAverageMetrics,
+        runAverageMetricsWithSeeds,
+        state.simulationResult,
+    ]);
+
+    const runHelpingBonusAnalysis = useCallback(() => {
+        if (!state.simulationResult || !hasHelpingBonusMember) {
+            return;
+        }
+        if (cancelRunningAnalysisIfAny()) {
+            return;
+        }
+        const runVersion = analysisRunVersionRef.current;
+        const shouldAbort = () => analysisRunVersionRef.current !== runVersion;
+        setAnalysisError(null);
+        setHelpingBonusLoading(true);
+        setHelpingBonusProgress(0);
+        setTimeout(() => {
+            void (async () => {
+                const seedUnitCount = Math.max(analysisSeeds.length, 1);
+                const hasBaseMetrics = hasResolvedBaseMetrics;
+                const totalUnits = seedUnitCount * (hasBaseMetrics ? 1 : 2);
+                let processedUnits = 0;
+                const updateHelpingBonusProgress = (nextProgress: number): void => {
+                    const clamped = Math.max(0, Math.min(100, nextProgress));
+                    setHelpingBonusProgress(prev => Math.max(prev, clamped));
+                };
+                try {
+                    const baseMetrics = await resolveBaseAverageMetrics(
+                        hasBaseMetrics
+                            ? undefined
+                            : (baseProgress) => {
+                                if (shouldAbort()) {
+                                    return;
+                                }
+                                updateHelpingBonusProgress(
+                                    ((baseProgress / 100) * seedUnitCount / totalUnits) * 100
+                                );
+                            },
+                        shouldAbort
+                    );
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    if (!hasBaseMetrics) {
+                        processedUnits += seedUnitCount;
+                    }
+                    const scenarioMetrics = await runAverageMetricsWithSeeds({
+                        disableHelpingBonus: true,
+                    }, (scenarioProgress) => {
+                        if (shouldAbort()) {
+                            return;
+                        }
+                        const progress =
+                            ((processedUnits + ((scenarioProgress / 100) * seedUnitCount)) / totalUnits) * 100;
+                        updateHelpingBonusProgress(progress);
+                    }, shouldAbort);
+                    if (shouldAbort()) {
+                        throw createAbortError();
+                    }
+                    setHelpingBonusResult({
+                        baseTeamEP: baseMetrics.averageTeamEP,
+                        scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                        teamDeltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
+                        teamDeltaPercent: calculateDeltaPercent(
+                            baseMetrics.averageTeamEP,
+                            scenarioMetrics.averageTeamEP
+                        ),
+                    });
+                } catch (e) {
+                    if (!isAbortError(e)) {
+                        setAnalysisError(String(e));
+                    }
+                } finally {
+                    if (!shouldAbort()) {
+                        setHelpingBonusLoading(false);
+                        setHelpingBonusProgress(0);
+                    }
+                }
+            })();
+        }, 0);
+    }, [
+        cancelRunningAnalysisIfAny,
+        analysisSeeds.length,
+        hasResolvedBaseMetrics,
+        hasHelpingBonusMember,
         resolveBaseAverageMetrics,
         runAverageMetricsWithSeeds,
         state.simulationResult,
@@ -1532,12 +1929,16 @@ export default function TeamTimelineApp() {
                         throw createAbortError();
                     }
                     setEnergyRecoveryBonusResult({
-                        baseTeamHelpCount: baseMetrics.averageTeamHelpCount,
-                        scenarioTeamHelpCount: scenarioMetrics.averageTeamHelpCount,
+                        baseTeamEP: baseMetrics.averageTeamEP,
+                        scenarioTeamEP: scenarioMetrics.averageTeamEP,
+                        teamDeltaEP: scenarioMetrics.averageTeamEP - baseMetrics.averageTeamEP,
                         teamDeltaPercent: calculateDeltaPercent(
-                            baseMetrics.averageTeamHelpCount,
-                            scenarioMetrics.averageTeamHelpCount
+                            baseMetrics.averageTeamEP,
+                            scenarioMetrics.averageTeamEP
                         ),
+                        wakeErbMemberCountMin: wakeErbMemberCountRange.minCount,
+                        wakeErbMemberCountMax: wakeErbMemberCountRange.maxCount,
+                        wakeSlotCount: wakeErbMemberCountRange.slotCount,
                     });
                 } catch (e) {
                     if (!isAbortError(e)) {
@@ -1559,6 +1960,7 @@ export default function TeamTimelineApp() {
         resolveBaseAverageMetrics,
         runAverageMetricsWithSeeds,
         state.simulationResult,
+        wakeErbMemberCountRange,
     ]);
 
     useEffect(() => {
@@ -1581,7 +1983,12 @@ export default function TeamTimelineApp() {
         state.simulationResult,
         state.simulationLoading
     );
-
+    const skipTeamResultEntryAnimation = shouldSkipTeamResultEntryAnimation(
+        previousActiveTabRef.current,
+        state.activeTab
+    );
+    const showSimulationDetails = state.simulationResult !== null && boxRef.current !== null;
+    const showPreSimulationTimeline = state.simulationResult === null && boxRef.current !== null;
     const showAverageSection = useMemo(
         () => (
             state.multiTrialResults !== null
@@ -1596,9 +2003,10 @@ export default function TeamTimelineApp() {
             state.multiTrialAverageTeamSummary,
         ]
     );
+    const showPostSimulationInsights = showAverageSection || showAdditionalAnalysis;
 
     return (
-        <div style={{ margin: '0 0.5rem' }}>
+        <div style={{ margin: '0 0.5rem', paddingBottom: TIMELINE_PAGE_BOTTOM_PADDING }}>
             {/* タブUI */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                 <Tabs value={state.activeTab} onChange={handleTabChange}>
@@ -1656,104 +2064,112 @@ export default function TeamTimelineApp() {
                         </Box>
                     )}
 
-                    {showAverageSection && boxRef.current && (
-                        <Box sx={{ mt: '18px' }}>
-                            <Box
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'flex-start',
-                                    gap: '8px',
-                                    flexWrap: 'wrap',
-                                    mb: '5px',
-                                }}
-                            >
-                                <Typography
-                                    sx={{
-                                        fontSize: '14px',
-                                        fontWeight: 700,
-                                        lineHeight: '18px',
-                                        letterSpacing: '0.4px',
-                                    }}
-                                >
-                                    {t('TeamTimeline.simulation average', 'シミュレーション結果(平均)')}
-                                </Typography>
-                                {showSummaryValueToggle && (
-                                    <SummaryValueModeToggle
-                                        value={summaryValueMode}
-                                        onChange={handleSummaryValueModeChange}
+                    <WipeReveal
+                        show={showPostSimulationInsights}
+                        durationMs={skipTeamResultEntryAnimation ? 0 : TIMELINE_WIPE_REVEAL_DURATION_MS}
+                        appear={!skipTeamResultEntryAnimation}
+                        enterEasing={TIMELINE_WIPE_REVEAL_EASING_IN_QUAD}
+                        exitEasing={TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD}
+                        testId="team-timeline-post-simulation-wipe"
+                    >
+                        <>
+                            {showAverageSection && boxRef.current && (
+                                <Box sx={{ mt: '18px' }}>
+                                    <Box
+                                        sx={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'flex-start',
+                                            gap: '8px',
+                                            flexWrap: 'wrap',
+                                            mb: '5px',
+                                        }}
+                                    >
+                                        <Typography
+                                            sx={{
+                                                fontSize: '14px',
+                                                fontWeight: 700,
+                                                lineHeight: '18px',
+                                                letterSpacing: '0.4px',
+                                            }}
+                                        >
+                                            {t('TeamTimeline.simulation average', 'シミュレーション結果(平均)')}
+                                        </Typography>
+                                        {showSummaryValueToggle && (
+                                            <SummaryValueModeToggle
+                                                value={summaryValueMode}
+                                                onChange={handleSummaryValueModeChange}
+                                                simulationDays={state.simulationConfig.simulationDays}
+                                                orientation="horizontal"
+                                            />
+                                        )}
+                                    </Box>
+                                    <TeamSummaryRow
+                                        teamSummary={state.multiTrialAverageTeamSummary!}
+                                        layoutMode="average"
                                         simulationDays={state.simulationConfig.simulationDays}
-                                        orientation="horizontal"
+                                        valueMode={summaryValueMode}
                                     />
-                                )}
-                            </Box>
-                            <TeamSummaryRow
-                                teamSummary={state.multiTrialAverageTeamSummary!}
-                                layoutMode="average"
-                                simulationDays={state.simulationConfig.simulationDays}
-                                valueMode={summaryValueMode}
-                            />
-                            <DailySummaryRow
-                                dailySummaries={state.multiTrialAverageDailySummaries!}
-                                box={boxRef.current}
-                                layoutMode="average"
-                                simulationDays={state.simulationConfig.simulationDays}
-                                valueMode={summaryValueMode}
-                            />
-                        </Box>
-                    )}
+                                    <DailySummaryRow
+                                        dailySummaries={state.multiTrialAverageDailySummaries!}
+                                        box={boxRef.current}
+                                        layoutMode="average"
+                                        simulationDays={state.simulationConfig.simulationDays}
+                                        valueMode={summaryValueMode}
+                                        showTimelineDurationShare={hasConfiguredSwap}
+                                        timelineDurationByPokemonId={timelineDurationSummary.activeMinutesByPokemonId}
+                                        totalTimelineDurationMinutes={timelineDurationSummary.totalTimelineMinutes}
+                                    />
+                                </Box>
+                            )}
 
-                    {showAdditionalAnalysis && (
-                        <AdditionalAnalysisPanel
-                            quickModeEnabled={analysisQuickModeEnabled}
-                            onQuickModeChange={setAnalysisQuickModeEnabled}
-                            simulationDays={state.simulationConfig.simulationDays}
-                            valueMode={summaryValueMode}
-                            contributionMembers={appearingTimelineMembers}
-                            contributionResults={contributionResults}
-                            contributionLoadingIds={contributionLoadingIds}
-                            contributionBatchLoading={contributionBatchLoading}
-                            contributionBatchProgress={contributionBatchProgress}
-                            contributionProgressById={contributionProgressById}
-                            onRunContribution={runContributionAnalysis}
-                            onRunContributionAll={runContributionAnalysisAll}
-                            energySkillTargets={energySkillTargets}
-                            energySkillResults={energySkillResults}
-                            energySkillLoadingIds={energySkillLoadingIds}
-                            energySkillBatchLoading={energySkillBatchLoading}
-                            energySkillBatchProgress={energySkillBatchProgress}
-                            energySkillProgressById={energySkillProgressById}
-                            onRunEnergySkill={runEnergySkillAnalysis}
-                            onRunEnergySkillAll={runEnergySkillAnalysisAll}
-                            hasEnergyRecoveryBonusMember={hasEnergyRecoveryBonusMember}
-                            energyRecoveryBonusResult={energyRecoveryBonusResult}
-                            energyRecoveryBonusLoading={energyRecoveryBonusLoading}
-                            energyRecoveryBonusProgress={energyRecoveryBonusProgress}
-                            onRunEnergyRecoveryBonus={runEnergyRecoveryBonusAnalysis}
-                            errorMessage={analysisError}
-                        />
-                    )}
-
-                    {state.simulationResult && boxRef.current && (
-                        <Box sx={{ mt: '18px' }}>
-                            <Typography
-                                sx={{
-                                    fontSize: '14px',
-                                    fontWeight: 700,
-                                    lineHeight: '18px',
-                                    letterSpacing: '0.4px',
-                                    mb: '5px',
-                                }}
-                            >
-                                {t('TeamTimeline.simulation details', 'シミュレーション詳細')}
-                            </Typography>
-                            {state.multiTrialResults && state.multiTrialSelectedIndex !== null && (
-                                <TrialResultSelector
-                                    results={state.multiTrialResults}
-                                    selectedIndex={state.multiTrialSelectedIndex}
-                                    onSelect={handleSliderChange}
+                            {showAdditionalAnalysis && (
+                                <AdditionalAnalysisPanel
+                                    quickModeEnabled={analysisQuickModeEnabled}
+                                    onQuickModeChange={setAnalysisQuickModeEnabled}
+                                    simulationDays={state.simulationConfig.simulationDays}
+                                    valueMode={summaryValueMode}
+                                    contributionMembers={appearingTimelineMembers}
+                                    contributionResults={contributionResults}
+                                    contributionLoadingIds={contributionLoadingIds}
+                                    contributionBatchLoading={contributionBatchLoading}
+                                    contributionBatchProgress={contributionBatchProgress}
+                                    contributionProgressById={contributionProgressById}
+                                    onRunContribution={runContributionAnalysis}
+                                    onRunContributionAll={runContributionAnalysisAll}
+                                    energySkillTargets={energySkillTargets}
+                                    energySkillResults={energySkillResults}
+                                    energySkillLoadingIds={energySkillLoadingIds}
+                                    energySkillBatchLoading={energySkillBatchLoading}
+                                    energySkillBatchProgress={energySkillBatchProgress}
+                                    energySkillProgressById={energySkillProgressById}
+                                    energySkillTeamResult={energySkillTeamResult}
+                                    energySkillTeamLoading={energySkillTeamLoading}
+                                    energySkillTeamProgress={energySkillTeamProgress}
+                                    onRunEnergySkill={runEnergySkillAnalysis}
+                                    onRunEnergySkillAll={runEnergySkillAnalysisAll}
+                                    onRunEnergySkillTeam={runEnergySkillTeamAnalysis}
+                                    hasHelpingBonusMember={hasHelpingBonusMember}
+                                    helpingBonusResult={helpingBonusResult}
+                                    helpingBonusLoading={helpingBonusLoading}
+                                    helpingBonusProgress={helpingBonusProgress}
+                                    onRunHelpingBonus={runHelpingBonusAnalysis}
+                                    averageHelpingBonusMemberCount={averageHelpingBonusMemberCount}
+                                    hasConfiguredSwap={hasConfiguredSwap}
+                                    averageEnergyRecoveryBonusMemberCount={averageEnergyRecoveryBonusMemberCount}
+                                    hasEnergyRecoveryBonusMember={hasEnergyRecoveryBonusMember}
+                                    energyRecoveryBonusResult={energyRecoveryBonusResult}
+                                    energyRecoveryBonusLoading={energyRecoveryBonusLoading}
+                                    energyRecoveryBonusProgress={energyRecoveryBonusProgress}
+                                    onRunEnergyRecoveryBonus={runEnergyRecoveryBonusAnalysis}
+                                    errorMessage={analysisError}
                                 />
                             )}
+                        </>
+                    </WipeReveal>
+
+                    {showPreSimulationTimeline && (
+                        <Box sx={{ mt: '18px' }} data-testid="team-timeline-pre-simulation-table">
                             <Box
                                 sx={{
                                     width: '100%',
@@ -1767,30 +2183,89 @@ export default function TeamTimelineApp() {
                                     team={state.team}
                                     timeSlots={state.timeSlots}
                                     simulationDays={state.simulationConfig.simulationDays}
-                                    result={state.simulationResult}
+                                    result={EMPTY_SIMULATION_RESULT}
                                     swaps={state.swaps}
-                                    box={boxRef.current}
+                                    box={boxRef.current!}
                                     onSwapClick={handleSwapClick}
+                                    onHeaderSlotClick={handleSlotClick}
                                     showSummaryRows={false}
+                                    compactEmptyCells
+                                    alwaysShowSwapButton
                                 />
                             </Box>
-                            <TeamSummaryRow
-                                teamSummary={state.simulationResult.teamSummary}
-                                layoutMode="details"
-                                simulationDays={state.simulationConfig.simulationDays}
-                                valueMode={summaryValueMode}
-                                showValueModeToggle={showSummaryValueToggle}
-                                onValueModeChange={handleSummaryValueModeChange}
-                            />
-                            <DailySummaryRow
-                                dailySummaries={state.simulationResult.dailySummaries}
-                                box={boxRef.current}
-                                layoutMode="details"
-                                simulationDays={state.simulationConfig.simulationDays}
-                                valueMode={summaryValueMode}
-                            />
                         </Box>
                     )}
+
+                    <Fade
+                        in={showSimulationDetails}
+                        timeout={skipTeamResultEntryAnimation ? 0 : TIMELINE_DETAILS_FADE_DURATION_MS}
+                        appear={!skipTeamResultEntryAnimation}
+                        mountOnEnter
+                        unmountOnExit
+                    >
+                        <Box data-testid="team-timeline-details-fade">
+                            {showSimulationDetails && (
+                                <Box sx={{ mt: '18px' }}>
+                                    <Typography
+                                        sx={{
+                                            fontSize: '14px',
+                                            fontWeight: 700,
+                                            lineHeight: '18px',
+                                            letterSpacing: '0.4px',
+                                            mb: '5px',
+                                        }}
+                                    >
+                                        {t('TeamTimeline.simulation details', 'シミュレーション詳細')}
+                                    </Typography>
+                                    {state.multiTrialResults && state.multiTrialSelectedIndex !== null && (
+                                        <TrialResultSelector
+                                            results={state.multiTrialResults}
+                                            selectedIndex={state.multiTrialSelectedIndex}
+                                            onSelect={handleSliderChange}
+                                        />
+                                    )}
+                                    <Box
+                                        sx={{
+                                            width: '100%',
+                                            maxWidth: '100%',
+                                            overflowX: 'auto',
+                                            overflowY: 'hidden',
+                                            WebkitOverflowScrolling: 'touch',
+                                        }}
+                                    >
+                                        <TimelineTable
+                                            team={state.team}
+                                            timeSlots={state.timeSlots}
+                                            simulationDays={state.simulationConfig.simulationDays}
+                                            result={state.simulationResult!}
+                                            swaps={state.swaps}
+                                            box={boxRef.current!}
+                                            onSwapClick={handleSwapClick}
+                                            showSummaryRows={false}
+                                        />
+                                    </Box>
+                                    <TeamSummaryRow
+                                        teamSummary={state.simulationResult!.teamSummary}
+                                        layoutMode="details"
+                                        simulationDays={state.simulationConfig.simulationDays}
+                                        valueMode={summaryValueMode}
+                                        showValueModeToggle={showSummaryValueToggle}
+                                        onValueModeChange={handleSummaryValueModeChange}
+                                    />
+                                    <DailySummaryRow
+                                        dailySummaries={state.simulationResult!.dailySummaries}
+                                        box={boxRef.current!}
+                                        layoutMode="details"
+                                        simulationDays={state.simulationConfig.simulationDays}
+                                        valueMode={summaryValueMode}
+                                        showTimelineDurationShare={hasConfiguredSwap}
+                                        timelineDurationByPokemonId={timelineDurationSummary.activeMinutesByPokemonId}
+                                        totalTimelineDurationMinutes={timelineDurationSummary.totalTimelineMinutes}
+                                    />
+                                </Box>
+                            )}
+                        </Box>
+                    </Fade>
                     </Box>
                 </Box>
             )}

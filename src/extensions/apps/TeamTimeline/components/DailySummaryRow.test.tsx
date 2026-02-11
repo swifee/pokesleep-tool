@@ -238,4 +238,112 @@ describe('DailySummaryRow', () => {
         expect(text).toContain('🔍2.5');
         expect(text).toContain('食材合計: 5');
     });
+
+    it('shows timeline duration share when swap is configured', () => {
+        const items = [createPokemon('Pikachu', 20, 'ShareMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+                showTimelineDurationShare
+                timelineDurationByPokemonId={new Map([[items[0].id, 720]])}
+                totalTimelineDurationMinutes={1440}
+            />
+        );
+
+        expect(screen.getByText('12H (50％)')).toBeDefined();
+    });
+
+    it('formats timeline duration share with one decimal when needed', () => {
+        const items = [createPokemon('Pikachu', 20, 'DecimalShareMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+                showTimelineDurationShare
+                timelineDurationByPokemonId={new Map([[items[0].id, 570]])}
+                totalTimelineDurationMinutes={1440}
+            />
+        );
+
+        expect(screen.getByText('9.5H (39.6％)')).toBeDefined();
+    });
+
+    it('hides timeline duration share when disabled or total is zero', () => {
+        const items = [createPokemon('Pikachu', 20, 'HiddenShareMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+
+        const { rerender } = render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+                showTimelineDurationShare={false}
+                timelineDurationByPokemonId={new Map([[items[0].id, 720]])}
+                totalTimelineDurationMinutes={1440}
+            />
+        );
+        expect(screen.queryByText('12H (50％)')).toBeNull();
+
+        rerender(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+                showTimelineDurationShare
+                timelineDurationByPokemonId={new Map([[items[0].id, 720]])}
+                totalTimelineDurationMinutes={0}
+            />
+        );
+        expect(screen.queryByText('12H (50％)')).toBeNull();
+    });
+
+    it('shows timeline duration share in average layout mode', () => {
+        const items = [createPokemon('Pikachu', 20, 'AverageShareMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="average"
+                showTimelineDurationShare
+                timelineDurationByPokemonId={new Map([[items[0].id, 720]])}
+                totalTimelineDurationMinutes={1440}
+            />
+        );
+
+        expect(screen.getByText('12H (50％)')).toBeDefined();
+    });
+
+    it('shows per-day timeline duration share in dailyAverage mode', () => {
+        const items = [createPokemon('Pikachu', 20, 'PerDayShareMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="average"
+                simulationDays={7}
+                valueMode="dailyAverage"
+                showTimelineDurationShare
+                timelineDurationByPokemonId={new Map([[items[0].id, 720]])}
+                totalTimelineDurationMinutes={1440}
+            />
+        );
+
+        expect(screen.getByText('1.7H (50％)')).toBeDefined();
+    });
 });

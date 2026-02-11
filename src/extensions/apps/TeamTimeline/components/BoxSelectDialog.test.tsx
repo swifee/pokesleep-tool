@@ -104,8 +104,35 @@ describe('BoxSelectDialog', () => {
 
     it('uses centered dialog styles for mobile stability', () => {
         expect(DIALOG_SX['& .MuiDialog-container'].alignItems).toBe('center');
-        expect(DIALOG_PAPER_SX.width).toBe('min(720px, calc(100% - 24px))');
-        expect(DIALOG_PAPER_SX.margin).toBe('12px');
-        expect(DIALOG_PAPER_SX.maxHeight).toBe('calc(100% - 24px)');
+        expect(DIALOG_PAPER_SX.maxWidth).toBe('none');
+        expect(DIALOG_PAPER_SX.width).toEqual({
+            xs: 'calc(100% - 16px)',
+            sm: 'min(720px, calc(100% - 24px))',
+        });
+        expect(DIALOG_PAPER_SX.margin).toEqual({
+            xs: '30px 8px',
+            sm: '30px 12px',
+        });
+        expect(DIALOG_PAPER_SX.maxHeight).toBe('calc(100% - 60px)');
+    });
+
+    it('places sorting footer outside scrollable content area', () => {
+        const box = new PokemonBox([
+            createPokemon('Pikachu', 10, 'Bravo'),
+            createPokemon('Bulbasaur', 30, 'Alpha'),
+        ]);
+
+        render(
+            <BoxSelectDialog
+                open
+                box={box}
+                onSelect={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        const content = screen.getByTestId('team-timeline-box-select-content');
+        const footer = screen.getByTestId('team-timeline-box-select-footer');
+        expect(content.contains(footer)).toBe(false);
     });
 });

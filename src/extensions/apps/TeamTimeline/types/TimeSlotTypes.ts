@@ -126,7 +126,7 @@ export function clampSimulationDays(days: number): number {
  * デフォルトのシミュレーション設定
  */
 export const DEFAULT_SIMULATION_CONFIG: SimulationConfig = {
-    seed: 12345,
+    seed: 123456,
     initialEnergy: 50,
     simulationDays: MIN_SIMULATION_DAYS,
 };
@@ -389,12 +389,11 @@ export interface SimulationResult {
  * デフォルトの時間帯設定（新形式）
  */
 export const DEFAULT_TIME_SLOTS: TimeSlot[] = [
-    { id: 'slot-1', time: '22:30', sleepState: 'sleep', hasMeal: false },
-    { id: 'slot-2', time: '07:00', sleepState: 'wake', hasMeal: false },
-    { id: 'slot-3', time: '12:00', sleepState: 'none', hasMeal: true },
-    { id: 'slot-4', time: '16:30', sleepState: 'none', hasMeal: false },
-    { id: 'slot-5', time: '19:00', sleepState: 'none', hasMeal: true },
-    { id: 'slot-6', time: '21:00', sleepState: 'none', hasMeal: false },
+    { id: 'slot-1', time: '07:00', sleepState: 'wake', hasMeal: true },
+    { id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: true },
+    { id: 'slot-3', time: '15:00', sleepState: 'none', hasMeal: false },
+    { id: 'slot-4', time: '18:00', sleepState: 'none', hasMeal: true },
+    { id: 'slot-5', time: '23:00', sleepState: 'sleep', hasMeal: false },
 ];
 
 /**

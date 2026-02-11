@@ -45,6 +45,7 @@ export interface SimulationAnalysisOptions {
     keepDisabledPokemonTargetable?: boolean;
     suppressEnergyDeltaSkillPokemonIds?: readonly number[];
     disableEnergyRecoveryBonus?: boolean;
+    disableHelpingBonus?: boolean;
 }
 
 /** シミュレーション入力 */
@@ -335,7 +336,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             pokemon => !disabledPokemonIds.has(pokemon.id)
         );
         const activeTeamMemberIds = new Set<number>(currentActiveTeam.map(pokemon => pokemon.id));
-        const teamHelpingBonusCount = getTeamHelpingBonusCount(currentActiveTeam);
+        const teamHelpingBonusCount = analysisOptions?.disableHelpingBonus
+            ? 0
+            : getTeamHelpingBonusCount(currentActiveTeam);
         const teamSkillBonusByPokemonId = new Map<number, PokemonSkillBonusContext>();
         currentTargetableTeam.forEach(pokemon => {
             teamSkillBonusByPokemonId.set(
