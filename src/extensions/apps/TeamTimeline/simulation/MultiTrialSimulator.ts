@@ -4,7 +4,14 @@
  */
 
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
-import { TimeSlot, SimulationConfig, PokemonSwap, DailySummary, TeamSummary } from '../types/TimeSlotTypes';
+import {
+    TimeSlot,
+    SimulationConfig,
+    PokemonSwap,
+    DailySummary,
+    TeamSummary,
+    SimulationResult,
+} from '../types/TimeSlotTypes';
 import { IngredientName } from '../../../../data/pokemons';
 import { runSimulation } from './TimelineSimulator';
 import { TrialSummary, MultiTrialResult } from '../types/MultiTrialTypes';
@@ -24,6 +31,14 @@ export interface MultiTrialInput {
 
 export interface MultiTrialProgressInput extends MultiTrialInput {
     readonly onProgress?: (progress: number) => void;
+    readonly onTrialComplete?: (trial: {
+        index: number;
+        trialCount: number;
+        seed: number;
+        result: SimulationResult;
+    }) => void;
+    readonly shouldAbort?: () => boolean;
+    readonly progressUpdateIntervalMs?: number;
     readonly yieldEvery?: number;
 }
 
@@ -204,11 +219,11 @@ function finalizeAverages(state: AggregationState, trialCount: number): {
 function finalizeMultiTrialResult(
     trials: TrialSummary[],
     state: AggregationState,
-    trialCount: number,
+    completedTrialCount: number,
 ): MultiTrialResult {
     trials.sort((a, b) => b.grandTotalEP - a.grandTotalEP);
     const medianIndex = Math.floor((trials.length - 1) / 2);
-    const { averageDailySummaries, averageTeamSummary } = finalizeAverages(state, trialCount);
+    const { averageDailySummaries, averageTeamSummary } = finalizeAverages(state, completedTrialCount);
     return {
         trials,
         medianIndex,
@@ -224,6 +239,9 @@ function finalizeMultiTrialResult(
  */
 export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResult {
     const { team, timeSlots, config, bonusSettings, swaps, box, trialCount } = input;
+    if (trialCount <= 0) {
+        throw new Error('trialCount must be greater than 0');
+    }
     const trials: TrialSummary[] = [];
     const state = createAggregationState();
 
@@ -249,7 +267,7 @@ export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResul
         accumulateTeamSummary(state, result.teamSummary);
     }
 
-    return finalizeMultiTrialResult(trials, state, trialCount);
+    return finalizeMultiTrialResult(trials, state, trials.length);
 }
 
 function waitNextTick(): Promise<void> {
@@ -257,6 +275,8 @@ function waitNextTick(): Promise<void> {
         setTimeout(resolve, 0);
     });
 }
+
+const DEFAULT_PROGRESS_UPDATE_INTERVAL_MS = 200;
 
 /**
  * Run multi-trial simulation with progress callback.
@@ -274,14 +294,44 @@ export async function runMultiTrialSimulationWithProgress(
         box,
         trialCount,
         onProgress,
+        onTrialComplete,
+        shouldAbort,
+        progressUpdateIntervalMs = DEFAULT_PROGRESS_UPDATE_INTERVAL_MS,
         yieldEvery = 20,
     } = input;
+    if (trialCount <= 0) {
+        throw new Error('trialCount must be greater than 0');
+    }
     const trials: TrialSummary[] = [];
     const state = createAggregationState();
+    let lastProgressUpdateAt = Date.now();
+    let lastEmittedProgress = 0;
 
     onProgress?.(0);
 
+    const emitProgress = async (progress: number, force = false): Promise<void> => {
+        if (!onProgress) {
+            return;
+        }
+        const normalizedProgress = Math.max(lastEmittedProgress, Math.max(0, Math.min(100, progress)));
+        const now = Date.now();
+        if (
+            !force
+            && progressUpdateIntervalMs > 0
+            && now - lastProgressUpdateAt < progressUpdateIntervalMs
+        ) {
+            return;
+        }
+        onProgress(normalizedProgress);
+        lastEmittedProgress = normalizedProgress;
+        lastProgressUpdateAt = now;
+        await waitNextTick();
+    };
+
     for (let i = 0; i < trialCount; i++) {
+        if (i > 0 && shouldAbort?.()) {
+            break;
+        }
         const seed = createSeed(input.initialSeed, i);
         const result = runSimulation({
             team,
@@ -296,6 +346,12 @@ export async function runMultiTrialSimulationWithProgress(
             seed,
             grandTotalEP: result.teamSummary.grandTotalEP,
         });
+        onTrialComplete?.({
+            index: i,
+            trialCount,
+            seed,
+            result,
+        });
 
         for (const dailySummary of result.dailySummaries) {
             accumulateDailySummary(state, dailySummary);
@@ -303,13 +359,17 @@ export async function runMultiTrialSimulationWithProgress(
         accumulateTeamSummary(state, result.teamSummary);
 
         const progress = Math.round(((i + 1) / trialCount) * 100);
-        onProgress?.(progress);
+        await emitProgress(progress, i + 1 === trialCount);
 
-        if (yieldEvery > 0 && (i + 1) % yieldEvery === 0 && i < trialCount - 1) {
+        if (!onProgress && yieldEvery > 0 && (i + 1) % yieldEvery === 0 && i < trialCount - 1) {
             await waitNextTick();
         }
     }
 
-    onProgress?.(100);
-    return finalizeMultiTrialResult(trials, state, trialCount);
+    const finalProgress = Math.round((trials.length / trialCount) * 100);
+    if (finalProgress > lastEmittedProgress) {
+        await emitProgress(finalProgress, true);
+    }
+
+    return finalizeMultiTrialResult(trials, state, trials.length);
 }

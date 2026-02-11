@@ -4,6 +4,7 @@ import {
     Dialog,
     DialogTitle,
     DialogContent,
+    DialogActions,
     IconButton,
     ButtonBase,
 } from '@mui/material';
@@ -223,7 +224,7 @@ const BoxSelectDialog = React.memo(({
                     <CloseIcon />
                 </IconButton>
             </DialogTitle>
-            <DialogContent dividers>
+            <DialogContent dividers data-testid="team-timeline-box-select-content">
                 {/* Special options for swap dialog */}
                 {(onRemoveSwap || onSelectNone) && (
                     <SpecialOptionsContainer>
@@ -252,7 +253,9 @@ const BoxSelectDialog = React.memo(({
                         ))}
                     </GridContainer>
                 )}
-                <FooterArea>
+            </DialogContent>
+            <DialogActions disableSpacing sx={{ p: 0, m: 0 }}>
+                <FooterArea data-testid="team-timeline-box-select-footer">
                     <BoxSortConfigFooter
                         sortConfig={sortConfig}
                         parameter={parameter}
@@ -266,7 +269,7 @@ const BoxSelectDialog = React.memo(({
                         onFilterButtonClick={onFilterButtonClick}
                     />
                 </FooterArea>
-            </DialogContent>
+            </DialogActions>
             <BoxFilterDialog
                 open={filterOpen}
                 value={filterConfig}
@@ -377,7 +380,9 @@ const StyledBoxItem = styled('div')({
 });
 
 const FooterArea = styled('div')({
-    marginTop: '8px',
+    width: '100%',
+    padding: 0,
+    boxSizing: 'border-box',
 });
 
 export default BoxSelectDialog;

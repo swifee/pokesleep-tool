@@ -10,6 +10,7 @@ interface ChildrenProps {
 interface ButtonProps extends ChildrenProps {
     onClick?: React.MouseEventHandler<HTMLButtonElement>;
     disabled?: boolean;
+    sx?: unknown;
     ['aria-valuenow']?: number;
     ['aria-valuemin']?: number;
     ['aria-valuemax']?: number;
@@ -45,8 +46,16 @@ interface MenuItemProps extends ChildrenProps {
 vi.mock('@mui/material', () => ({
     Box: ({ children }: ChildrenProps) => <div>{children}</div>,
     Typography: ({ children }: ChildrenProps) => <span>{children}</span>,
-    Button: ({ children, onClick, disabled, ...rest }: ButtonProps) => (
-        <button type="button" onClick={onClick} disabled={disabled} {...rest}>{children}</button>
+    Button: ({ children, onClick, disabled, sx, ...rest }: ButtonProps) => (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            data-sx={sx ? JSON.stringify(sx) : undefined}
+            {...rest}
+        >
+            {children}
+        </button>
     ),
     Checkbox: ({ checked, onChange, disabled }: CheckboxProps) => (
         <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} aria-label="seed-checkbox" />
@@ -120,7 +129,7 @@ describe('SimulationControls', () => {
         expect(props.onTrialCountChange).toHaveBeenCalledWith(1000);
     });
 
-    it('disables run button while loading or team is empty', () => {
+    it('keeps run button enabled while loading and disables only when team is empty', () => {
         const { rerender } = render(
             <SimulationControls
                 seedMode="random"
@@ -156,7 +165,7 @@ describe('SimulationControls', () => {
                 onRunSimulation={vi.fn()}
             />
         );
-        expect((screen.getByRole('button', { name: '計算中...' }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole('button', { name: 'シミュレーション' }) as HTMLButtonElement).disabled).toBe(false);
 
         rerender(
             <SimulationControls
@@ -183,6 +192,15 @@ describe('SimulationControls', () => {
             simulationProgress: 65,
         });
 
-        expect(screen.getByRole('button', { name: '計算中...' }).getAttribute('aria-valuenow')).toBe('65');
+        expect(screen.getByRole('button', { name: 'シミュレーション' }).getAttribute('aria-valuenow')).toBe('65');
+    });
+
+    it('uses lighter progress track color while loading', () => {
+        renderControls({
+            simulationLoading: true,
+            simulationProgress: 40,
+        });
+
+        expect(screen.getByRole('button', { name: 'シミュレーション' }).getAttribute('data-sx')).toContain('"background":"#94bffc"');
     });
 });

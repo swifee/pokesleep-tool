@@ -41,6 +41,13 @@ function createPokemonWithHelpingBonus(base: PokemonBoxItem): PokemonBoxItem {
     return new PokemonBoxItem(withHelpingBonusIv);
 }
 
+function createPokemonWithEnergyRecoveryBonus(base: PokemonBoxItem): PokemonBoxItem {
+    const withErbIv = base.iv.changeSubSkills(
+        new SubSkillList({ lv10: new SubSkill('Energy Recovery Bonus') })
+    );
+    return new PokemonBoxItem(withErbIv);
+}
+
 function createNeutralSkillEffectResult(energyAfterSelfRecovery: number) {
     return {
         selfEnergyRecovery: 0,
@@ -363,6 +370,40 @@ describe('TimelineSimulator', () => {
         expect(withHelpingBonusHelpCount).toBeGreaterThan(withoutHelpingBonusHelpCount);
     });
 
+    it('おてつだいボーナス無効化オプションでおてつだい回数が減少する', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const basePokemon = createBerryBurstDisguisePokemon(3);
+        const pokemonWithHelpingBonus = createPokemonWithHelpingBonus(basePokemon);
+        const timeSlots: TimeSlot[] = [
+            { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+            { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+        ];
+
+        const normal = runSimulation({
+            team: [pokemonWithHelpingBonus, null, null, null, null],
+            timeSlots,
+            config: { seed: 90234, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+        const disabledHelpingBonus = runSimulation({
+            team: [pokemonWithHelpingBonus, null, null, null, null],
+            timeSlots,
+            config: { seed: 90234, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            analysisOptions: {
+                disableHelpingBonus: true,
+            },
+        });
+
+        const normalHelpCount = sumHelpCount(normal, pokemonWithHelpingBonus.id);
+        const disabledHelpCount = sumHelpCount(disabledHelpingBonus, pokemonWithHelpingBonus.id);
+        expect(normalHelpCount).toBeGreaterThan(disabledHelpCount);
+    });
+
     it('いいキャンプチケット有効時はおてつだい回数が増える', () => {
         processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
             const energy = typeof args[2] === 'number' ? args[2] : 50;
@@ -445,5 +486,109 @@ describe('TimelineSimulator', () => {
 
         expect(eventResult.teamSummary.totalBerryEP).toBeGreaterThan(baseResult.teamSummary.totalBerryEP);
         expect(expertResult.teamSummary.totalBerryEP).toBeGreaterThan(baseResult.teamSummary.totalBerryEP);
+    });
+
+    it('無効化対象はおてつだい/スキルを行わず、対象チームには残る', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemonA = createBerryBurstDisguisePokemon(3);
+        const pokemonB = createBerryBurstDisguisePokemon(3);
+        runSimulation({
+            team: [pokemonA, pokemonB, null, null, null],
+            timeSlots: [
+                { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 93456, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            analysisOptions: {
+                disabledPokemonIds: [pokemonB.id],
+                keepDisabledPokemonTargetable: true,
+            },
+        });
+
+        const helpByA = sumHelpCount(
+            runSimulation({
+                team: [pokemonA, pokemonB, null, null, null],
+                timeSlots: [
+                    { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                    { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+                ],
+                config: { seed: 93456, initialEnergy: 50, simulationDays: 1 },
+                bonusSettings: defaultBonusSettings,
+                analysisOptions: {
+                    disabledPokemonIds: [pokemonB.id],
+                    keepDisabledPokemonTargetable: true,
+                },
+            }),
+            pokemonA.id
+        );
+        const helpByB = sumHelpCount(
+            runSimulation({
+                team: [pokemonA, pokemonB, null, null, null],
+                timeSlots: [
+                    { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                    { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+                ],
+                config: { seed: 93456, initialEnergy: 50, simulationDays: 1 },
+                bonusSettings: defaultBonusSettings,
+                analysisOptions: {
+                    disabledPokemonIds: [pokemonB.id],
+                    keepDisabledPokemonTargetable: true,
+                },
+            }),
+            pokemonB.id
+        );
+
+        expect(helpByA).toBeGreaterThan(0);
+        expect(helpByB).toBe(0);
+        const firstCall = processSkillTriggersMock.mock.calls[0];
+        expect(firstCall).toBeDefined();
+        const teamMembersArg = firstCall?.[6] as PokemonBoxItem[] | undefined;
+        expect(teamMembersArg?.map(member => member.id)).toContain(pokemonB.id);
+        const analysisContextArg = firstCall?.[13] as {
+            activeTeamMemberIds?: ReadonlySet<number>;
+            targetableTeamMembers?: readonly PokemonBoxItem[];
+        } | undefined;
+        expect(analysisContextArg?.activeTeamMemberIds?.has(pokemonA.id)).toBe(true);
+        expect(analysisContextArg?.activeTeamMemberIds?.has(pokemonB.id)).toBe(false);
+        expect(analysisContextArg?.targetableTeamMembers?.map(member => member.id)).toContain(pokemonB.id);
+    });
+
+    it('げんき回復ボーナス無効化オプションで起床回復が減少する', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const basePokemon = createBerryBurstDisguisePokemon(3);
+        const pokemonWithErb = createPokemonWithEnergyRecoveryBonus(basePokemon);
+        const timeSlots: TimeSlot[] = [
+            { id: 'sleep', time: '23:30', sleepState: 'sleep', hasMeal: false },
+            { id: 'wake', time: '00:10', sleepState: 'wake', hasMeal: false },
+        ];
+
+        const normal = runSimulation({
+            team: [pokemonWithErb, null, null, null, null],
+            timeSlots,
+            config: { seed: 94567, initialEnergy: 99, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+        const disabledErb = runSimulation({
+            team: [pokemonWithErb, null, null, null, null],
+            timeSlots,
+            config: { seed: 94567, initialEnergy: 99, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            analysisOptions: {
+                disableEnergyRecoveryBonus: true,
+            },
+        });
+
+        const normalWake = normal.slotResults.get('wake__day0')?.[0]?.wakeRecovery ?? 0;
+        const disabledWake = disabledErb.slotResults.get('wake__day0')?.[0]?.wakeRecovery ?? 0;
+        expect(normalWake).toBeGreaterThan(disabledWake);
     });
 });

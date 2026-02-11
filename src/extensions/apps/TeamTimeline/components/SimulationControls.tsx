@@ -39,6 +39,8 @@ const CONTROL_VALUE_STYLE = {
   letterSpacing: '-0.48px',
 };
 
+const PROGRESS_TRACK_BACKGROUND = '#94bffc';
+
 export const SimulationControls: React.FC<SimulationControlsProps> = ({
   seedMode,
   seed,
@@ -189,7 +191,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
       <Button
         variant="contained"
         onClick={onRunSimulation}
-        disabled={simulationLoading || isTeamEmpty}
+        disabled={isTeamEmpty}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={simulationLoading ? clampedProgress : undefined}
@@ -204,7 +206,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
           color: '#fff',
           position: 'relative',
           overflow: 'hidden',
-          background: '#3c8af8',
+          background: simulationLoading ? PROGRESS_TRACK_BACKGROUND : '#3c8af8',
           transition: 'none',
           '&::before': {
             content: '""',
@@ -233,9 +235,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         }}
       >
         <span className="button-label">
-          {simulationLoading
-            ? t('TeamTimeline.simulating', '計算中...')
-            : t('TeamTimeline.run simulation', 'シミュレーション')}
+          {t('TeamTimeline.run simulation', 'シミュレーション')}
         </span>
       </Button>
     </Box>

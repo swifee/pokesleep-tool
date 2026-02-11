@@ -3,7 +3,7 @@ import { styled } from '@mui/system';
 import { useTranslation } from 'react-i18next';
 import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
-import { TimeSlot, SimulationResult, PokemonSwap, getDisplayLabel } from '../types/TimeSlotTypes';
+import { TimeSlot, SimulationResult, PokemonSwap } from '../types/TimeSlotTypes';
 import TimelineRow from './TimelineRow';
 import DailySummaryRow from './DailySummaryRow';
 import TeamSummaryRow from './TeamSummaryRow';
@@ -17,7 +17,10 @@ interface TimelineTableProps {
   swaps: PokemonSwap[];
   box: PokemonBox;
   onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
+  onHeaderSlotClick?: (index: number) => void;
   showSummaryRows?: boolean;
+  compactEmptyCells?: boolean;
+  alwaysShowSwapButton?: boolean;
 }
 
 const TimelineTable = React.memo(({
@@ -28,7 +31,10 @@ const TimelineTable = React.memo(({
   swaps,
   box,
   onSwapClick,
+  onHeaderSlotClick,
   showSummaryRows = true,
+  compactEmptyCells = false,
+  alwaysShowSwapButton = false,
 }: TimelineTableProps) => {
   const { t } = useTranslation();
 
@@ -37,53 +43,70 @@ const TimelineTable = React.memo(({
     [timeSlots, simulationDays]
   );
 
-  const firstSlot = expandedTimeline.expandedSlots[0]?.slot;
-
-  const firstSlotLabel = useMemo(() => {
-    if (!firstSlot) {
-      return '-';
-    }
-    const label = getDisplayLabel(firstSlot);
-    if (label === 'custom') {
-      return firstSlot.customLabel || '-';
-    }
-    return t(`TeamTimeline.label ${label}`);
-  }, [firstSlot, t]);
-
   const dayBandBySlotId = useMemo(() => {
     const entries = expandedTimeline.dayBands.map(band => [band.afterDisplaySlotId, band.dayNumber] as const);
     return new Map<string, number>(entries);
   }, [expandedTimeline.dayBands]);
+  const shouldShowFirstDayBand = simulationDays >= 2 && expandedTimeline.expandedSlots.length > 0;
 
   return (
     <TableContainer>
       <HeaderRow>
-        <CornerHeaderCell>
-          <div className="time">{firstSlot?.time ?? '-'}</div>
-          <div className="label">{firstSlotLabel}</div>
-        </CornerHeaderCell>
+        <CornerHeaderCell aria-hidden="true" data-testid="timeline-corner-header-cell" />
         {team.map((pokemon, index) => (
           <PokemonHeaderCell key={index}>
-            {pokemon ? (
-              <>
-                <PokemonIconBox>
-                  <PokemonIcon idForm={pokemon.iv.idForm} size={30} />
-                </PokemonIconBox>
-                <PokemonHeaderText>
-                  <span className="name">{pokemon.filledNickname(t)}</span>
-                  <span className="level-label">Lv.</span>
-                  <span className="level-value">{pokemon.iv.level}</span>
-                </PokemonHeaderText>
-              </>
+            {onHeaderSlotClick ? (
+              <HeaderSlotButton
+                type="button"
+                onClick={() => onHeaderSlotClick(index)}
+                data-testid={`timeline-header-slot-button-${index}`}
+                title={pokemon?.filledNickname(t)}
+              >
+                {pokemon ? (
+                  <>
+                    <PokemonIconBox>
+                      <PokemonIcon idForm={pokemon.iv.idForm} size={30} />
+                    </PokemonIconBox>
+                    <PokemonHeaderText>
+                      <span className="name">{pokemon.filledNickname(t)}</span>
+                      <span className="level-label">Lv.</span>
+                      <span className="level-value">{pokemon.iv.level}</span>
+                    </PokemonHeaderText>
+                  </>
+                ) : (
+                  <EmptySlot>-</EmptySlot>
+                )}
+              </HeaderSlotButton>
             ) : (
-              <EmptySlot>-</EmptySlot>
+              <>
+                {pokemon ? (
+                  <>
+                    <PokemonIconBox>
+                      <PokemonIcon idForm={pokemon.iv.idForm} size={30} />
+                    </PokemonIconBox>
+                    <PokemonHeaderText>
+                      <span className="name">{pokemon.filledNickname(t)}</span>
+                      <span className="level-label">Lv.</span>
+                      <span className="level-value">{pokemon.iv.level}</span>
+                    </PokemonHeaderText>
+                  </>
+                ) : (
+                  <EmptySlot>-</EmptySlot>
+                )}
+              </>
             )}
           </PokemonHeaderCell>
         ))}
       </HeaderRow>
 
       <DataSection>
+        {shouldShowFirstDayBand && (
+          <DayBandRow>
+            {t('TeamTimeline.day label', '{{day}}日目', { day: 1 })}
+          </DayBandRow>
+        )}
         {expandedTimeline.expandedSlots.map((expandedSlot) => {
+          const isFirstTimelineSlot = expandedSlot.dayIndex === 0 && expandedSlot.slotIndexInDay === 0;
           const slotResults = result.slotResults.get(expandedSlot.slot.id)
             || result.slotResults.get(expandedSlot.originalSlotId)
             || [];
@@ -100,6 +123,9 @@ const TimelineTable = React.memo(({
                 box={box}
                 onSwapClick={onSwapClick}
                 isFirstSlot={expandedSlot.slotIndexInDay === 0}
+                compactEmptyCells={compactEmptyCells}
+                alwaysShowSwapButton={alwaysShowSwapButton}
+                isFirstTimelineSlot={isFirstTimelineSlot}
               />
               {dayBandNumber !== undefined && (
                 <DayBandRow>
@@ -157,17 +183,6 @@ const CornerHeaderCell = styled('div')({
   borderRight: '0.5px solid #e2e2e2',
   fontFamily: '"M PLUS 1p", sans-serif',
   color: '#000',
-  '& .time': {
-    fontSize: '12px',
-    lineHeight: '15px',
-    letterSpacing: '-0.48px',
-  },
-  '& .label': {
-    fontSize: '10px',
-    lineHeight: '13px',
-    letterSpacing: '-0.5px',
-    marginTop: '2px',
-  },
 });
 
 const PokemonHeaderCell = styled('div')({
@@ -184,6 +199,25 @@ const PokemonHeaderCell = styled('div')({
   gap: '1px',
   '&:last-of-type': {
     borderRight: 'none',
+  },
+});
+
+const HeaderSlotButton = styled('button')({
+  width: '100%',
+  height: '100%',
+  border: 'none',
+  padding: 0,
+  margin: 0,
+  backgroundColor: 'transparent',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '1px',
+  cursor: 'pointer',
+  fontFamily: '"M PLUS 1p", sans-serif',
+  '&:hover': {
+    backgroundColor: '#f8fbff',
   },
 });
 
@@ -247,10 +281,10 @@ const DataSection = styled('div')({
 });
 
 const DayBandRow = styled('div')({
-  margin: '0 6px 1px',
+  margin: '0 0 1px',
   padding: '2px 8px',
   border: '1px solid #bbdefb',
-  borderRadius: '999px',
+  borderRadius: '6px',
   backgroundColor: '#e3f2fd',
   color: '#0d47a1',
   fontSize: '10px',

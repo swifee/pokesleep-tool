@@ -17,17 +17,34 @@ interface TimelineCellProps {
     hasSwap?: boolean;               // Whether this position has a swap
     swappedPokemonName?: string;     // Name of the swapped Pokemon
     isFirstSlot?: boolean;           // Whether this is the first time slot (duration 0)
+    compactEmpty?: boolean;          // Use compact layout for empty cell
+    compactFirstSlot?: boolean;      // Use compact layout for first timeline slot
+    alwaysShowSwapButton?: boolean;  // Show swap button without hover
+    disableSwapUi?: boolean;         // Hide swap UI entirely for this cell
 }
 
 /**
  * Display simulation results for 1 Pokemon x 1 time slot
  */
 const TimelineCell = React.memo((props: TimelineCellProps) => {
-    const { result, isSleeping, onSwapClick, hasSwap, swappedPokemonName, isFirstSlot } = props;
+    const {
+        result,
+        isSleeping,
+        onSwapClick,
+        hasSwap,
+        swappedPokemonName,
+        isFirstSlot,
+        compactEmpty = false,
+        compactFirstSlot = false,
+        alwaysShowSwapButton = false,
+        disableSwapUi = false,
+    } = props;
     const { t } = useTranslation();
     const swapButtonTitle = t('TeamTimeline.swap pokemon');
-    const hasSwapInfo = Boolean(hasSwap && swappedPokemonName);
-    const showSwapButton = Boolean(onSwapClick) && !hasSwapInfo;
+    const hasSwapInfo = !disableSwapUi && Boolean(hasSwap && swappedPokemonName);
+    const showSwapButton = !disableSwapUi && Boolean(onSwapClick) && !hasSwapInfo;
+    const isCompactEmptyCell = compactEmpty && result === null;
+    const isCompactLayout = isCompactEmptyCell || compactFirstSlot;
 
     const handleSwapButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
@@ -51,6 +68,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             <SwapIconButton
                 type="button"
                 className="swap-trigger"
+                data-always-visible={alwaysShowSwapButton ? 'true' : 'false'}
                 onClick={handleSwapButtonClick}
                 title={swapButtonTitle}
             >
@@ -132,8 +150,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 $isSleeping={isSleeping}
                 $hasSwap={hasSwap}
                 $showSwapButton={showSwapButton}
+                $alwaysShowSwapButton={alwaysShowSwapButton}
+                $compact={isCompactLayout}
+                data-compact-layout={isCompactLayout ? 'true' : 'false'}
             >
-                <EmptyContent>-</EmptyContent>
+                <EmptyContent />
                 {renderSwapInfo()}
                 {renderSwapControl()}
             </StyledCell>
@@ -346,6 +367,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             $isSleeping={isSleeping}
             $hasSwap={hasSwap}
             $showSwapButton={showSwapButton}
+            $alwaysShowSwapButton={alwaysShowSwapButton}
+            $compact={isCompactLayout}
+            data-compact-layout={isCompactLayout ? 'true' : 'false'}
         >
             {/* Line 1: Energy Value */}
             <EnergyLine>
@@ -419,15 +443,23 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     );
 });
 
-const StyledCell = styled('div')<{ $isSleeping: boolean; $hasSwap?: boolean; $showSwapButton: boolean }>(
-    ({ $isSleeping, $showSwapButton }) => ({
+const StyledCell = styled('div')<{
+    $isSleeping: boolean;
+    $hasSwap?: boolean;
+    $showSwapButton: boolean;
+    $alwaysShowSwapButton: boolean;
+    $compact: boolean;
+}>(
+    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact }) => ({
     position: 'relative',
     width: '100px',
     minWidth: '100px',
     flexShrink: 0,
     boxSizing: 'border-box',
-    minHeight: '109px',
-    padding: `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
+    minHeight: $compact ? '34px' : '109px',
+    padding: $compact
+        ? `2px 2px ${$showSwapButton ? '22px' : '2px'}`
+        : `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
     borderLeft: '0.5px solid #e2e2e2',
     backgroundColor: $isSleeping ? '#f5f6fb' : '#fff',
     display: 'flex',
@@ -438,13 +470,15 @@ const StyledCell = styled('div')<{ $isSleeping: boolean; $hasSwap?: boolean; $sh
     cursor: 'default',
     WebkitTapHighlightColor: 'transparent',
     '& .swap-trigger': {
-        opacity: 0,
-        pointerEvents: 'none',
+        opacity: $alwaysShowSwapButton ? 1 : 0,
+        pointerEvents: $alwaysShowSwapButton ? 'auto' : 'none',
     },
-    '&:hover .swap-trigger, &:focus-within .swap-trigger': {
-        opacity: 1,
-        pointerEvents: 'auto',
-    },
+    ...(!$alwaysShowSwapButton ? {
+        '&:hover .swap-trigger, &:focus-within .swap-trigger': {
+            opacity: 1,
+            pointerEvents: 'auto',
+        },
+    } : {}),
     '@media (hover: none), (pointer: coarse)': {
         '& .swap-trigger': {
             opacity: 1,
@@ -456,10 +490,7 @@ const StyledCell = styled('div')<{ $isSleeping: boolean; $hasSwap?: boolean; $sh
 const EmptyContent = styled('div')({
     display: 'flex',
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
     minHeight: 0,
-    color: '#999',
 });
 
 const HelpLine = styled('span')({

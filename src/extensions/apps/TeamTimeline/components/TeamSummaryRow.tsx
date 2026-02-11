@@ -90,6 +90,7 @@ const TeamSummaryRow = React.memo(({
               <SummaryValueModeToggle
                 value={resolvedValueMode}
                 onChange={onValueModeChange}
+                simulationDays={simulationDays}
                 orientation="responsive"
               />
             </span>

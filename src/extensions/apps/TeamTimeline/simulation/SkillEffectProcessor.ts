@@ -125,6 +125,13 @@ export interface TeamSkillBonusContext {
     byPokemonId: ReadonlyMap<number, PokemonSkillBonusContext>;
 }
 
+export interface SkillAnalysisContext {
+    activeTeamMemberIds?: ReadonlySet<number>;
+    targetableTeamMembers?: readonly PokemonBoxItem[];
+    disabledPokemonIds?: ReadonlySet<number>;
+    suppressEnergyDelta?: boolean;
+}
+
 function calculateBerryStrength(type: PokemonType, level: number): number {
     const baseStrength = BERRY_STRENGTH_BY_TYPE[type];
     return Math.max(baseStrength + level - 1, Math.round(Math.pow(1.025, level - 1) * baseStrength));
@@ -424,9 +431,13 @@ function simulateSupportHelps(
     target: PokemonBoxItem,
     helpCount: number,
     random: SeededRandom,
-    bonusContext?: TeamSkillBonusContext
+    bonusContext?: TeamSkillBonusContext,
+    activeTeamMemberIds?: ReadonlySet<number>,
 ): { berryCount: number; berryEP: number; ingredients: IngredientResult[] } {
     if (helpCount <= 0) {
+        return { berryCount: 0, berryEP: 0, ingredients: [] };
+    }
+    if (activeTeamMemberIds && !activeTeamMemberIds.has(target.id)) {
         return { berryCount: 0, berryEP: 0, ingredients: [] };
     }
 
@@ -495,6 +506,7 @@ export function processSkillTriggers(
     proxySkillLevelOverride?: number,
     forceStockpileSpit: boolean = false,
     bonusContext?: TeamSkillBonusContext,
+    analysisContext?: SkillAnalysisContext,
 ): SkillEffectResult {
     const skillName = proxySkillNameOverride ?? (pokemon.iv.pokemon.skill as MainSkillName);
     const pokemonBonus = bonusContext?.byPokemonId.get(pokemon.id);
@@ -504,6 +516,17 @@ export function processSkillTriggers(
     );
     const category = classifySkill(skillName);
     const activeNuzzleChainState = nuzzleChainState ?? { remaining: NUZZLE_MAX_CHAIN_TRIGGERS };
+    const defaultTeamMembers = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
+    const targetableTeamMembers = analysisContext?.targetableTeamMembers !== undefined
+        ? [...analysisContext.targetableTeamMembers]
+        : defaultTeamMembers;
+    const activeTeamMemberIds = analysisContext?.activeTeamMemberIds;
+    const activeTeamMembers = activeTeamMemberIds
+        ? targetableTeamMembers.filter(member => activeTeamMemberIds.has(member.id))
+        : targetableTeamMembers;
+    const targetableTeammates = targetableTeamMembers.filter(member => member.id !== pokemon.id);
+    const activeTeammates = activeTeamMembers.filter(member => member.id !== pokemon.id);
+    const suppressEnergyDelta = analysisContext?.suppressEnergyDelta === true;
 
     let totalSelfRecovery = 0;
     let totalDirectEP = 0;
@@ -582,20 +605,22 @@ export function processSkillTriggers(
         const recoveryPerTrigger = getSkillValue(skillName, skillLevel);
 
         for (let i = 0; i < skillTriggerCount; i++) {
-            const beforeRecovery = energy;
-            energy = Math.min(MAX_ENERGY, energy + recoveryPerTrigger);
-            const actualRecovery = energy - beforeRecovery;
-            totalSelfRecovery += actualRecovery;
+            if (!suppressEnergyDelta) {
+                const beforeRecovery = energy;
+                energy = Math.min(MAX_ENERGY, energy + recoveryPerTrigger);
+                const actualRecovery = energy - beforeRecovery;
+                totalSelfRecovery += actualRecovery;
+            }
 
             // Moonlightの場合、50%の確率でチームメイトを回復
-            if (skillName === 'Charge Energy S (Moonlight)' && teammates.length > 0) {
+            if (skillName === 'Charge Energy S (Moonlight)' && targetableTeammates.length > 0) {
                 if (random.chance(MOONLIGHT_TEAMMATE_PROBABILITY)) {
                     // ランダムにチームメイトを選択
-                    const targetIndex = random.nextInt(0, teammates.length - 1);
-                    const targetPokemon = teammates[targetIndex];
+                    const targetIndex = random.nextInt(0, targetableTeammates.length - 1);
+                    const targetPokemon = targetableTeammates[targetIndex];
                     const clampedLevel = Math.min(Math.max(skillLevel, 1), MOONLIGHT_TEAMMATE_VALUES.length);
                     const teammateRecovery = MOONLIGHT_TEAMMATE_VALUES[clampedLevel - 1] ?? 0;
-                    if (targetPokemon) {
+                    if (!suppressEnergyDelta && targetPokemon) {
                         addNumberToMap(moonlightTargets, targetPokemon.id, teammateRecovery);
                     }
                 }
@@ -633,11 +658,16 @@ export function processSkillTriggers(
             const epPerTrigger = getSkillValue(skillName, skillLevel);
             totalDirectEP = epPerTrigger * skillTriggerCount;
 
-            const activeTeam = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
-            const nonDarkCount = activeTeam.filter(member => member.iv.pokemon.type !== 'dark').length;
-            badDreamsDamagePerTarget = BAD_DREAMS_DAMAGE_PER_HIT * skillTriggerCount;
-            badDreamsHitCount = nonDarkCount * skillTriggerCount;
-            badDreamsTotalDamage = badDreamsHitCount * BAD_DREAMS_DAMAGE_PER_HIT;
+            const nonDarkCount = targetableTeamMembers.filter(member => member.iv.pokemon.type !== 'dark').length;
+            if (suppressEnergyDelta) {
+                badDreamsDamagePerTarget = 0;
+                badDreamsHitCount = 0;
+                badDreamsTotalDamage = 0;
+            } else {
+                badDreamsDamagePerTarget = BAD_DREAMS_DAMAGE_PER_HIT * skillTriggerCount;
+                badDreamsHitCount = nonDarkCount * skillTriggerCount;
+                badDreamsTotalDamage = badDreamsHitCount * BAD_DREAMS_DAMAGE_PER_HIT;
+            }
         } else if (skillName === 'Charge Strength S (Random)') {
             // ランダム範囲EP
             const [minEP, maxEP] = getSkillRandomRange(skillName, skillLevel);
@@ -646,7 +676,7 @@ export function processSkillTriggers(
                 totalDirectEP += ep;
             }
         } else if (skillName === 'Berry Burst' || skillName === 'Berry Burst (Disguise)') {
-            const activeTeam = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
+            const activeTeam = activeTeamMembers;
             const berryBurstMultiplier = pokemonBonus?.berryBurstMultiplier ?? 1;
             const selfBerryCount = Math.ceil(getSkillValue(skillName, skillLevel) * berryBurstMultiplier);
             const otherBerryCount = Math.ceil(getSkillSubValue(skillName, skillLevel) * berryBurstMultiplier);
@@ -681,13 +711,11 @@ export function processSkillTriggers(
     } else if (category === 'teamEnergy') {
         // Energy for Everyone S系: チーム全員回復（発動者含む）
         const recoveryPerTrigger = getSkillValue(skillName, skillLevel);
-        totalTeamRecovery = recoveryPerTrigger * skillTriggerCount;
+        totalTeamRecovery = suppressEnergyDelta ? 0 : recoveryPerTrigger * skillTriggerCount;
 
-        const activeTeam = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
-
-        if (skillName === 'Energy for Everyone S (Lunar Blessing)' && activeTeam.length > 0) {
+        if (skillName === 'Energy for Everyone S (Lunar Blessing)' && activeTeamMembers.length > 0) {
             const psychicSpeciesCount = new Set(
-                activeTeam
+                activeTeamMembers
                     .filter(member => member.iv.pokemon.type === 'psychic')
                     .map(member => member.iv.pokemonName)
             ).size;
@@ -699,7 +727,7 @@ export function processSkillTriggers(
                     clampedSpeciesCount
                 );
                 totalDirectEP += calculateDistributedBerryEp(
-                    activeTeam,
+                    activeTeamMembers,
                     pokemon.id,
                     myBerryCount,
                     othersBerryCount,
@@ -720,22 +748,25 @@ export function processSkillTriggers(
     } else if (category === 'targetEnergy') {
         // Energizing Cheer S / Nuzzle: チーム内のランダム1体を回復
         const recoveryPerTrigger = getSkillValue(skillName, skillLevel);
-        const activeTeam = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
+        const activeTeam = targetableTeamMembers;
         if (activeTeam.length > 0) {
             for (let i = 0; i < skillTriggerCount; i++) {
                 const targetIndex = random.nextInt(0, activeTeam.length - 1);
                 const target = activeTeam[targetIndex];
                 if (!target) continue;
-                addNumberToMap(energizingCheerTargets, target.id, recoveryPerTrigger);
+                if (!suppressEnergyDelta) {
+                    addNumberToMap(energizingCheerTargets, target.id, recoveryPerTrigger);
+                }
                 energizingCheerEvents.push({
                     targetPokemonId: target.id,
-                    recovery: recoveryPerTrigger,
+                    recovery: suppressEnergyDelta ? 0 : recoveryPerTrigger,
                     source: skillName === 'Energizing Cheer S (Nuzzle)' ? 'nuzzle' : 'cheer',
                 });
 
                 if (
                     skillName === 'Energizing Cheer S (Nuzzle)' &&
-                    activeNuzzleChainState.remaining > 0
+                    activeNuzzleChainState.remaining > 0 &&
+                    (!activeTeamMemberIds || activeTeamMemberIds.has(target.id))
                 ) {
                     const targetSkillTriggerBonus = bonusContext?.byPokemonId.get(target.id)?.skillTriggerBonus ?? 1;
                     const targetSkillRate = Math.min(1, target.iv.skillRate * targetSkillTriggerBonus);
@@ -753,15 +784,16 @@ export function processSkillTriggers(
                             1,
                             currentEnergy,
                             random,
-                            activeTeam.filter(member => member.id !== target.id),
+                            targetableTeamMembers.filter(member => member.id !== target.id),
                             0,
-                            activeTeam,
+                            targetableTeamMembers,
                             activeNuzzleChainState,
                             berryBurstDisguiseLockedState,
                             undefined,
                             undefined,
                             false,
-                            bonusContext
+                            bonusContext,
+                            analysisContext
                         );
 
                         totalDirectEP += nestedResult.directEP;
@@ -816,16 +848,22 @@ export function processSkillTriggers(
             }
         }
     } else if (category === 'helpSupport') {
-        const activeTeam = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
-        if (activeTeam.length > 0) {
+        const targetableTeam = targetableTeamMembers;
+        if (targetableTeam.length > 0) {
             for (let i = 0; i < skillTriggerCount; i++) {
                 if (skillName === 'Extra Helpful S') {
-                    const targetIndex = random.nextInt(0, activeTeam.length - 1);
-                    const target = activeTeam[targetIndex];
+                    const targetIndex = random.nextInt(0, targetableTeam.length - 1);
+                    const target = targetableTeam[targetIndex];
                     if (!target) continue;
 
                     const helpCount = getSkillValue('Extra Helpful S', skillLevel);
-                    const supportResult = simulateSupportHelps(target, helpCount, random, bonusContext);
+                    const supportResult = simulateSupportHelps(
+                        target,
+                        helpCount,
+                        random,
+                        bonusContext,
+                        activeTeamMemberIds
+                    );
                     totalSupportBerryCount += supportResult.berryCount;
                     totalSupportBerryEP += supportResult.berryEP;
                     totalDirectEP += supportResult.berryEP;
@@ -844,15 +882,21 @@ export function processSkillTriggers(
                 }
 
                 const sameTypeSpeciesCount = new Set(
-                    activeTeam
+                    activeTeamMembers
                         .filter(member => member.iv.pokemon.type === pokemon.iv.pokemon.type)
                         .map(member => member.iv.pokemonName)
                 ).size;
                 const clampedSpeciesCount = Math.min(Math.max(sameTypeSpeciesCount, 1), 5);
                 const helpCount = getSkillValue('Helper Boost', skillLevel, clampedSpeciesCount);
 
-                for (const target of activeTeam) {
-                    const supportResult = simulateSupportHelps(target, helpCount, random, bonusContext);
+                for (const target of targetableTeam) {
+                    const supportResult = simulateSupportHelps(
+                        target,
+                        helpCount,
+                        random,
+                        bonusContext,
+                        activeTeamMemberIds
+                    );
                     totalSupportBerryCount += supportResult.berryCount;
                     totalSupportBerryEP += supportResult.berryEP;
                     totalDirectEP += supportResult.berryEP;
@@ -880,7 +924,7 @@ export function processSkillTriggers(
         const remainderCount = totalCountPerTrigger % INGREDIENT_MAGNET_PICK_COUNT;
         const shouldApplyPlusBonus =
             skillName === 'Ingredient Magnet S (Plus)' &&
-            teammates.some(teammate => PLUS_TRIGGER_SKILLS.has(teammate.iv.pokemon.skill as MainSkillName));
+            activeTeammates.some(teammate => PLUS_TRIGGER_SKILLS.has(teammate.iv.pokemon.skill as MainSkillName));
 
         let plusBonusCount = 0;
         if (shouldApplyPlusBonus) {
@@ -981,23 +1025,25 @@ export function processSkillTriggers(
             totalCookingPotCapacityIncrease = potIncreasePerTrigger * skillTriggerCount;
 
             if (skillName === 'Cooking Power-Up S (Minus)') {
-                const activeTeam = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
-                const hasOtherPlusMinus = activeTeam.some(
+                const targetableTeam = targetableTeamMembers;
+                const hasOtherPlusMinus = activeTeamMembers.some(
                     member =>
                         member.id !== pokemon.id &&
                         PLUS_TRIGGER_SKILLS.has(member.iv.pokemon.skill as MainSkillName)
                 );
                 const recoveryPerTrigger = getSkillSubValue('Cooking Power-Up S (Minus)', skillLevel);
 
-                if (hasOtherPlusMinus && recoveryPerTrigger > 0 && activeTeam.length > 0) {
+                if (hasOtherPlusMinus && recoveryPerTrigger > 0 && targetableTeam.length > 0) {
                     for (let i = 0; i < skillTriggerCount; i++) {
-                        const targetIndex = random.nextInt(0, activeTeam.length - 1);
-                        const target = activeTeam[targetIndex];
+                        const targetIndex = random.nextInt(0, targetableTeam.length - 1);
+                        const target = targetableTeam[targetIndex];
                         if (!target) continue;
-                        addNumberToMap(cookingMinusTargets, target.id, recoveryPerTrigger);
+                        if (!suppressEnergyDelta) {
+                            addNumberToMap(cookingMinusTargets, target.id, recoveryPerTrigger);
+                        }
                         cookingMinusEvents.push({
                             targetPokemonId: target.id,
-                            recovery: recoveryPerTrigger,
+                            recovery: suppressEnergyDelta ? 0 : recoveryPerTrigger,
                         });
                     }
                 }
@@ -1017,7 +1063,7 @@ export function processSkillTriggers(
             totalDreamShardCount = shardPerTrigger * skillTriggerCount;
         }
     } else if (category === 'proxySkill') {
-        const activeTeam = teamMembers.length > 0 ? teamMembers : [pokemon, ...teammates];
+        const activeTeam = activeTeamMembers;
         const copyCandidates = activeTeam.filter(member => member.id !== pokemon.id);
 
         for (let i = 0; i < skillTriggerCount; i++) {
@@ -1059,7 +1105,7 @@ export function processSkillTriggers(
                 1,
                 energy,
                 random,
-                teammates,
+                targetableTeammates,
                 stockpileCount,
                 activeTeam,
                 activeNuzzleChainState,
@@ -1067,7 +1113,8 @@ export function processSkillTriggers(
                 resolvedSkillName,
                 resolvedSkillLevel,
                 source === 'metronome' && resolvedSkillName === 'Charge Strength S (Stockpile)',
-                bonusContext
+                bonusContext,
+                analysisContext
             );
 
             proxySkillEvents.push({

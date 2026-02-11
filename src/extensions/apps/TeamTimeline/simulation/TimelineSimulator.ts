@@ -40,6 +40,14 @@ import {
 import { TimelineBonusSettings } from '../types/TimelineBonusSettingsTypes';
 import { buildStrengthParameterFromTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
 
+export interface SimulationAnalysisOptions {
+    disabledPokemonIds?: readonly number[];
+    keepDisabledPokemonTargetable?: boolean;
+    suppressEnergyDeltaSkillPokemonIds?: readonly number[];
+    disableEnergyRecoveryBonus?: boolean;
+    disableHelpingBonus?: boolean;
+}
+
 /** シミュレーション入力 */
 export interface SimulationInput {
     /** チーム（5スロット、nullは空きスロット） */
@@ -54,6 +62,8 @@ export interface SimulationInput {
     swaps?: PokemonSwap[];
     /** ボックス（入れ替え時のポケモン取得用、オプショナル） */
     box?: PokemonBox;
+    /** 追加分析用オプション */
+    analysisOptions?: SimulationAnalysisOptions;
 }
 
 /** ポケモンの状態（シミュレーション中の内部管理用） */
@@ -102,8 +112,18 @@ export function getTeamHelpingBonusCount(team: PokemonBoxItem[]): number {
 /**
  * チーム内のEnergy Recovery Bonus保持ポケモン数をカウント
  */
-export function getTeamEnergyRecoveryBonusCount(team: PokemonBoxItem[]): number {
+export function getTeamEnergyRecoveryBonusCount(
+    team: PokemonBoxItem[],
+    options?: {
+        disabledPokemonIds?: ReadonlySet<number>;
+        disableEnergyRecoveryBonus?: boolean;
+    }
+): number {
+    if (options?.disableEnergyRecoveryBonus) {
+        return 0;
+    }
     return team.filter(pokemon =>
+        !(options?.disabledPokemonIds?.has(pokemon.id) ?? false) &&
         pokemon.iv.activeSubSkills.some(s => s.name === 'Energy Recovery Bonus')
     ).length;
 }
@@ -111,7 +131,19 @@ export function getTeamEnergyRecoveryBonusCount(team: PokemonBoxItem[]): number 
 /**
  * ポケモンがEnergy Recovery Bonusを持っているか判定
  */
-function hasEnergyRecoveryBonus(pokemon: PokemonBoxItem): boolean {
+function hasEnergyRecoveryBonus(
+    pokemon: PokemonBoxItem,
+    options?: {
+        disabledPokemonIds?: ReadonlySet<number>;
+        disableEnergyRecoveryBonus?: boolean;
+    }
+): boolean {
+    if (options?.disableEnergyRecoveryBonus) {
+        return false;
+    }
+    if (options?.disabledPokemonIds?.has(pokemon.id)) {
+        return false;
+    }
     return pokemon.iv.activeSubSkills.some(s => s.name === 'Energy Recovery Bonus');
 }
 
@@ -176,12 +208,22 @@ function buildPokemonBonusContext(
  * シミュレーションを実行
  */
 export function runSimulation(input: SimulationInput): SimulationResult {
-    const { team, timeSlots, config, bonusSettings, swaps = [], box } = input;
+    const { team, timeSlots, config, bonusSettings, swaps = [], box, analysisOptions } = input;
+    const disabledPokemonIds = new Set<number>(analysisOptions?.disabledPokemonIds ?? []);
+    const keepDisabledPokemonTargetable = analysisOptions?.keepDisabledPokemonTargetable !== false;
+    const suppressEnergyDeltaSkillPokemonIds = new Set<number>(
+        analysisOptions?.suppressEnergyDeltaSkillPokemonIds ?? []
+    );
+    const energyRecoveryOptions = {
+        disabledPokemonIds,
+        disableEnergyRecoveryBonus: analysisOptions?.disableEnergyRecoveryBonus === true,
+    };
 
     // 1. 有効なポケモンのみ抽出
     const validTeam: PokemonBoxItem[] = team.filter((p): p is PokemonBoxItem => p !== null);
+    const activeTeamAtStart = validTeam.filter(pokemon => !disabledPokemonIds.has(pokemon.id));
 
-    if (validTeam.length === 0 || timeSlots.length === 0) {
+    if (activeTeamAtStart.length === 0 || timeSlots.length === 0) {
         return {
             slotResults: new Map(),
             dailySummaries: [],
@@ -286,10 +328,19 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             : MEAL_LABELS.includes(getDisplayLabel(slot));
 
         // 8.2. 現在のチームからHelping Bonus保持数をカウント
-        const currentValidTeam: PokemonBoxItem[] = currentTeam.filter((p): p is PokemonBoxItem => p !== null);
-        const teamHelpingBonusCount = getTeamHelpingBonusCount(currentValidTeam);
+        const currentTargetableTeamBase: PokemonBoxItem[] = currentTeam.filter((p): p is PokemonBoxItem => p !== null);
+        const currentTargetableTeam = keepDisabledPokemonTargetable
+            ? currentTargetableTeamBase
+            : currentTargetableTeamBase.filter(pokemon => !disabledPokemonIds.has(pokemon.id));
+        const currentActiveTeam = currentTargetableTeam.filter(
+            pokemon => !disabledPokemonIds.has(pokemon.id)
+        );
+        const activeTeamMemberIds = new Set<number>(currentActiveTeam.map(pokemon => pokemon.id));
+        const teamHelpingBonusCount = analysisOptions?.disableHelpingBonus
+            ? 0
+            : getTeamHelpingBonusCount(currentActiveTeam);
         const teamSkillBonusByPokemonId = new Map<number, PokemonSkillBonusContext>();
-        currentValidTeam.forEach(pokemon => {
+        currentTargetableTeam.forEach(pokemon => {
             teamSkillBonusByPokemonId.set(
                 pokemon.id,
                 getPokemonBonusContext(pokemon).skill
@@ -302,7 +353,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 
         // 睡眠開始を追跡
         if (getDisplayLabel(slot) === 'sleep') {
-            for (const pokemon of currentValidTeam) {
+            for (const pokemon of currentActiveTeam) {
                 const state = pokemonStates.get(pokemon.id);
                 if (state) {
                     state.sleepStartTime = slot.time;
@@ -315,7 +366,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         const helpOutputs: { state: PokemonState; helpOutput: ReturnType<typeof calculateHelp> }[] = [];
 
         // 現在のチームに存在するポケモンのみ処理
-        for (const pokemon of currentValidTeam) {
+        for (const pokemon of currentActiveTeam) {
             const state = pokemonStates.get(pokemon.id);
             if (!state) continue;
 
@@ -362,8 +413,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             // Step 2: 起床回復（減少後のげんきに適用）
             if (getDisplayLabel(slot) === 'wake' && state.sleepStartTime) {
                 const sleepMinutes = calculateDuration(state.sleepStartTime, slot.time);
-                selfHasErb = hasEnergyRecoveryBonus(state.pokemon);
-                const teamErbCount = getTeamEnergyRecoveryBonusCount(currentValidTeam);
+                selfHasErb = hasEnergyRecoveryBonus(state.pokemon, energyRecoveryOptions);
+                const teamErbCount = getTeamEnergyRecoveryBonusCount(currentActiveTeam, energyRecoveryOptions);
                 const otherErbCount = selfHasErb ? teamErbCount - 1 : teamErbCount;
 
                 const wakeInput: WakeRecoveryInput = {
@@ -418,7 +469,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         const cookingMinusReceivedMap = new Map<number, number>(); // pokemonId -> total cooking minus recovery
         const badDreamsReceivedMap = new Map<number, number>(); // pokemonId -> total bad dreams damage
         const pokemonNameMap = new Map<number, string>(
-            currentValidTeam.map(member => [
+            currentTargetableTeam.map(member => [
                 member.id,
                 member.nickname || i18next.t(`pokemons.${member.iv.pokemonName}`)
             ])
@@ -429,7 +480,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             const wakeAndMealData = wakeAndMealRecoveryMap.get(state.pokemon.id)!;
 
             // テームメイト配列を構築（自分を除く）
-            const teammates: PokemonBoxItem[] = currentValidTeam.filter((_, i) => i !== idx);
+            const teammates: PokemonBoxItem[] = currentTargetableTeam.filter(
+                member => member.id !== state.pokemon.id
+            );
 
             // 時間減少→起床→食事回復後のげんきでスキル処理
             const skillResult = processSkillTriggers(
@@ -439,13 +492,19 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 state.random,
                 teammates,
                 state.stockpileCount,
-                currentValidTeam,
+                currentTargetableTeam,
                 undefined,
                 state.berryBurstDisguiseLocked,
                 undefined,
                 undefined,
                 false,
                 teamSkillBonusContext,
+                {
+                    activeTeamMemberIds,
+                    targetableTeamMembers: currentTargetableTeam,
+                    disabledPokemonIds,
+                    suppressEnergyDelta: suppressEnergyDeltaSkillPokemonIds.has(state.pokemon.id),
+                },
             );
 
             skillResults.set(state.pokemon.id, skillResult);
@@ -470,7 +529,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             });
 
             if (skillResult.badDreamsDamagePerTarget > 0) {
-                for (const targetPokemon of currentValidTeam) {
+                for (const targetPokemon of currentTargetableTeam) {
                     if (targetPokemon.iv.pokemon.type === 'dark') {
                         continue;
                     }
@@ -625,7 +684,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 berryBurstGreatSuccessCount: skillResult.berryBurstGreatSuccessCount,
                 teamEnergyRecoveryGivenPerMember: skillResult.teamEnergyRecoveryPerMember,
                 teamEnergyRecoveryGivenTargetCount: skillResult.teamEnergyRecoveryPerMember > 0
-                    ? currentValidTeam.length
+                    ? currentTargetableTeam.length
                     : 0,
                 stockpileStoreCount: skillResult.stockpileStoreCount,
                 stockpileCountAtStore: skillResult.stockpileCountAtStore,

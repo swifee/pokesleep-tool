@@ -257,6 +257,8 @@
         "seed fixed": "种子值",
             "trial count prefix": "{{count}}次中，显示第",
             "trial count suffix": "位结果",
+            "show distribution": "显示分布",
+            "hide distribution": "关闭分布",
             "individual results": "个别成绩",
             "individual results stacked": "个别\n成绩",
             "team average": "团队平均",

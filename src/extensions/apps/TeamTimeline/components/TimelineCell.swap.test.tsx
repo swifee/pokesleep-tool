@@ -45,4 +45,77 @@ describe('TimelineCell swap ui', () => {
         expect(container.querySelector('.swap-trigger')).not.toBeNull();
         expect(container.querySelector('.swap-info')).toBeNull();
     });
+
+    it('renders empty content without placeholder dash in compact empty mode', () => {
+        const { container } = render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                compactEmpty
+                onSwapClick={vi.fn()}
+            />
+        );
+
+        expect(container.textContent?.includes('-')).toBe(false);
+    });
+
+    it('keeps swap button always visible when alwaysShowSwapButton is enabled', () => {
+        const { container } = render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                alwaysShowSwapButton
+                onSwapClick={vi.fn()}
+            />
+        );
+
+        const trigger = container.querySelector('.swap-trigger') as HTMLElement | null;
+        expect(trigger).not.toBeNull();
+        expect(trigger?.getAttribute('data-always-visible')).toBe('true');
+    });
+
+    it('shows swap info box even in compact empty mode', () => {
+        const onSwapClick = vi.fn();
+        const { container } = render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                hasSwap
+                swappedPokemonName="ピカチュウ"
+                compactEmpty
+                alwaysShowSwapButton
+                onSwapClick={onSwapClick}
+            />
+        );
+
+        expect(container.querySelector('.swap-info')).not.toBeNull();
+        fireEvent.click(screen.getByText('ピカチュウ'));
+        expect(onSwapClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides all swap UI and keeps compact layout when swap UI is disabled', () => {
+        const { container } = render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                compactFirstSlot
+                disableSwapUi
+                onSwapClick={vi.fn()}
+                hasSwap
+                swappedPokemonName="フシギダネ"
+            />
+        );
+
+        expect(container.querySelector('.swap-trigger')).toBeNull();
+        expect(container.querySelector('.swap-info')).toBeNull();
+        expect(container.querySelector('[data-compact-layout="true"]')).not.toBeNull();
+    });
 });
