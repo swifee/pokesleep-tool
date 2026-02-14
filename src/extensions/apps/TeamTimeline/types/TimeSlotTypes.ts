@@ -323,6 +323,8 @@ export interface DailySummary {
     totalBerryCount: number;
     /** 合計食材（種類別） */
     totalIngredients: IngredientResult[];
+    /** スキル由来の合計食材（種類別） */
+    totalSkillIngredients?: IngredientResult[];
 
     // EP（エナジーポイント）
     /** きのみEP */

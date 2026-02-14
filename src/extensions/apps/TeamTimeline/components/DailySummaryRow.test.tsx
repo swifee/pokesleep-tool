@@ -33,6 +33,7 @@ function createDailySummary(pokemonId: number, baseValue: number): DailySummary 
         totalSkillCount: baseValue,
         totalBerryCount: baseValue,
         totalIngredients: [],
+        totalSkillIngredients: [],
         berryEP: baseValue * 10,
         ingredientEP: baseValue * 20,
         skillEP: baseValue * 30,
@@ -237,6 +238,29 @@ describe('DailySummaryRow', () => {
         expect(text).toContain('3,003EP');
         expect(text).toContain('🔍2.5');
         expect(text).toContain('食材合計: 5');
+    });
+
+    it('opens skill ingredient popover by clicking the skill count number', () => {
+        const items = [createPokemon('Pikachu', 20, 'SkillIngMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+        summary.totalSkillIngredients = [
+            { name: 'apple', count: 3 },
+            { name: 'milk', count: 1 },
+        ];
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+            />
+        );
+
+        fireEvent.click(screen.getByTestId(`skill-ingredient-trigger-${items[0].id}`));
+
+        expect(screen.getByText('apple')).toBeDefined();
+        expect(screen.getByText('milk')).toBeDefined();
     });
 
     it('shows timeline duration share when swap is configured', () => {

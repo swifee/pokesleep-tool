@@ -693,6 +693,64 @@ describe('EnergyPointCalculator', () => {
             expect(summary.totalEP).toBe(summary.berryEP + summary.ingredientEP);
         });
 
+        it('Ingredient Magnet系はスキル食材を別集計しつつ食材合計へは合算する', () => {
+            const skillPokemonData = pokemons.find(p => p.skill === 'Ingredient Magnet S');
+            expect(skillPokemonData).toBeDefined();
+            const iv = new PokemonIv({ pokemonName: skillPokemonData!.name, skillLevel: 6 });
+            const pokemon = new PokemonBoxItem(iv);
+
+            const results: TimeSlotResult[] = [
+                {
+                    slotId: 'slot-ingredient-magnet-1',
+                    pokemonId: pokemon.id,
+                    teamIndex: 0,
+                    durationMinutes: 60,
+                    isSleeping: false,
+                    helpCount: 3,
+                    skillTriggerCount: 2,
+                    berryCount: 4,
+                    ingredients: [{ name: 'apple', count: 2 }],
+                    skillIngredients: [{ name: 'milk', count: 3 }],
+                    energyStart: 70,
+                    energyEnd: 66,
+                    mealRecovery: 0,
+                    skillRecovery: 0,
+                    wakeRecovery: 0,
+                    energyDecay: 4,
+                    skillOverflowCount: 0,
+                    overflowIngredients: [],
+                    selfSkillRecovery: 0,
+                    directSkillEP: 0,
+                    moonlightGivenRecovery: 0,
+                    moonlightReceivedRecovery: 0,
+                    energizingCheerGivenRecovery: 0,
+                    energizingCheerReceivedRecovery: 0,
+                    energizingCheerEvents: [],
+                    nuzzleTriggeredSkillEvents: [],
+                    presentCandyCount: 0,
+                    berryJuiceCount: 0,
+                    supportSkillBerryCount: 0,
+                    supportSkillBerryEP: 0,
+                    supportHelpEvents: [],
+                    dreamShardCount: 0,
+                    stockpileStoreCount: 0,
+                    stockpileSpitCount: 0,
+                    badDreamsHitCount: 0,
+                    badDreamsTotalDamageGiven: 0,
+                    badDreamsDamageTaken: 0,
+                },
+            ];
+
+            const summary = calculateDailySummary(pokemon.id, pokemon, results);
+            expect(summary.skillEP).toBe(0);
+            expect(summary.totalSkillIngredients).toEqual([{ name: 'milk', count: 3 }]);
+            expect(summary.totalIngredients).toEqual([
+                { name: 'apple', count: 2 },
+                { name: 'milk', count: 3 },
+            ]);
+            expect(summary.ingredientEP).toBe(90 * 2 + 98 * 3);
+        });
+
         it('Berry BurstはdirectSkillEPをskillEPとして集計する', () => {
             const berryBurstPokemonData = pokemons.find(p => p.skill === 'Berry Burst');
             expect(berryBurstPokemonData).toBeDefined();
