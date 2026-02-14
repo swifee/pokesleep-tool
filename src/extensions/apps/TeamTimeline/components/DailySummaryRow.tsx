@@ -1,8 +1,9 @@
 import React from 'react';
 import { styled } from '@mui/system';
+import { Popover } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
-import { DailySummary } from '../types/TimeSlotTypes';
+import { DailySummary, IngredientResult } from '../types/TimeSlotTypes';
 import PokemonBox from '../../../../util/PokemonBox';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
 import IngredientOthersPopover from './IngredientOthersPopover';
@@ -38,6 +39,72 @@ interface DailySummaryRowProps {
 const SUMMARY_CARD_WIDTH = 96;
 const SUMMARY_COLUMN_GAP = 4;
 const SUMMARY_GRID_MAX_WIDTH = SUMMARY_CARD_WIDTH * 5 + SUMMARY_COLUMN_GAP * 4;
+
+interface SkillIngredientPopoverTriggerProps {
+    countLabel: string;
+    ingredients: IngredientResult[];
+    triggerTestId?: string;
+}
+
+const SkillIngredientPopoverTrigger = React.memo(({
+    countLabel,
+    ingredients,
+    triggerTestId,
+}: SkillIngredientPopoverTriggerProps) => {
+    const [anchorElement, setAnchorElement] = React.useState<HTMLButtonElement | null>(null);
+    const sortedIngredients = React.useMemo(
+        () => sortIngredientsByCountDesc(ingredients.filter(ingredient => ingredient.count > 0)),
+        [ingredients]
+    );
+
+    if (sortedIngredients.length === 0) {
+        return <span>{countLabel}</span>;
+    }
+
+    const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
+        setAnchorElement(event.currentTarget);
+    };
+
+    const handleClose = () => {
+        setAnchorElement(null);
+    };
+
+    return (
+        <>
+            <SkillIngredientTriggerButton type="button" onClick={handleOpen} data-testid={triggerTestId}>
+                {countLabel}
+            </SkillIngredientTriggerButton>
+            <Popover
+                open={anchorElement !== null}
+                anchorEl={anchorElement}
+                onClose={handleClose}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                slotProps={{
+                    paper: {
+                        sx: {
+                            mt: '2px',
+                            p: '6px 8px',
+                            borderRadius: '8px',
+                            border: '1px solid #d6d6d6',
+                            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.14)',
+                            minWidth: '120px',
+                        },
+                    },
+                }}
+            >
+                <SkillIngredientPopoverBody>
+                    {sortedIngredients.map((ingredient) => (
+                        <SkillIngredientPopoverItem key={ingredient.name}>
+                            <IngredientIcon name={ingredient.name} />
+                            <span>{formatIngredientCount(ingredient.count)}</span>
+                        </SkillIngredientPopoverItem>
+                    ))}
+                </SkillIngredientPopoverBody>
+            </Popover>
+        </>
+    );
+});
 
 function formatTimelineDurationMetric(value: number): string {
     const rounded = Math.round(value * 10) / 10;
@@ -110,6 +177,11 @@ const DailySummaryRow = React.memo(({
                             .filter(i => i.count > 0)
                             .map(i => ({ ...i, count: convertByMode(i.count) }))
                     );
+                    const sortedSkillIngredients = sortIngredientsByCountDesc(
+                        (summary.totalSkillIngredients ?? [])
+                            .filter(i => i.count > 0)
+                            .map(i => ({ ...i, count: convertByMode(i.count) }))
+                    );
                     const groupedAverageIngredients = groupLowDailyIngredientsForAverage(sortedIngredients, convertedDayDivisor);
                     const displayIngredients = layoutMode === 'average'
                         ? groupedAverageIngredients.visibleIngredients
@@ -173,7 +245,12 @@ const DailySummaryRow = React.memo(({
 
                             <Line>🔍{formatSummaryNumber(totalHelpCount)}</Line>
                             <Line>
-                                ❗{formatSummaryNumber(totalSkillCount)}
+                                ❗
+                                <SkillIngredientPopoverTrigger
+                                    countLabel={formatSummaryNumber(totalSkillCount)}
+                                    ingredients={sortedSkillIngredients}
+                                    triggerTestId={`skill-ingredient-trigger-${summary.pokemonId}`}
+                                />
                                 {totalSkillOverflowCount > 0 && (
                                     <SkillOverflowIcon>❕{formatSummaryNumber(totalSkillOverflowCount)}</SkillOverflowIcon>
                                 )}
@@ -353,6 +430,37 @@ const SkillOverflowIcon = styled('span')({
     color: '#9e9e9e',
     fontWeight: 600,
     marginLeft: '2px',
+});
+
+const SkillIngredientTriggerButton = styled('button')({
+    border: 0,
+    background: 'transparent',
+    padding: 0,
+    margin: 0,
+    color: 'inherit',
+    font: 'inherit',
+    lineHeight: 'inherit',
+    textDecoration: 'underline',
+    cursor: 'pointer',
+});
+
+const SkillIngredientPopoverBody = styled('div')({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    fontSize: '11px',
+    lineHeight: '14px',
+    letterSpacing: '-0.44px',
+});
+
+const SkillIngredientPopoverItem = styled('div')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '2px',
+    '& svg': {
+        width: '14px',
+        height: '14px',
+    },
 });
 
 const IngredientLine = styled('div')({

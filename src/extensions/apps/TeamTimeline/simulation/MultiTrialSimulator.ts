@@ -59,6 +59,7 @@ type DailyAccumulator = {
     totalBerryCount: number;
     totalSkillOverflowCount: number;
     ingredientSums: Map<string, number>;
+    skillIngredientSums: Map<string, number>;
     overflowIngredientSums: Map<string, number>;
     berryEP: number;
     ingredientEP: number;
@@ -122,6 +123,7 @@ function accumulateDailySummary(state: AggregationState, dailySummary: DailySumm
             totalBerryCount: 0,
             totalSkillOverflowCount: 0,
             ingredientSums: new Map(),
+            skillIngredientSums: new Map(),
             overflowIngredientSums: new Map(),
             berryEP: 0,
             ingredientEP: 0,
@@ -150,6 +152,7 @@ function accumulateDailySummary(state: AggregationState, dailySummary: DailySumm
     acc.totalTastyChanceIncreasePercent += dailySummary.totalTastyChanceIncreasePercent;
     acc.totalDreamShardCount += dailySummary.totalDreamShardCount;
     accumulateIngredients(acc.ingredientSums, dailySummary.totalIngredients);
+    accumulateIngredients(acc.skillIngredientSums, dailySummary.totalSkillIngredients ?? []);
     accumulateIngredients(acc.overflowIngredientSums, dailySummary.totalOverflowIngredients);
 }
 
@@ -180,6 +183,10 @@ function finalizeAverages(state: AggregationState, trialCount: number): {
             totalBerryCount: Math.round((acc.totalBerryCount / n) * 10) / 10,
             totalSkillOverflowCount: Math.round((acc.totalSkillOverflowCount / n) * 10) / 10,
             totalIngredients: [...acc.ingredientSums.entries()].map(([name, count]) => ({
+                name: name as IngredientName,
+                count: Math.round((count / n) * 10) / 10,
+            })),
+            totalSkillIngredients: [...acc.skillIngredientSums.entries()].map(([name, count]) => ({
                 name: name as IngredientName,
                 count: Math.round((count / n) * 10) / 10,
             })),

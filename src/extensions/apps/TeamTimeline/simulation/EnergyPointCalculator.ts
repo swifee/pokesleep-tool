@@ -1,9 +1,7 @@
 import { IngredientResult, TimeSlotResult, DailySummary, TeamSummary } from '../types/TimeSlotTypes';
 import { PokemonBoxItem } from '../../../../util/PokemonBox';
 import { PokemonType, IngredientName } from '../../../../data/pokemons';
-import PokemonRp from '../../../../util/PokemonRp';
 import { recipeLevelBonus } from '../../../../util/PokemonStrength';
-import { isDirectEPSkill, isNonEPSkill, isProxySkill } from './SkillEffectProcessor';
 
 /**
  * きのみ強度マップ（タイプ別）
@@ -148,19 +146,6 @@ export function calculateIngredientEP(
 }
 
 /**
- * スキルEPを計算
- * PokemonRp クラスの skillValue getter を使用
- *
- * @param pokemon - ポケモンボックスアイテム
- * @param skillTriggerCount - スキル発動回数
- * @returns スキルEP
- */
-export function calculateSkillEP(pokemon: PokemonBoxItem, skillTriggerCount: number): number {
-    const rp = new PokemonRp(pokemon.iv);
-    return rp.skillValue * skillTriggerCount;
-}
-
-/**
  * 複数の時間帯結果から食材を集計
  * 同じ食材名をまとめて count を合計
  *
@@ -175,6 +160,29 @@ export function aggregateIngredients(results: TimeSlotResult[]): IngredientResul
             const current = ingredientMap.get(ing.name) || 0;
             ingredientMap.set(ing.name, current + ing.count);
         }
+        for (const ing of result.skillIngredients ?? []) {
+            const current = ingredientMap.get(ing.name) || 0;
+            ingredientMap.set(ing.name, current + ing.count);
+        }
+    }
+
+    return Array.from(ingredientMap.entries()).map(([name, count]) => ({
+        name: name as IngredientName,
+        count,
+    }));
+}
+
+/**
+ * 複数の時間帯結果からスキル食材を集計
+ * 同じ食材名をまとめて count を合計
+ *
+ * @param results - 時間帯結果の配列
+ * @returns 集計されたスキル食材の配列
+ */
+export function aggregateSkillIngredients(results: TimeSlotResult[]): IngredientResult[] {
+    const ingredientMap = new Map<string, number>();
+
+    for (const result of results) {
         for (const ing of result.skillIngredients ?? []) {
             const current = ingredientMap.get(ing.name) || 0;
             ingredientMap.set(ing.name, current + ing.count);
@@ -248,8 +256,9 @@ export function calculateDailySummary(
         totalDreamShardCount += result.dreamShardCount ?? 0;
     }
 
-    // 食材を集計
+    // 食材を集計（通常 + スキル）
     const totalIngredients = aggregateIngredients(results);
+    const totalSkillIngredients = aggregateSkillIngredients(results);
 
     // 溢れ食材を集計
     const totalOverflowIngredients = aggregateOverflowIngredients(results);
@@ -258,13 +267,8 @@ export function calculateDailySummary(
     const berryEP = calculateBerryEP(pokemon, totalBerryCount, bonusContext);
     const ingredientEP = calculateIngredientEP(totalIngredients, bonusContext);
 
-    // スキルEPの計算: 直接EP獲得スキルの場合は totalDirectSkillEP を使用
-    const skillName = pokemon.iv.pokemon.skill;
-    const skillEP = isNonEPSkill(skillName)
-        ? 0
-        : (isDirectEPSkill(skillName) || isProxySkill(skillName))
-            ? totalDirectSkillEP
-            : calculateSkillEP(pokemon, totalSkillCount);
+    // スキルEPの計算: 直接エナジー獲得値のみを集計
+    const skillEP = totalDirectSkillEP;
 
     const totalEP = berryEP + ingredientEP + skillEP;
 
@@ -274,6 +278,7 @@ export function calculateDailySummary(
         totalSkillCount,
         totalBerryCount,
         totalIngredients,
+        totalSkillIngredients,
         berryEP,
         ingredientEP,
         skillEP,
