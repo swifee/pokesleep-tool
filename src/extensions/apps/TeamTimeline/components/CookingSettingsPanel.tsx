@@ -6,6 +6,8 @@ import {
     TextField,
     Select,
     MenuItem,
+    Tabs,
+    Tab,
     Switch,
     FormControlLabel,
     Button,
@@ -14,56 +16,51 @@ import {
 import { CookingSimulationSettings, CookingCategory } from '../types/CookingTypes';
 import { getRecipesByCategory } from '../data/RecipeData';
 import { IngredientNames, IngredientName } from '../../../../data/pokemons';
+import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
 
 interface CookingSettingsPanelProps {
     settings: CookingSimulationSettings;
     onChange: (settings: CookingSimulationSettings) => void;
 }
 
-const MIN_POT_CAPACITY = 1;
-const MAX_POT_CAPACITY = 999;
+const MIN_POT_CAPACITY = 12;
+const MAX_POT_CAPACITY = 99;
+const POT_CAPACITY_STEP = 3;
 const MIN_RECIPE_LEVEL = 1;
 const MAX_RECIPE_LEVEL = 65;
 
-const INGREDIENT_LABELS: Partial<Record<IngredientName, string>> = {
-    leek: 'ふといながねぎ',
-    mushroom: 'あじわいキノコ',
-    egg: 'とくせんエッグ',
-    potato: 'ほっこりポテト',
-    apple: 'とくせんリンゴ',
-    herb: 'げきからハーブ',
-    sausage: 'マメミート',
-    milk: 'モーモーミルク',
-    honey: 'あまいミツ',
-    oil: 'ピュアなオイル',
-    ginger: 'あったかジンジャー',
-    tomato: 'うまみのもとトマト',
-    cacao: 'リラックスカカオ',
-    tail: 'おいしいシッポ',
-    soy: 'ワカクサ大豆',
-    corn: 'ワカクサコーン',
-    coffee: 'あったかコーヒー',
-    pumpkin: 'かぼちゃのみ',
-    avocado: 'アボカドのみ',
-};
+const POT_CAPACITY_OPTIONS = Array.from(
+    { length: ((MAX_POT_CAPACITY - MIN_POT_CAPACITY) / POT_CAPACITY_STEP) + 1 },
+    (_, index) => MIN_POT_CAPACITY + (index * POT_CAPACITY_STEP),
+);
+
+function normalizePotCapacity(value: number): number {
+    const clamped = Math.max(MIN_POT_CAPACITY, Math.min(MAX_POT_CAPACITY, Math.floor(value)));
+    return clamped - (clamped % POT_CAPACITY_STEP);
+}
+
+function formatRecipeIngredientSummary(recipe: ReturnType<typeof getRecipesByCategory>[number]): string {
+    const total = recipe.ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
+    return `食材${total}`;
+}
 
 const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettingsPanelProps) => {
     const { t } = useTranslation();
     const [batchLevel, setBatchLevel] = useState<number>(1);
+    const [recipeLevelDrafts, setRecipeLevelDrafts] = useState<Record<string, string>>({});
 
     const handleEnabledChange = useCallback((_: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
         onChange({ ...settings, enabled: checked });
     }, [settings, onChange]);
 
-    const handleCategoryChange = useCallback((event: { target: { value: unknown } }) => {
-        onChange({ ...settings, category: event.target.value as CookingCategory });
+    const handleCategoryChange = useCallback((_: React.SyntheticEvent, value: CookingCategory) => {
+        onChange({ ...settings, category: value });
     }, [settings, onChange]);
 
-    const handlePotCapacityChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-        const value = parseInt(event.target.value, 10);
+    const handlePotCapacityChange = useCallback((event: { target: { value: unknown } }) => {
+        const value = parseInt(String(event.target.value), 10);
         if (Number.isNaN(value)) return;
-        const clamped = Math.max(MIN_POT_CAPACITY, Math.min(MAX_POT_CAPACITY, value));
-        onChange({ ...settings, basePotCapacity: clamped });
+        onChange({ ...settings, basePotCapacity: normalizePotCapacity(value) });
     }, [settings, onChange]);
 
     const handleRecipeLevelChange = useCallback((recipeName: string, level: number) => {
@@ -73,6 +70,38 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
             recipeLevels: { ...settings.recipeLevels, [recipeName]: clamped },
         });
     }, [settings, onChange]);
+
+    const handleRecipeLevelInputChange = useCallback((recipeName: string, rawValue: string) => {
+        setRecipeLevelDrafts((prev) => ({ ...prev, [recipeName]: rawValue }));
+        if (rawValue.trim() === '') {
+            return;
+        }
+        const parsed = Number.parseInt(rawValue, 10);
+        if (Number.isNaN(parsed)) {
+            return;
+        }
+        handleRecipeLevelChange(recipeName, parsed);
+    }, [handleRecipeLevelChange]);
+
+    const handleRecipeLevelInputBlur = useCallback((recipeName: string) => {
+        setRecipeLevelDrafts((prev) => {
+            const rawValue = prev[recipeName];
+            if (rawValue == null) {
+                return prev;
+            }
+
+            if (rawValue.trim() !== '') {
+                const parsed = Number.parseInt(rawValue, 10);
+                if (!Number.isNaN(parsed)) {
+                    handleRecipeLevelChange(recipeName, parsed);
+                }
+            }
+
+            const rest = { ...prev };
+            delete rest[recipeName];
+            return rest;
+        });
+    }, [handleRecipeLevelChange]);
 
     const handleBatchSet = useCallback(() => {
         const recipes = getRecipesByCategory(settings.category);
@@ -92,6 +121,9 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
     }, [settings, onChange]);
 
     const recipes = getRecipesByCategory(settings.category);
+    const initialIngredientTotal = IngredientNames.reduce((sum, ingredientName) => {
+        return sum + (settings.initialIngredients[ingredientName] ?? 0);
+    }, 0);
 
     return (
         <Box
@@ -117,46 +149,55 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
 
             {settings.enabled && (
                 <Box sx={{ mt: 1 }}>
-                    {/* 2. Cooking category selector */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, fontSize: '0.9rem' }}>
-                        <label style={{ marginRight: 'auto' }}>
-                            {t('TeamTimeline.cooking category', '今週の料理')}:
-                        </label>
-                        <Select
-                            size="small"
-                            variant="standard"
-                            value={settings.category}
-                            onChange={handleCategoryChange}
-                            sx={{ minWidth: '11rem' }}
-                            data-testid="cooking-category-select"
-                        >
-                            <MenuItem value="curry">
-                                {t('TeamTimeline.cooking curry', 'カレー・シチュー')}
-                            </MenuItem>
-                            <MenuItem value="salad">
-                                {t('TeamTimeline.cooking salad', 'サラダ')}
-                            </MenuItem>
-                            <MenuItem value="dessert">
-                                {t('TeamTimeline.cooking dessert', 'デザート・ドリンク')}
-                            </MenuItem>
-                        </Select>
-                    </Box>
-
-                    {/* 3. Base pot capacity */}
+                    {/* 2. Base pot capacity */}
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, fontSize: '0.9rem' }}>
                         <label style={{ marginRight: 'auto' }}>
                             {t('TeamTimeline.cooking pot capacity', '鍋の基礎容量')}:
                         </label>
-                        <TextField
-                            type="number"
+                        <Select
                             size="small"
                             variant="standard"
                             value={settings.basePotCapacity}
                             onChange={handlePotCapacityChange}
-                            inputProps={{ min: MIN_POT_CAPACITY, max: MAX_POT_CAPACITY }}
-                            sx={{ width: '5rem' }}
-                            data-testid="cooking-pot-capacity"
-                        />
+                            sx={{ minWidth: '6rem' }}
+                            data-testid="cooking-pot-capacity-select"
+                        >
+                            {POT_CAPACITY_OPTIONS.map((capacity) => (
+                                <MenuItem key={capacity} value={capacity}>{capacity}</MenuItem>
+                            ))}
+                        </Select>
+                    </Box>
+
+                    {/* 3. Cooking category selector */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, fontSize: '0.9rem' }}>
+                        <label style={{ marginRight: '0.5rem' }}>
+                            {t('TeamTimeline.cooking category', '今週の料理')}:
+                        </label>
+                        <Tabs
+                            value={settings.category}
+                            onChange={handleCategoryChange}
+                            sx={{ minHeight: '32px' }}
+                            data-testid="cooking-category-tabs"
+                        >
+                            <Tab
+                                label={t('TeamTimeline.cooking curry', 'カレー・シチュー')}
+                                value="curry"
+                                sx={{ minHeight: '32px', minWidth: '64px', px: 1.5 }}
+                                data-testid="cooking-category-tab-curry"
+                            />
+                            <Tab
+                                label={t('TeamTimeline.cooking salad', 'サラダ')}
+                                value="salad"
+                                sx={{ minHeight: '32px', minWidth: '64px', px: 1.5 }}
+                                data-testid="cooking-category-tab-salad"
+                            />
+                            <Tab
+                                label={t('TeamTimeline.cooking dessert', 'デザート・ドリンク')}
+                                value="dessert"
+                                sx={{ minHeight: '32px', minWidth: '64px', px: 1.5 }}
+                                data-testid="cooking-category-tab-dessert"
+                            />
+                        </Tabs>
                     </Box>
 
                     <Divider sx={{ my: 1.5 }} />
@@ -205,22 +246,51 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                 }}
                                 data-testid={`recipe-row-${recipe.name}`}
                             >
-                                <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {t(`TeamTimeline.recipe ${recipe.name}`, recipe.name)}
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Box
+                                        sx={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            flexWrap: 'wrap',
+                                            gap: 0.5,
+                                        }}
+                                    >
+                                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '15rem' }}>
+                                            {t(`TeamTimeline.recipe ${recipe.name}`, recipe.name)}
+                                        </Box>
+                                        <Box
+                                            component="span"
+                                            sx={{ color: '#666', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 0.4 }}
+                                            data-testid={`recipe-ingredients-${recipe.name}`}
+                                        >
+                                            {formatRecipeIngredientSummary(recipe)}
+                                            <Box component="span">(</Box>
+                                            {recipe.ingredients.map((ingredient) => (
+                                                <Box
+                                                    key={`${recipe.name}-${ingredient.name}`}
+                                                    component="span"
+                                                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.2 }}
+                                                >
+                                                    <IngredientIcon name={ingredient.name} />
+                                                    {ingredient.count}
+                                                </Box>
+                                            ))}
+                                            <Box component="span">)</Box>
+                                        </Box>
+                                    </Box>
                                 </Box>
                                 <TextField
                                     type="number"
                                     size="small"
                                     variant="standard"
-                                    value={settings.recipeLevels[recipe.name] ?? 1}
+                                    value={recipeLevelDrafts[recipe.name] ?? String(settings.recipeLevels[recipe.name] ?? 1)}
                                     onChange={(e) => {
-                                        const v = parseInt(e.target.value, 10);
-                                        if (!Number.isNaN(v)) {
-                                            handleRecipeLevelChange(recipe.name, v);
-                                        }
+                                        handleRecipeLevelInputChange(recipe.name, e.target.value);
                                     }}
+                                    onBlur={() => handleRecipeLevelInputBlur(recipe.name)}
                                     inputProps={{ min: MIN_RECIPE_LEVEL, max: MAX_RECIPE_LEVEL }}
                                     sx={{ width: '4rem', ml: 1 }}
+                                    data-testid={`recipe-level-input-${recipe.name}`}
                                 />
                             </Box>
                         ))}
@@ -236,7 +306,7 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                     <Box
                         sx={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
                             gap: 0.5,
                         }}
                         data-testid="cooking-initial-ingredients"
@@ -250,8 +320,12 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                     fontSize: '0.85rem',
                                 }}
                             >
-                                <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {INGREDIENT_LABELS[ingredientName] ?? ingredientName}
+                                <Box
+                                    sx={{ display: 'inline-flex', alignItems: 'center' }}
+                                    data-testid={`ingredient-icon-${ingredientName}`}
+                                    title={ingredientName}
+                                >
+                                    <IngredientIcon name={ingredientName} />
                                 </Box>
                                 <TextField
                                     type="number"
@@ -271,6 +345,13 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                             </Box>
                         ))}
                     </Box>
+                    <Typography
+                        variant="caption"
+                        sx={{ mt: 1, display: 'block', color: '#666' }}
+                        data-testid="cooking-initial-ingredients-total"
+                    >
+                        入力値合計: {initialIngredientTotal.toLocaleString()}
+                    </Typography>
                 </Box>
             )}
         </Box>

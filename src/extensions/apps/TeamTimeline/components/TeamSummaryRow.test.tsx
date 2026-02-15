@@ -2,11 +2,16 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { TeamSummary } from '../types/TimeSlotTypes';
+import type { CookingSimulationResult } from '../types/CookingTypes';
 import TeamSummaryRow from './TeamSummaryRow';
 
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
-        t: (_key: string, defaultValue?: string) => defaultValue ?? _key,
+        t: (key: string, defaultValue?: string) => (
+            key.startsWith('TeamTimeline.recipe ')
+                ? `translated:${key}`
+                : (defaultValue ?? key)
+        ),
     }),
 }));
 
@@ -34,6 +39,40 @@ const TEAM_SUMMARY_WITH_INGREDIENTS: TeamSummary = {
         { name: 'honey', count: 1 },
         { name: 'mushroom', count: 6 },
     ],
+};
+
+const COOKING_RESULT: CookingSimulationResult = {
+    events: [],
+    dailySummaries: [
+        {
+            events: [
+                {
+                    mealSlotId: 'breakfast',
+                    mealType: 'breakfast',
+                    recipeName: 'specialAppleCurry',
+                    isGreatSuccess: false,
+                    cookingEP: 1000,
+                    eBase: 0,
+                    eDisplay: 0,
+                    eFinal: 0,
+                    ingredientsUsed: [],
+                    remainingPotCapacity: 0,
+                    effectivePotCapacity: 15,
+                    tastyChancePercent: 10,
+                    cookingPowerUpBonusUsed: 0,
+                },
+            ],
+            totalCookingEP: 1000,
+            greatSuccessCount: 0,
+        },
+    ],
+    pokemonAttributions: [],
+    leftoverIngredients: {
+        byPokemon: new Map(),
+        initialRemaining: {},
+        total: {},
+    },
+    totalCookingEP: 1000,
 };
 
 describe('TeamSummaryRow', () => {
@@ -137,5 +176,17 @@ describe('TeamSummaryRow', () => {
         expect(text).toContain('スキル : 334EP');
         expect(text).toContain('total 2,001EP');
         expect(text).toContain('食材合計: 3');
+    });
+
+    it('renders translated recipe names in cooking result', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={COOKING_RESULT}
+            />
+        );
+
+        expect(screen.getByText('translated:TeamTimeline.recipe specialAppleCurry')).toBeDefined();
     });
 });

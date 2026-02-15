@@ -10,6 +10,14 @@ export const STORAGE_KEY_COOKING_SETTINGS = 'PstTeamTimelineCookingSettings';
 const VALID_CATEGORIES: readonly CookingCategory[] = ['curry', 'salad', 'dessert'];
 const MIN_RECIPE_LEVEL = 1;
 const MAX_RECIPE_LEVEL = 65;
+const MIN_POT_CAPACITY = 12;
+const MAX_POT_CAPACITY = 99;
+const POT_CAPACITY_STEP = 3;
+
+function normalizePotCapacity(value: number): number {
+    const clamped = Math.max(MIN_POT_CAPACITY, Math.min(MAX_POT_CAPACITY, Math.floor(value)));
+    return clamped - (clamped % POT_CAPACITY_STEP);
+}
 
 /** 料理設定をlocalStorageに保存 */
 export function saveCookingSettingsToStorage(settings: CookingSimulationSettings): void {
@@ -60,12 +68,11 @@ function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
         }
     }
 
-    // Validate basePotCapacity is positive integer (default 15)
+    // Validate basePotCapacity is integer in 12-99 and divisible by 3 (default 15)
     const basePotCapacity =
         typeof obj.basePotCapacity === 'number' &&
-        Number.isFinite(obj.basePotCapacity) &&
-        obj.basePotCapacity > 0
-            ? Math.floor(obj.basePotCapacity)
+        Number.isFinite(obj.basePotCapacity)
+            ? normalizePotCapacity(obj.basePotCapacity)
             : defaults.basePotCapacity;
 
     // Validate initialIngredients is object with non-negative number values

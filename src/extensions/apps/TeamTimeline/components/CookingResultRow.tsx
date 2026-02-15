@@ -1,5 +1,6 @@
 import React from 'react';
 import { styled } from '@mui/system';
+import { useTranslation } from 'react-i18next';
 import { CookingEventResult } from '../types/CookingTypes';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
 import { formatIngredientCount, sortIngredientsByCountDesc } from '../utils/IngredientDisplayUtils';
@@ -10,9 +11,15 @@ interface CookingResultRowProps {
 }
 
 const CookingResultRow = React.memo(({ event, teamSize }: CookingResultRowProps) => {
+    const { t } = useTranslation();
+
     if (event.recipeName == null && event.cookingEP === 0) {
         return null; // Skip display if no recipe was cooked
     }
+
+    const localizedRecipeName = event.recipeName == null
+        ? null
+        : t(`TeamTimeline.recipe ${event.recipeName}`, event.recipeName);
 
     const usedIngredients = sortIngredientsByCountDesc(
         event.ingredientsUsed.map(u => ({ name: u.name, count: u.count }))
@@ -24,7 +31,7 @@ const CookingResultRow = React.memo(({ event, teamSize }: CookingResultRowProps)
             <ContentCell $teamSize={teamSize}>
                 <CookingInfo>
                     {event.isGreatSuccess && <GreatSuccessBadge>{'\u5927\u6210\u529F\u2757'}</GreatSuccessBadge>}
-                    <RecipeName>{event.recipeName}</RecipeName>
+                    <RecipeName>{localizedRecipeName}</RecipeName>
                     <CookingEP>{Math.round(event.cookingEP).toLocaleString()}EP</CookingEP>
                 </CookingInfo>
                 <IngredientInfo>

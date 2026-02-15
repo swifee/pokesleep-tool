@@ -156,7 +156,9 @@ const TeamSummaryRow = React.memo(({
                             <CookingEventLine key={`${dayIndex}-${eventIndex}`}>
                                 {event.isGreatSuccess && <GreatSuccessMark>&#x2757;</GreatSuccessMark>}
                                 <span className="recipe-name">
-                                    {event.recipeName ?? 'スキップ'}
+                                    {event.recipeName == null
+                                        ? 'スキップ'
+                                        : t(`TeamTimeline.recipe ${event.recipeName}`, event.recipeName)}
                                 </span>
                                 <span className="cooking-ep">
                                     {event.cookingEP > 0 ? `${Math.round(event.cookingEP).toLocaleString()}EP` : '-'}
