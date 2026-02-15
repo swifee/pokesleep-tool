@@ -44,7 +44,10 @@ import {
     runMultiTrialSimulationWithProgress,
 } from './simulation/MultiTrialSimulator';
 import TimelineBonusSettingsPanel from './components/TimelineBonusSettingsPanel';
+import CookingSettingsPanel from './components/CookingSettingsPanel';
 import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
+import { CookingSimulationSettings } from './types/CookingTypes';
+import { saveCookingSettingsToStorage, loadCookingSettingsFromStorage } from './utils/CookingSettingsStorage';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
 import SummaryValueModeToggle from './components/SummaryValueModeToggle';
 import ResimulationNoticeBar from './components/ResimulationNoticeBar';
@@ -376,6 +379,9 @@ export default function TeamTimelineApp() {
             });
         }
 
+        const cookingSettings = loadCookingSettingsFromStorage();
+        dispatch({ type: 'loadCookingSettings', settings: cookingSettings });
+
         const savedSwaps = localStorage.getItem('PstTeamTimelineSwaps');
         if (savedSwaps) {
             try {
@@ -419,6 +425,12 @@ export default function TeamTimelineApp() {
         if (!isInitialized) return;
         saveBonusSettingsToStorage(state.bonusSettings);
     }, [state.bonusSettings, isInitialized]);
+
+    // 料理設定の永続化（初期化完了後のみ）
+    useEffect(() => {
+        if (!isInitialized) return;
+        saveCookingSettingsToStorage(state.cookingSettings);
+    }, [state.cookingSettings, isInitialized]);
 
     // 個体値計算機連動フラグの永続化（初期化完了後のみ）
     useEffect(() => {
@@ -536,6 +548,7 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
             box: boxRef.current || undefined,
+            cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result });
         dispatch({ type: 'updateSimulationConfig', config: { seed } });
@@ -546,6 +559,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.cookingSettings,
     ]);
 
     const runMultiTrialWithSeed = useCallback(async (
@@ -562,6 +576,7 @@ export default function TeamTimelineApp() {
                 simulationDays: state.simulationConfig.simulationDays,
             },
             bonusSettings: state.bonusSettings,
+            cookingSettings: state.cookingSettings,
             swaps: state.swaps,
             box: boxRef.current || undefined,
             trialCount: state.multiTrialCount,
@@ -615,6 +630,7 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
             box: boxRef.current || undefined,
+            cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result: fullResult });
         dispatch({ type: 'updateSimulationConfig', config: { seed: selectedSeed } });
@@ -626,6 +642,7 @@ export default function TeamTimelineApp() {
         state.bonusSettings,
         state.swaps,
         state.multiTrialCount,
+        state.cookingSettings,
     ]);
 
     const executeSimulation = useCallback(async (options?: {
@@ -717,6 +734,7 @@ export default function TeamTimelineApp() {
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
                 box: boxRef.current || undefined,
+                cookingSettings: state.cookingSettings,
             });
             dispatch({ type: 'setSimulationResult', result });
             dispatch({ type: 'updateSimulationConfig', config: { seed: trial.seed } });
@@ -731,6 +749,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.cookingSettings,
     ]);
 
     // シードモード変更ハンドラー
@@ -756,7 +775,7 @@ export default function TeamTimelineApp() {
     }, []);
 
     // タブ切り替えハンドラー
-    const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings') => {
+    const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings' | 'cooking') => {
         dispatch({ type: 'selectTab', tab: newValue });
     }, []);
 
@@ -795,6 +814,10 @@ export default function TeamTimelineApp() {
             saveTimelineBonusSettingsToIvStorage(settings);
         }
     }, [state.syncWithIvParameter]);
+
+    const handleCookingSettingsChange = useCallback((settings: CookingSimulationSettings) => {
+        dispatch({ type: 'setCookingSettings', settings });
+    }, []);
 
     const handleSyncWithIvParameterChange = useCallback((enabled: boolean) => {
         dispatch({ type: 'setSyncWithIvParameter', enabled });
@@ -1103,6 +1126,7 @@ export default function TeamTimelineApp() {
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
                 box: boxRef.current || undefined,
+                cookingSettings: state.cookingSettings,
                 analysisOptions: {
                     disabledPokemonIds: options.disabledPokemonIds,
                     keepDisabledPokemonTargetable: true,
@@ -2021,6 +2045,7 @@ export default function TeamTimelineApp() {
                 <Tabs value={state.activeTab} onChange={handleTabChange}>
                     <Tab label={t('TeamTimeline.tab team', 'チーム')} value="team" />
                     <Tab label={t('TeamTimeline.tab settings', '設定')} value="settings" />
+                    <Tab label={t('TeamTimeline.tab cooking', '料理')} value="cooking" />
                 </Tabs>
             </Box>
 
@@ -2262,6 +2287,7 @@ export default function TeamTimelineApp() {
                                         valueMode={summaryValueMode}
                                         showValueModeToggle={showSummaryValueToggle}
                                         onValueModeChange={handleSummaryValueModeChange}
+                                        cookingResult={state.simulationResult!.cookingResult}
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.simulationResult!.dailySummaries}
@@ -2294,6 +2320,7 @@ export default function TeamTimelineApp() {
                         syncWithIvParameter={state.syncWithIvParameter}
                         onSyncChange={handleSyncWithIvParameterChange}
                         onSettingsChange={handleBonusSettingsChange}
+                        cookingSimEnabled={state.cookingSettings.enabled}
                     />
                     {/* 就寝時げんき設定 */}
                     <Box sx={{ mb: 3, p: 2 }}>
@@ -2317,6 +2344,21 @@ export default function TeamTimelineApp() {
                             onReset={handleResetTimeSlots}
                         />
                     </Box>
+                </Box>
+            )}
+
+            {/* 料理タブ */}
+            {state.activeTab === 'cooking' && (
+                <Box
+                    sx={{
+                        width: '100%',
+                        maxWidth: isDesktop ? '960px' : '100%',
+                    }}
+                >
+                    <CookingSettingsPanel
+                        settings={state.cookingSettings}
+                        onChange={handleCookingSettingsChange}
+                    />
                 </Box>
             )}
 

@@ -6,6 +6,7 @@ import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import { TimeSlot, SimulationResult, PokemonSwap } from '../types/TimeSlotTypes';
 import TimelineRow from './TimelineRow';
+import CookingResultRow from './CookingResultRow';
 import DailySummaryRow from './DailySummaryRow';
 import TeamSummaryRow from './TeamSummaryRow';
 import { buildExpandedTimeline } from '../utils/TimelineDayExpansion';
@@ -142,6 +143,20 @@ const TimelineTable = React.memo(({
                 alwaysShowSwapButton={alwaysShowSwapButton}
                 isFirstTimelineSlot={isFirstTimelineSlot}
               />
+              {result.cookingResult && expandedSlot.slot.hasMeal && (() => {
+                  const cookingEvent = result.cookingResult!.events.find(
+                      e => e.mealSlotId === expandedSlot.slot.id
+                  );
+                  if (!cookingEvent || (cookingEvent.recipeName == null && cookingEvent.cookingEP === 0)) {
+                      return null;
+                  }
+                  return (
+                      <CookingResultRow
+                          event={cookingEvent}
+                          teamSize={team.length}
+                      />
+                  );
+              })()}
               {dayBandNumber !== undefined && (
                 <DayBandRow>
                   {t('TeamTimeline.day label', '{{day}}日目', { day: dayBandNumber })}

@@ -2,7 +2,9 @@ import React from 'react';
 import { styled } from '@mui/system';
 import { useTranslation } from 'react-i18next';
 import { TeamSummary } from '../types/TimeSlotTypes';
+import { CookingSimulationResult } from '../types/CookingTypes';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
+import { IngredientName } from '../../../../data/pokemons';
 import type { SummaryLayoutMode } from './DailySummaryRow';
 import IngredientOthersPopover from './IngredientOthersPopover';
 import SummaryValueModeToggle from './SummaryValueModeToggle';
@@ -31,6 +33,7 @@ interface TeamSummaryRowProps {
   valueMode?: SummaryValueMode;
   showValueModeToggle?: boolean;
   onValueModeChange?: (value: SummaryValueMode) => void;
+  cookingResult?: CookingSimulationResult;
 }
 
 const TeamSummaryRow = React.memo(({
@@ -41,6 +44,7 @@ const TeamSummaryRow = React.memo(({
   valueMode = 'periodTotal',
   showValueModeToggle = false,
   onValueModeChange,
+  cookingResult,
 }: TeamSummaryRowProps) => {
   const { t } = useTranslation();
   const defaultLabel = layoutMode === 'average'
@@ -102,7 +106,11 @@ const TeamSummaryRow = React.memo(({
           <EPLine>
             きのみ : {formatSummaryEp(totalBerryEP)}EP
             <span className="sep" />
-            食材 : {formatSummaryEp(totalIngredientEP)}EP
+            {teamSummary.totalCookingEP != null ? (
+                <>料理 : {formatSummaryEp(convertByMode(teamSummary.totalCookingEP))}EP</>
+            ) : (
+                <>食材 : {formatSummaryEp(totalIngredientEP)}EP</>
+            )}
             <span className="sep" />
             スキル : {formatSummaryEp(totalSkillEP)}EP
           </EPLine>
@@ -135,6 +143,52 @@ const TeamSummaryRow = React.memo(({
           {totalDreamShardCount > 0 && <MetaItem>ゆめのかけら : +{formatSummaryNumber(totalDreamShardCount)}</MetaItem>}
           {totalTastyChanceIncreasePercent > 0 && <MetaItem>料理チャンス : +{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</MetaItem>}
         </IngredientSection>
+        {cookingResult && (
+            <CookingSection>
+                <MetaLineBreak aria-hidden />
+                <CookingHeader>料理結果</CookingHeader>
+                {cookingResult.dailySummaries.map((daySummary, dayIndex) => (
+                    <DayCookingGroup key={dayIndex}>
+                        {cookingResult.dailySummaries.length > 1 && (
+                            <DayCookingLabel>{dayIndex + 1}日目</DayCookingLabel>
+                        )}
+                        {daySummary.events.map((event, eventIndex) => (
+                            <CookingEventLine key={`${dayIndex}-${eventIndex}`}>
+                                {event.isGreatSuccess && <GreatSuccessMark>&#x2757;</GreatSuccessMark>}
+                                <span className="recipe-name">
+                                    {event.recipeName ?? 'スキップ'}
+                                </span>
+                                <span className="cooking-ep">
+                                    {event.cookingEP > 0 ? `${Math.round(event.cookingEP).toLocaleString()}EP` : '-'}
+                                </span>
+                                {event.remainingPotCapacity > 0 && (
+                                    <span className="pot-remaining">
+                                        鍋空き{event.remainingPotCapacity}
+                                    </span>
+                                )}
+                            </CookingEventLine>
+                        ))}
+                    </DayCookingGroup>
+                ))}
+                {/* あまり食材 */}
+                {Object.keys(cookingResult.leftoverIngredients.total).length > 0 && (
+                    <LeftoverSection>
+                        <LeftoverLabel>あまり食材</LeftoverLabel>
+                        <LeftoverIngredientList>
+                            {Object.entries(cookingResult.leftoverIngredients.total)
+                                .filter(([, count]) => count != null && count > 0)
+                                .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+                                .map(([name, count]) => (
+                                    <IngredientItem key={name}>
+                                        <IngredientIcon name={name as IngredientName} />
+                                        <span>{formatIngredientCount(count ?? 0)}</span>
+                                    </IngredientItem>
+                                ))}
+                        </LeftoverIngredientList>
+                    </LeftoverSection>
+                )}
+            </CookingSection>
+        )}
       </ContentCell>
     </Wrapper>
   );
@@ -256,6 +310,82 @@ const TotalLine = styled('div')({
   fontSize: '12px',
   lineHeight: '15px',
   fontWeight: 700,
+});
+
+const CookingSection = styled('div')({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    marginTop: '4px',
+    paddingTop: '4px',
+    borderTop: '1px dashed #d6d6d6',
+});
+
+const CookingHeader = styled('div')({
+    fontSize: '12px',
+    fontWeight: 700,
+    lineHeight: '15px',
+    letterSpacing: '-0.48px',
+});
+
+const DayCookingGroup = styled('div')({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+});
+
+const DayCookingLabel = styled('div')({
+    fontSize: '10px',
+    lineHeight: '13px',
+    letterSpacing: '-0.5px',
+    color: '#888',
+    fontWeight: 600,
+});
+
+const CookingEventLine = styled('div')({
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '4px',
+    fontSize: '11px',
+    lineHeight: '14px',
+    letterSpacing: '-0.44px',
+    '& .recipe-name': {
+        fontWeight: 500,
+    },
+    '& .cooking-ep': {
+        fontWeight: 700,
+    },
+    '& .pot-remaining': {
+        color: '#888',
+        fontSize: '10px',
+    },
+});
+
+const GreatSuccessMark = styled('span')({
+    color: '#ff6b00',
+    fontWeight: 700,
+});
+
+const LeftoverSection = styled('div')({
+    marginTop: '4px',
+    paddingTop: '4px',
+    borderTop: '1px dashed #e0e0e0',
+});
+
+const LeftoverLabel = styled('div')({
+    fontSize: '11px',
+    lineHeight: '14px',
+    fontWeight: 600,
+    color: '#666',
+    marginBottom: '2px',
+});
+
+const LeftoverIngredientList = styled('div')({
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '4px',
+    alignItems: 'center',
 });
 
 export default TeamSummaryRow;

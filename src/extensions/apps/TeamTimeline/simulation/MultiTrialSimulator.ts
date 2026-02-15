@@ -16,6 +16,7 @@ import { IngredientName } from '../../../../data/pokemons';
 import { runSimulation } from './TimelineSimulator';
 import { TrialSummary, MultiTrialResult } from '../types/MultiTrialTypes';
 import { TimelineBonusSettings } from '../types/TimelineBonusSettingsTypes';
+import { CookingSimulationSettings } from '../types/CookingTypes';
 
 /** Multi-trial simulation input */
 export interface MultiTrialInput {
@@ -25,6 +26,7 @@ export interface MultiTrialInput {
     readonly bonusSettings: TimelineBonusSettings;
     readonly swaps?: PokemonSwap[];
     readonly box?: PokemonBox;
+    readonly cookingSettings?: CookingSimulationSettings;
     readonly trialCount: number;
     readonly initialSeed?: number;
 }
@@ -70,6 +72,7 @@ type DailyAccumulator = {
     totalCookingPotCapacityIncrease: number;
     totalTastyChanceIncreasePercent: number;
     totalDreamShardCount: number;
+    cookingEP: number;
 };
 
 type AggregationState = {
@@ -85,6 +88,7 @@ type AggregationState = {
         totalCookingPotCapacityIncrease: number;
         totalTastyChanceIncreasePercent: number;
         totalDreamShardCount: number;
+        totalCookingEP: number;
     };
 };
 
@@ -102,6 +106,7 @@ function createAggregationState(): AggregationState {
             totalCookingPotCapacityIncrease: 0,
             totalTastyChanceIncreasePercent: 0,
             totalDreamShardCount: 0,
+            totalCookingEP: 0,
         },
     };
 }
@@ -134,6 +139,7 @@ function accumulateDailySummary(state: AggregationState, dailySummary: DailySumm
             totalCookingPotCapacityIncrease: 0,
             totalTastyChanceIncreasePercent: 0,
             totalDreamShardCount: 0,
+            cookingEP: 0,
         };
         state.dailyAccsByPokemonId.set(dailySummary.pokemonId, acc);
         state.dailyOrder.push(dailySummary.pokemonId);
@@ -151,6 +157,7 @@ function accumulateDailySummary(state: AggregationState, dailySummary: DailySumm
     acc.totalCookingPotCapacityIncrease += dailySummary.totalCookingPotCapacityIncrease;
     acc.totalTastyChanceIncreasePercent += dailySummary.totalTastyChanceIncreasePercent;
     acc.totalDreamShardCount += dailySummary.totalDreamShardCount;
+    acc.cookingEP += dailySummary.cookingEP ?? 0;
     accumulateIngredients(acc.ingredientSums, dailySummary.totalIngredients);
     accumulateIngredients(acc.skillIngredientSums, dailySummary.totalSkillIngredients ?? []);
     accumulateIngredients(acc.overflowIngredientSums, dailySummary.totalOverflowIngredients);
@@ -165,6 +172,7 @@ function accumulateTeamSummary(state: AggregationState, teamSummary: TeamSummary
     state.teamAcc.totalCookingPotCapacityIncrease += teamSummary.totalCookingPotCapacityIncrease;
     state.teamAcc.totalTastyChanceIncreasePercent += teamSummary.totalTastyChanceIncreasePercent;
     state.teamAcc.totalDreamShardCount += teamSummary.totalDreamShardCount;
+    state.teamAcc.totalCookingEP += teamSummary.totalCookingEP ?? 0;
     accumulateIngredients(state.teamAcc.ingredientSums, teamSummary.totalIngredients);
 }
 
@@ -203,6 +211,7 @@ function finalizeAverages(state: AggregationState, trialCount: number): {
             totalCookingPotCapacityIncrease: Math.round((acc.totalCookingPotCapacityIncrease / n) * 10) / 10,
             totalTastyChanceIncreasePercent: Math.round((acc.totalTastyChanceIncreasePercent / n) * 10) / 10,
             totalDreamShardCount: Math.round((acc.totalDreamShardCount / n) * 10) / 10,
+            cookingEP: acc.cookingEP > 0 ? Math.round(acc.cookingEP / n) : undefined,
         }));
 
     const averageTeamSummary: TeamSummary = {
@@ -218,6 +227,7 @@ function finalizeAverages(state: AggregationState, trialCount: number): {
         totalCookingPotCapacityIncrease: Math.round((state.teamAcc.totalCookingPotCapacityIncrease / n) * 10) / 10,
         totalTastyChanceIncreasePercent: Math.round((state.teamAcc.totalTastyChanceIncreasePercent / n) * 10) / 10,
         totalDreamShardCount: Math.round((state.teamAcc.totalDreamShardCount / n) * 10) / 10,
+        totalCookingEP: state.teamAcc.totalCookingEP > 0 ? Math.round(state.teamAcc.totalCookingEP / n) : undefined,
     };
 
     return { averageDailySummaries, averageTeamSummary };
@@ -261,6 +271,7 @@ export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResul
             bonusSettings,
             swaps,
             box,
+            cookingSettings: input.cookingSettings,
         });
 
         trials.push({
@@ -347,6 +358,7 @@ export async function runMultiTrialSimulationWithProgress(
             bonusSettings,
             swaps,
             box,
+            cookingSettings: input.cookingSettings,
         });
 
         trials.push({

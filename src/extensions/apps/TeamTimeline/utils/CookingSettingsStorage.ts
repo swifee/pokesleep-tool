@@ -1,0 +1,94 @@
+import { IngredientNames, IngredientName } from '../../../../data/pokemons';
+import {
+    CookingSimulationSettings,
+    CookingCategory,
+    createDefaultCookingSettings,
+} from '../types/CookingTypes';
+
+export const STORAGE_KEY_COOKING_SETTINGS = 'PstTeamTimelineCookingSettings';
+
+const VALID_CATEGORIES: readonly CookingCategory[] = ['curry', 'salad', 'dessert'];
+const MIN_RECIPE_LEVEL = 1;
+const MAX_RECIPE_LEVEL = 65;
+
+/** 料理設定をlocalStorageに保存 */
+export function saveCookingSettingsToStorage(settings: CookingSimulationSettings): void {
+    localStorage.setItem(STORAGE_KEY_COOKING_SETTINGS, JSON.stringify(settings));
+}
+
+/** 料理設定をlocalStorageから読み込み */
+export function loadCookingSettingsFromStorage(): CookingSimulationSettings {
+    const raw = localStorage.getItem(STORAGE_KEY_COOKING_SETTINGS);
+    if (!raw) {
+        return createDefaultCookingSettings();
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        return normalizeCookingSettings(parsed);
+    } catch {
+        return createDefaultCookingSettings();
+    }
+}
+
+/** 不正な値を正規化 */
+function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
+    const defaults = createDefaultCookingSettings();
+
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return defaults;
+    }
+
+    const obj = parsed as Record<string, unknown>;
+
+    // Validate enabled is boolean (default false)
+    const enabled = typeof obj.enabled === 'boolean' ? obj.enabled : defaults.enabled;
+
+    // Validate category is 'curry' | 'salad' | 'dessert' (default 'curry')
+    const category: CookingCategory =
+        typeof obj.category === 'string' && VALID_CATEGORIES.includes(obj.category as CookingCategory)
+            ? (obj.category as CookingCategory)
+            : defaults.category;
+
+    // Validate recipeLevels is object with number values clamped to 1-65
+    const recipeLevels: Record<string, number> = {};
+    if (typeof obj.recipeLevels === 'object' && obj.recipeLevels !== null && !Array.isArray(obj.recipeLevels)) {
+        const levels = obj.recipeLevels as Record<string, unknown>;
+        for (const [key, value] of Object.entries(levels)) {
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                recipeLevels[key] = Math.max(MIN_RECIPE_LEVEL, Math.min(MAX_RECIPE_LEVEL, Math.floor(value)));
+            }
+        }
+    }
+
+    // Validate basePotCapacity is positive integer (default 15)
+    const basePotCapacity =
+        typeof obj.basePotCapacity === 'number' &&
+        Number.isFinite(obj.basePotCapacity) &&
+        obj.basePotCapacity > 0
+            ? Math.floor(obj.basePotCapacity)
+            : defaults.basePotCapacity;
+
+    // Validate initialIngredients is object with non-negative number values
+    const initialIngredients: Partial<Record<IngredientName, number>> = {};
+    if (typeof obj.initialIngredients === 'object' && obj.initialIngredients !== null && !Array.isArray(obj.initialIngredients)) {
+        const ings = obj.initialIngredients as Record<string, unknown>;
+        for (const [key, value] of Object.entries(ings)) {
+            if (
+                IngredientNames.includes(key as IngredientName) &&
+                typeof value === 'number' &&
+                Number.isFinite(value) &&
+                value >= 0
+            ) {
+                initialIngredients[key as IngredientName] = value;
+            }
+        }
+    }
+
+    return {
+        enabled,
+        category,
+        recipeLevels,
+        basePotCapacity,
+        initialIngredients,
+    };
+}

@@ -2,6 +2,7 @@ import { PokemonBoxItem } from '../../../../util/PokemonBox';
 import { TimeSlot, SimulationConfig, SimulationResult, PokemonSwap, DailySummary, TeamSummary } from './TimeSlotTypes';
 import { TrialSummary } from './MultiTrialTypes';
 import { TimelineBonusSettings } from './TimelineBonusSettingsTypes';
+import { CookingSimulationSettings } from './CookingTypes';
 
 /**
  * チームタイムラインの状態
@@ -25,7 +26,7 @@ export interface TeamTimelineState {
     /** シミュレーションエラー */
     simulationError: string | null;
     /** アクティブなタブ */
-    activeTab: 'team' | 'settings';
+    activeTab: 'team' | 'settings' | 'cooking';
     /** 編集中の時間帯スロットインデックス */
     editingSlotIndex: number | null;
     /** 時間帯編集ダイアログの開閉状態 */
@@ -58,6 +59,8 @@ export interface TeamTimelineState {
     multiTrialAverageTeamSummary: TeamSummary | null;
     /** TeamTimeline 用ボーナス設定 */
     bonusSettings: TimelineBonusSettings;
+    /** 料理シミュレーション設定 */
+    cookingSettings: CookingSimulationSettings;
     /** 個体値計算機設定との連動フラグ */
     syncWithIvParameter: boolean;
 }
@@ -87,7 +90,7 @@ export type TeamTimelineAction =
     | { type: 'setSimulationError'; error: string }
     | { type: 'clearSimulationResult' }
     // Phase 3: UI状態
-    | { type: 'selectTab'; tab: 'team' | 'settings' }
+    | { type: 'selectTab'; tab: 'team' | 'settings' | 'cooking' }
     | { type: 'openTimeSlotDialog'; index?: number }
     | { type: 'closeTimeSlotDialog' }
     // Phase 4: ポケモン入れ替え
@@ -108,7 +111,9 @@ export type TeamTimelineAction =
     | { type: 'setBonusSettings'; settings: TimelineBonusSettings }
     | { type: 'loadBonusSettings'; settings: TimelineBonusSettings }
     | { type: 'setSyncWithIvParameter'; enabled: boolean }
-    | { type: 'loadSyncWithIvParameter'; enabled: boolean };
+    | { type: 'loadSyncWithIvParameter'; enabled: boolean }
+    | { type: 'setCookingSettings'; settings: CookingSimulationSettings }
+    | { type: 'loadCookingSettings'; settings: CookingSimulationSettings };
 
 /**
  * チームの最大メンバー数

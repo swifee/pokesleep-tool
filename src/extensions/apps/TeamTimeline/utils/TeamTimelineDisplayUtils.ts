@@ -1,6 +1,6 @@
 import { SimulationResult } from '../types/TimeSlotTypes';
 
-export type TeamTimelineTab = 'team' | 'settings';
+export type TeamTimelineTab = 'team' | 'settings' | 'cooking';
 
 export function shouldShowAdditionalAnalysisPanel(
     simulationResult: SimulationResult | null,

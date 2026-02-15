@@ -238,7 +238,11 @@ const DailySummaryRow = React.memo(({
                                     <LocalFireDepartmentIcon sx={{ width: 12, height: 12, color: '#ff944b' }} />
                                     {formatSummaryEp(berryEP)}EP
                                 </EPLine>
-                                <EPLine>🍴{formatSummaryEp(ingredientEP)}EP</EPLine>
+                                {summary.cookingEP != null ? (
+                                    <EPLine>🍳{formatSummaryEp(convertByMode(summary.cookingEP))}EP</EPLine>
+                                ) : (
+                                    <EPLine>🍴{formatSummaryEp(ingredientEP)}EP</EPLine>
+                                )}
                                 <Divider />
                                 <TotalLine>{formatSummaryEp(totalEP)}EP</TotalLine>
                             </EPBox>

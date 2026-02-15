@@ -17,6 +17,7 @@ import {
     PokemonSwap,
     DailySummary,
     getDisplayLabel,
+    getMealType,
     SWAP_NONE_POKEMON_ID,
 } from '../types/TimeSlotTypes';
 import { calculateDuration, isSleepingSlot } from '../utils/TimeSlotUtils';
@@ -39,6 +40,14 @@ import {
 } from './SkillEffectProcessor';
 import { TimelineBonusSettings } from '../types/TimelineBonusSettingsTypes';
 import { buildStrengthParameterFromTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
+import { CookingSimulationSettings, CookingSimulationResult, CookingEventResult } from '../types/CookingTypes';
+import {
+    createIngredientBag,
+    addIngredientsToBag,
+    executeMealCooking,
+    computeLeftoverIngredients,
+    computePokemonCookingAttributions,
+} from './CookingSimulator';
 
 export interface SimulationAnalysisOptions {
     disabledPokemonIds?: readonly number[];
@@ -64,6 +73,8 @@ export interface SimulationInput {
     box?: PokemonBox;
     /** 追加分析用オプション */
     analysisOptions?: SimulationAnalysisOptions;
+    /** 料理シミュレーション設定（オプショナル） */
+    cookingSettings?: CookingSimulationSettings;
 }
 
 /** ポケモンの状態（シミュレーション中の内部管理用） */
@@ -201,6 +212,116 @@ function buildPokemonBonusContext(
             recipeLevel: bonusSettings.recipeLevel,
             dishBonus: bonus.dish,
         },
+    };
+}
+
+/**
+ * 料理シミュレーションのポスト処理を実行する
+ *
+ * スロット結果を時系列で走査し、食材をバッグに蓄積しながら
+ * 各食事タイミングで最適な料理を選択・作成する。
+ */
+function runCookingPostProcess(
+    expandedSlots: { slot: TimeSlot; dayIndex: number }[],
+    slotResults: Map<string, TimeSlotResult[]>,
+    cookingSettings: CookingSimulationSettings,
+    bonusSettings: TimelineBonusSettings,
+    baseSeed: number,
+): CookingSimulationResult {
+    const bag = createIngredientBag(cookingSettings.initialIngredients);
+    const cookingRandom = new SeededRandom(baseSeed + 9999);
+
+    let cookingPowerUpBonus = 0;
+    let tastyChanceAccumulated = 0;
+
+    const allEvents: CookingEventResult[] = [];
+    // Map from dayIndex to events
+    const dayEventsMap = new Map<number, CookingEventResult[]>();
+
+    for (const expandedSlot of expandedSlots) {
+        const slot = expandedSlot.slot;
+        const results = slotResults.get(slot.id);
+
+        if (results) {
+            // Collect ingredients from this slot's results into the bag
+            for (const result of results) {
+                // Add regular ingredients
+                if (result.ingredients.length > 0) {
+                    addIngredientsToBag(bag, result.pokemonId, result.ingredients);
+                }
+                // Add skill ingredients
+                if (result.skillIngredients && result.skillIngredients.length > 0) {
+                    addIngredientsToBag(bag, result.pokemonId, result.skillIngredients);
+                }
+                // Accumulate cooking power up
+                cookingPowerUpBonus += result.cookingPotCapacityIncrease ?? 0;
+                // Accumulate tasty chance
+                tastyChanceAccumulated += result.tastyChanceIncreasePercent ?? 0;
+            }
+        }
+
+        // Check if this is a meal slot
+        const isMealSlot = slot.hasMeal !== undefined
+            ? slot.hasMeal
+            : false;
+
+        if (isMealSlot) {
+            const mealType = getMealType(slot.time);
+            const { result, newTastyChanceAccumulated } = executeMealCooking({
+                bag,
+                category: cookingSettings.category,
+                recipeLevels: cookingSettings.recipeLevels as Record<string, number>,
+                basePotCapacity: cookingSettings.basePotCapacity,
+                isGoodCampTicket: bonusSettings.isGoodCampTicketSet,
+                cookingPowerUpBonus,
+                tastyChanceAccumulated,
+                fieldBonus: bonusSettings.fieldBonus,
+                eventBonus: 0, // TODO: extract event bonus from bonusSettings
+                random: cookingRandom,
+                mealSlotId: slot.id,
+                mealType,
+            });
+
+            allEvents.push(result);
+
+            // Track events by day
+            let dayEvents = dayEventsMap.get(expandedSlot.dayIndex);
+            if (!dayEvents) {
+                dayEvents = [];
+                dayEventsMap.set(expandedSlot.dayIndex, dayEvents);
+            }
+            dayEvents.push(result);
+
+            // Reset cooking power up bonus after cooking
+            cookingPowerUpBonus = 0;
+            // Update tasty chance (resets only on great success)
+            tastyChanceAccumulated = newTastyChanceAccumulated;
+        }
+    }
+
+    // Build daily cooking summaries
+    const dailySummaries = [...dayEventsMap.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, events]) => ({
+            events,
+            totalCookingEP: events.reduce((sum, e) => sum + e.cookingEP, 0),
+            greatSuccessCount: events.filter(e => e.isGreatSuccess).length,
+        }));
+
+    // Compute leftover ingredients
+    const leftoverIngredients = computeLeftoverIngredients(bag);
+
+    // Compute pokemon cooking attributions
+    const pokemonAttributions = computePokemonCookingAttributions(allEvents);
+
+    const totalCookingEP = allEvents.reduce((sum, e) => sum + e.cookingEP, 0);
+
+    return {
+        events: allEvents,
+        dailySummaries,
+        pokemonAttributions,
+        leftoverIngredients,
+        totalCookingEP,
     };
 }
 
@@ -781,6 +902,18 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         slotResults.set(slot.id, slotResultsForThisSlot);
     }
 
+    // 8.5. 料理シミュレーション（有効な場合）
+    let cookingResult: CookingSimulationResult | undefined;
+    if (input.cookingSettings?.enabled) {
+        cookingResult = runCookingPostProcess(
+            expandedSlots,
+            slotResults,
+            input.cookingSettings,
+            bonusSettings,
+            config.seed,
+        );
+    }
+
     // 9. 一日合計を計算（結果が存在するポケモンのみ）
     const dailySummaries: DailySummary[] = [];
     pokemonResults.forEach((results, pokemonId) => {
@@ -797,12 +930,32 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         }
     });
 
+    // 9.5. 料理EPをDailySummaryに反映
+    if (cookingResult) {
+        for (const attribution of cookingResult.pokemonAttributions) {
+            const summary = dailySummaries.find(s => s.pokemonId === attribution.pokemonId);
+            if (summary) {
+                summary.cookingEP = Math.round(attribution.attributedCookingEP);
+                // 料理シミュON時: totalEPにcookingEPを加算し、ingredientEPの代わりにする
+                summary.totalEP = summary.berryEP + summary.cookingEP + summary.skillEP;
+            }
+        }
+    }
+
     // 10. チーム合計を計算
     const teamSummary = calculateTeamSummary(dailySummaries);
+
+    // 10.5. 料理EPをTeamSummaryに反映
+    if (cookingResult) {
+        teamSummary.totalCookingEP = cookingResult.totalCookingEP;
+        // 料理シミュON時: grandTotalEPを再計算
+        teamSummary.grandTotalEP = teamSummary.totalBerryEP + cookingResult.totalCookingEP + teamSummary.totalSkillEP;
+    }
 
     return {
         slotResults,
         dailySummaries,
         teamSummary,
+        cookingResult,
     };
 }

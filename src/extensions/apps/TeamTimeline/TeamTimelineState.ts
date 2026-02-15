@@ -23,6 +23,7 @@ import {
     createDefaultTimelineBonusSettings,
     normalizeTimelineBonusSettings,
 } from './utils/TimelineBonusSettingsBridge';
+import { createDefaultCookingSettings } from './types/CookingTypes';
 
 export const STORAGE_KEY_BONUS_SETTINGS = 'PstTeamTimelineBonusSettings';
 export const STORAGE_KEY_SYNC_IV_PARAMETER = 'PstTeamTimelineSyncIvParam';
@@ -84,6 +85,7 @@ export function createInitialState(): TeamTimelineState {
         multiTrialAverageTeamSummary: null,
         bonusSettings: createDefaultTimelineBonusSettings(),
         syncWithIvParameter: true,
+        cookingSettings: createDefaultCookingSettings(),
     };
 }
 
@@ -394,6 +396,17 @@ export function teamTimelineReducer(
             return {
                 ...state,
                 syncWithIvParameter: action.enabled,
+            };
+        case 'setCookingSettings':
+            return {
+                ...state,
+                ...getResetSimulationFields(),
+                cookingSettings: action.settings,
+            };
+        case 'loadCookingSettings':
+            return {
+                ...state,
+                cookingSettings: action.settings,
             };
         default:
             return state;
