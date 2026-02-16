@@ -62,13 +62,13 @@ vi.mock('./components/SwapEnergyDialog', () => ({
 vi.mock('./components/BoxSelectDialog', () => ({
     default: ({
         open,
-        onRemoveSwap,
+        onSelectNone,
     }: {
         open: boolean;
-        onRemoveSwap?: () => void;
+        onSelectNone?: () => void;
     }) => (
         <div
-            data-testid={onRemoveSwap ? 'swap-box-dialog' : 'team-box-dialog'}
+            data-testid={onSelectNone ? 'swap-box-dialog' : 'team-box-dialog'}
             data-open={open ? 'true' : 'false'}
         />
     ),

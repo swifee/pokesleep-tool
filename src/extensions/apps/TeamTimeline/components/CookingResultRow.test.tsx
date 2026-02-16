@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CookingEventResult } from '../types/CookingTypes';
 import CookingResultRow from './CookingResultRow';
@@ -32,6 +32,7 @@ const EVENT: CookingEventResult = {
     effectivePotCapacity: 15,
     tastyChancePercent: 10,
     cookingPowerUpBonusUsed: 0,
+    bagIngredientsBeforeCooking: [],
 };
 
 describe('CookingResultRow', () => {
@@ -39,5 +40,25 @@ describe('CookingResultRow', () => {
         render(<CookingResultRow event={EVENT} teamSize={5} />);
 
         expect(screen.getByText('translated:TeamTimeline.recipe specialAppleCurry')).toBeDefined();
+    });
+
+    it('opens bag ingredient popover when clicking left cooking icon', () => {
+        const event: CookingEventResult = {
+            ...EVENT,
+            bagIngredientsBeforeCooking: [
+                { name: 'apple', count: 9 },
+                { name: 'egg', count: 4 },
+            ],
+        };
+
+        render(<CookingResultRow event={event} teamSize={5} />);
+
+        fireEvent.click(screen.getByTestId('cooking-bag-trigger-breakfast-1'));
+
+        expect(screen.getByText('料理直前バッグ')).toBeDefined();
+        expect(screen.getByText('apple')).toBeDefined();
+        expect(screen.getByText('9')).toBeDefined();
+        expect(screen.getByText('egg')).toBeDefined();
+        expect(screen.getByText('4')).toBeDefined();
     });
 });

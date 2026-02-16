@@ -2,6 +2,7 @@ import React from 'react';
 import { styled } from '@mui/system';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import CloseIcon from '@mui/icons-material/Close';
 import { IconButton } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { TimeSlotResult } from '../types/TimeSlotTypes';
@@ -14,6 +15,7 @@ interface TimelineCellProps {
     slotId: string;                  // Time slot ID (e.g., "06:00-12:00")
     teamIndex: number;               // Team slot index (0-4)
     onSwapClick?: () => void;        // Callback for swap button click
+    onRemoveSwapClick?: () => void;  // Callback for swap removal button click
     hasSwap?: boolean;               // Whether this position has a swap
     swappedPokemonName?: string;     // Name of the swapped Pokemon
     isFirstSlot?: boolean;           // Whether this is the first time slot (duration 0)
@@ -31,6 +33,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         result,
         isSleeping,
         onSwapClick,
+        onRemoveSwapClick,
         hasSwap,
         swappedPokemonName,
         isFirstSlot,
@@ -41,6 +44,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     } = props;
     const { t } = useTranslation();
     const swapButtonTitle = t('TeamTimeline.swap pokemon');
+    const removeSwapButtonTitle = t('TeamTimeline.swap remove', '入れ替え設定を解除');
     const hasSwapInfo = !disableSwapUi && Boolean(hasSwap && swappedPokemonName);
     const showSwapButton = !disableSwapUi && Boolean(onSwapClick) && !hasSwapInfo;
     const isCompactEmptyCell = compactEmpty && result === null;
@@ -57,6 +61,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             return;
         }
         onSwapClick?.();
+    };
+
+    const handleSwapRemoveButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        onRemoveSwapClick?.();
     };
 
     const renderSwapControl = () => {
@@ -82,15 +91,28 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             return null;
         }
         return (
-            <SwapInfoBox
-                type="button"
-                className="swap-info"
-                onClick={onSwapClick ? handleSwapInfoClick : undefined}
-                title={swapButtonTitle}
-            >
-                <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
-                <span className="swap-name">{swappedPokemonName}</span>
-            </SwapInfoBox>
+            <SwapInfoContainer>
+                <SwapInfoMainButton
+                    type="button"
+                    className="swap-info"
+                    onClick={onSwapClick ? handleSwapInfoClick : undefined}
+                    title={swapButtonTitle}
+                >
+                    <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
+                    <span className="swap-name">{swappedPokemonName}</span>
+                </SwapInfoMainButton>
+                {onRemoveSwapClick && (
+                    <SwapRemoveButton
+                        type="button"
+                        className="swap-remove-trigger"
+                        onClick={handleSwapRemoveButtonClick}
+                        title={removeSwapButtonTitle}
+                        aria-label={removeSwapButtonTitle}
+                    >
+                        <CloseIcon className="swap-remove-icon" sx={{ fontSize: 12 }} />
+                    </SwapRemoveButton>
+                )}
+            </SwapInfoContainer>
         );
     };
     const stripDerivedSuffix = (skillLabel: string): string => skillLabel.replace(/\s*\([^)]*\)\s*$/, '');
@@ -634,7 +656,7 @@ const SwapIconButton = styled(IconButton)({
     },
 });
 
-const SwapInfoBox = styled('button')({
+const SwapInfoContainer = styled('div')({
     border: '1px solid #62d540',
     marginTop: '2px',
     marginLeft: '0',
@@ -642,9 +664,20 @@ const SwapInfoBox = styled('button')({
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '18px',
-    padding: '1px 4px',
     borderRadius: '6px',
     backgroundColor: '#f6ffef',
+    display: 'flex',
+    alignItems: 'center',
+    overflow: 'hidden',
+});
+
+const SwapInfoMainButton = styled('button')({
+    border: 'none',
+    padding: '1px 0 1px 4px',
+    margin: 0,
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'transparent',
     color: '#000',
     display: 'flex',
     alignItems: 'center',
@@ -668,6 +701,28 @@ const SwapInfoBox = styled('button')({
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
         display: 'block',
+    },
+});
+
+const SwapRemoveButton = styled('button')({
+    border: 'none',
+    width: '18px',
+    height: '18px',
+    padding: 0,
+    margin: '0 2px 0 0',
+    borderRadius: '999px',
+    backgroundColor: 'transparent',
+    color: '#62d540',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    flexShrink: 0,
+    '&:hover': {
+        backgroundColor: '#e5f9d9',
+    },
+    '& .swap-remove-icon': {
+        color: '#62d540',
     },
 });
 

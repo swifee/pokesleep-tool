@@ -19,6 +19,7 @@ interface TimelineTableProps {
   swaps: PokemonSwap[];
   box: PokemonBox;
   onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
+  onSwapRemoveClick?: (slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => void;
   onHeaderSlotClick?: (index: number) => void;
   onOpenTimeSlotSettings?: () => void;
   showSummaryRows?: boolean;
@@ -34,6 +35,7 @@ const TimelineTable = React.memo(({
   swaps,
   box,
   onSwapClick,
+  onSwapRemoveClick,
   onHeaderSlotClick,
   onOpenTimeSlotSettings,
   showSummaryRows = true,
@@ -138,6 +140,7 @@ const TimelineTable = React.memo(({
                 swaps={swaps}
                 box={box}
                 onSwapClick={onSwapClick}
+                onSwapRemoveClick={onSwapRemoveClick}
                 isFirstSlot={expandedSlot.slotIndexInDay === 0}
                 compactEmptyCells={compactEmptyCells}
                 alwaysShowSwapButton={alwaysShowSwapButton}

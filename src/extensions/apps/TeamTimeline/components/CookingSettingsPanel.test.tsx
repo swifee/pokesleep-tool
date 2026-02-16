@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import CookingSettingsPanel from './CookingSettingsPanel';
-import { CookingSimulationSettings } from '../types/CookingTypes';
+import { CookingSimulationSettings, createDefaultCookingSettings } from '../types/CookingTypes';
 
 interface ChildrenProps {
     children?: React.ReactNode;
@@ -57,7 +57,10 @@ interface FormControlLabelProps extends ChildrenProps {
 }
 
 vi.mock('@mui/material', () => ({
-    Box: ({ children, ...rest }: ChildrenProps) => <div {...rest}>{children}</div>,
+    Box: ({ children, sx, ...rest }: ChildrenProps & { sx?: unknown }) => {
+        const sxText = typeof sx === 'object' && sx != null ? JSON.stringify(sx) : undefined;
+        return <div data-sx={sxText} {...rest}>{children}</div>;
+    },
     Typography: ({ children, ...rest }: ChildrenProps) => <span {...rest}>{children}</span>,
     TextField: ({ type, value, onChange, onBlur, inputProps, size, variant, sx, ...rest }: TextFieldProps) => {
         void inputProps;
@@ -157,14 +160,20 @@ function createSettings(overrides?: Partial<CookingSimulationSettings>): Cooking
     return {
         enabled: true,
         category: 'curry',
-        recipeLevels: { megaStew: 1, lightSalad: 1, sweetDrink: 1 },
-        basePotCapacity: 15,
+        recipeLevels: { megaStew: 50, lightSalad: 50, sweetDrink: 50 },
+        basePotCapacity: 81,
         initialIngredients: { apple: 30, mushroom: 24, egg: 600 },
         ...overrides,
     };
 }
 
 describe('CookingSettingsPanel', () => {
+    it('uses updated defaults for cooking settings', () => {
+        const defaults = createDefaultCookingSettings();
+        expect(defaults.basePotCapacity).toBe(81);
+        expect(defaults.recipeLevels).toEqual({});
+    });
+
     it('renders pot capacity as 12-99 / step 3 select and changes category via tabs', () => {
         const onChange = vi.fn();
         render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
@@ -180,6 +189,14 @@ describe('CookingSettingsPanel', () => {
 
         fireEvent.click(screen.getByTestId('cooking-category-tab-salad'));
         expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'salad' }));
+    });
+
+    it('shows "料理" label and initializes recipe defaults to 50', () => {
+        render(<CookingSettingsPanel settings={createSettings({ recipeLevels: {} })} onChange={vi.fn()} />);
+
+        expect(screen.getByText('料理:')).toBeDefined();
+        expect((screen.getByTestId('cooking-batch-level-input') as HTMLInputElement).value).toBe('50');
+        expect((screen.getByTestId('recipe-level-input-megaStew') as HTMLInputElement).value).toBe('50');
     });
 
     it('allows empty recipe level input temporarily and accepts direct 65 input', () => {
@@ -208,5 +225,14 @@ describe('CookingSettingsPanel', () => {
 
         const ingredientArea = screen.getByTestId('cooking-initial-ingredients');
         expect(within(ingredientArea).queryByText('とくせんリンゴ')).toBeNull();
+    });
+
+    it('uses timeline-equivalent icon size in recipe ingredient summary', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const iconWithSize = screen.getByTestId('recipe-ingredient-icon-megaStew-apple');
+        const sxText = iconWithSize.getAttribute('data-sx') ?? '';
+        expect(sxText).toContain('"width":"12px"');
+        expect(sxText).toContain('"height":"12px"');
     });
 });

@@ -2,7 +2,7 @@ import { PokemonBoxItem } from '../../../../util/PokemonBox';
 import { TimeSlot, SimulationConfig, SimulationResult, PokemonSwap, DailySummary, TeamSummary } from './TimeSlotTypes';
 import { TrialSummary } from './MultiTrialTypes';
 import { TimelineBonusSettings } from './TimelineBonusSettingsTypes';
-import { CookingSimulationSettings } from './CookingTypes';
+import { AverageCookingSummary, CookingSimulationSettings } from './CookingTypes';
 
 /**
  * チームタイムラインの状態
@@ -57,6 +57,8 @@ export interface TeamTimelineState {
     multiTrialAverageDailySummaries: DailySummary[] | null;
     /** Average team summary across all trials */
     multiTrialAverageTeamSummary: TeamSummary | null;
+    /** Average cooking summary across all trials */
+    multiTrialAverageCookingSummary: AverageCookingSummary | null;
     /** TeamTimeline 用ボーナス設定 */
     bonusSettings: TimelineBonusSettings;
     /** 料理シミュレーション設定 */
@@ -97,15 +99,29 @@ export type TeamTimelineAction =
     | { type: 'openSwapDialog'; slotId: string; teamIndex: number; dayIndex: number }
     | { type: 'closeSwapDialog' }
     | { type: 'setPendingSwap'; pokemonId: number }
-    | { type: 'confirmSwap'; initialEnergy: number }
+    | { type: 'confirmSwap'; initialEnergy: number; endSlotId?: string; endDayIndex?: number; repeat?: boolean }
     | { type: 'confirmSwapDirect'; pokemonId: number; initialEnergy: number }
-    | { type: 'removeSwap'; slotId: string; teamIndex: number; dayIndex: number }
+    | {
+        type: 'removeSwap';
+        slotId: string;
+        teamIndex: number;
+        dayIndex: number;
+        removeFutureRepeats?: boolean;
+        pokemonId?: number;
+    }
     | { type: 'clearSwaps' }
     | { type: 'loadSwaps'; swaps: PokemonSwap[] }
     // Phase 5: Multi-trial simulation
     | { type: 'setSeedMode'; mode: 'random' | 'fixed' }
     | { type: 'setMultiTrialCount'; count: number }
-    | { type: 'setMultiTrialResults'; results: TrialSummary[]; medianIndex: number; averageDailySummaries: DailySummary[]; averageTeamSummary: TeamSummary }
+    | {
+        type: 'setMultiTrialResults';
+        results: TrialSummary[];
+        medianIndex: number;
+        averageDailySummaries: DailySummary[];
+        averageTeamSummary: TeamSummary;
+        averageCookingSummary: AverageCookingSummary | null;
+    }
     | { type: 'setMultiTrialSelectedIndex'; index: number }
     | { type: 'clearMultiTrialResults' }
     | { type: 'setBonusSettings'; settings: TimelineBonusSettings }

@@ -68,7 +68,7 @@ function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
         }
     }
 
-    // Validate basePotCapacity is integer in 12-99 and divisible by 3 (default 15)
+    // Validate basePotCapacity is integer in 12-99 and divisible by 3 (default 81)
     const basePotCapacity =
         typeof obj.basePotCapacity === 'number' &&
         Number.isFinite(obj.basePotCapacity)

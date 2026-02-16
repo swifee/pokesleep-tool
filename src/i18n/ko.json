@@ -261,6 +261,7 @@
             "individual results stacked": "개별\n성적",
             "team average": "팀 평균",
             "set initial energy": "초기 기력 설정",
+            "swap settings": "교체 설정",
             "energy": "기력",
             "confirm": "확인",
             "sleep state sleep": "취침",
@@ -274,7 +275,12 @@
         "value mode period total": "기간 합계",
         "value mode daily average": "1일 평균",
         "resimulation changed notice": "멤버 편성이 변경되었습니다.",
-        "resimulate": "재시뮬레이션"
+        "resimulate": "재시뮬레이션",
+        "cooking category short": "요리",
+        "swap until suffix": "까지",
+        "swap until not set": "미설정",
+        "swap repeat": "반복",
+        "swap next day prefix": "{{count}}일 후 "
     },
         "rp collection": "식재료%와 기술%은 RP Collection 값에 기반합니다.",
         "movie detail": "채널 구독・좋아요・댓글・하이브 등을 주시면 큰 힘이 됩니다!",

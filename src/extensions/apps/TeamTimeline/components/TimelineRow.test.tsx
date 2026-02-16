@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import PokemonBox from '../../../../util/PokemonBox';
-import { TimeSlot } from '../types/TimeSlotTypes';
+import { PokemonSwap, TimeSlot } from '../types/TimeSlotTypes';
+import type { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineRow from './TimelineRow';
 
 vi.mock('react-i18next', () => ({
@@ -12,7 +13,18 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('./TimelineCell', () => ({
-    default: () => <div data-testid="timeline-cell" />,
+    default: ({
+        swappedPokemonName,
+        onRemoveSwapClick,
+    }: {
+        swappedPokemonName?: string;
+        onRemoveSwapClick?: () => void;
+    }) => (
+        <div data-testid="timeline-cell">
+            <span>{swappedPokemonName ?? ''}</span>
+            <span data-testid="remove-flag">{onRemoveSwapClick ? '1' : '0'}</span>
+        </div>
+    ),
 }));
 
 function renderRow(slot: TimeSlot): void {
@@ -61,5 +73,46 @@ describe('TimelineRow label rendering', () => {
         });
 
         expect(screen.getByText('🛌')).toBeDefined();
+    });
+});
+
+describe('TimelineRow swap rendering', () => {
+    it('renders revert target at end slot when swap has "until" configuration', () => {
+        const swappedIn = {
+            id: 101,
+            filledNickname: () => 'ピカチュウ',
+        } as unknown as PokemonBoxItem;
+        const reverted = {
+            id: 42,
+            filledNickname: () => 'ツボツボ',
+        } as unknown as PokemonBoxItem;
+        const swaps: PokemonSwap[] = [
+            {
+                dayIndex: 0,
+                slotId: 'slot-1',
+                teamSlotIndex: 0,
+                newPokemonId: swappedIn.id,
+                initialEnergy: 100,
+                endSlotId: 'slot-4',
+                endDayIndex: 0,
+                revertPokemonId: reverted.id,
+            },
+        ];
+
+        render(
+            <TimelineRow
+                slot={{ id: 'slot-4', time: '18:00', sleepState: 'none', hasMeal: true }}
+                originalSlotId="slot-4"
+                dayIndex={0}
+                results={[]}
+                team={[null, null, null, null, null]}
+                swaps={swaps}
+                box={new PokemonBox([swappedIn, reverted])}
+            />
+        );
+
+        const firstCell = screen.getAllByTestId('timeline-cell')[0];
+        expect(within(firstCell).getByText('ツボツボ')).toBeDefined();
+        expect(within(firstCell).getByTestId('remove-flag').textContent).toBe('0');
     });
 });

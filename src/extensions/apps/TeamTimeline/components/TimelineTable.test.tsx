@@ -23,6 +23,7 @@ vi.mock('./TimelineRow', () => ({
         dayIndex,
         originalSlotId,
         onSwapClick,
+        onSwapRemoveClick,
         compactEmptyCells,
         alwaysShowSwapButton,
         isFirstTimelineSlot,
@@ -30,20 +31,30 @@ vi.mock('./TimelineRow', () => ({
         dayIndex: number;
         originalSlotId: string;
         onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
+        onSwapRemoveClick?: (slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => void;
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
         isFirstTimelineSlot?: boolean;
     }) => (
-        <button
-            type="button"
-            data-testid={`swap-${dayIndex}-${originalSlotId}`}
-            data-compact-empty={compactEmptyCells ? 'true' : 'false'}
-            data-always-show-swap={alwaysShowSwapButton ? 'true' : 'false'}
-            data-first-timeline-slot={isFirstTimelineSlot ? 'true' : 'false'}
-            onClick={() => onSwapClick?.(originalSlotId, 0, dayIndex)}
-        >
-            row
-        </button>
+        <>
+            <button
+                type="button"
+                data-testid={`swap-${dayIndex}-${originalSlotId}`}
+                data-compact-empty={compactEmptyCells ? 'true' : 'false'}
+                data-always-show-swap={alwaysShowSwapButton ? 'true' : 'false'}
+                data-first-timeline-slot={isFirstTimelineSlot ? 'true' : 'false'}
+                onClick={() => onSwapClick?.(originalSlotId, 0, dayIndex)}
+            >
+                row
+            </button>
+            <button
+                type="button"
+                data-testid={`swap-remove-${dayIndex}-${originalSlotId}`}
+                onClick={() => onSwapRemoveClick?.(originalSlotId, 0, dayIndex, 25)}
+            >
+                remove
+            </button>
+        </>
     ),
 }));
 
@@ -186,6 +197,26 @@ describe('TimelineTable', () => {
 
         expect(onHeaderSlotClick).toHaveBeenCalledTimes(1);
         expect(onHeaderSlotClick).toHaveBeenCalledWith(0);
+    });
+
+    it('passes remove callback to TimelineRow', () => {
+        const onSwapRemoveClick = vi.fn();
+
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={1}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                onSwapRemoveClick={onSwapRemoveClick}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('swap-remove-0-wake'));
+        expect(onSwapRemoveClick).toHaveBeenCalledTimes(1);
+        expect(onSwapRemoveClick).toHaveBeenCalledWith('wake', 0, 0, 25);
     });
 
     it('passes compact/always-show options down to TimelineRow', () => {

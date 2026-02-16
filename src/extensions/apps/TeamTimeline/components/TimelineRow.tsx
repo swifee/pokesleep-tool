@@ -14,6 +14,7 @@ interface TimelineRowProps {
     swaps: PokemonSwap[];
     box: PokemonBox;
     onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
+    onSwapRemoveClick?: (slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => void;
     isFirstSlot?: boolean;
     compactEmptyCells?: boolean;
     alwaysShowSwapButton?: boolean;
@@ -38,6 +39,7 @@ const TimelineRow = React.memo(({
     swaps,
     box,
     onSwapClick,
+    onSwapRemoveClick,
     isFirstSlot,
     compactEmptyCells = false,
     alwaysShowSwapButton = false,
@@ -66,20 +68,48 @@ const TimelineRow = React.memo(({
         resultMap.set(result.teamIndex, result);
     });
 
+    const getSwapDisplayName = (pokemonId: number): string => {
+        if (pokemonId === SWAP_NONE_POKEMON_ID) {
+            return t('TeamTimeline.swap none');
+        }
+        const pokemon = box.items.find((item: PokemonBoxItem) => item.id === pokemonId);
+        return pokemon?.filledNickname(t) || `ID: ${pokemonId}`;
+    };
+
     const getSwapInfo = (slotId: string, teamIndex: number) => {
-        const swap = swaps.find(
+        const directSwap = swaps.find(
             s => s.dayIndex === dayIndex && s.slotId === slotId && s.teamSlotIndex === teamIndex
         );
-        if (!swap) return { hasSwap: false, swappedPokemonName: undefined };
-
-        if (swap.newPokemonId === SWAP_NONE_POKEMON_ID) {
-            return { hasSwap: true, swappedPokemonName: t('TeamTimeline.swap none') };
+        if (directSwap) {
+            return {
+                hasSwap: true,
+                swappedPokemonName: getSwapDisplayName(directSwap.newPokemonId),
+                swappedPokemonId: directSwap.newPokemonId,
+                removable: true,
+            };
         }
 
-        const pokemon = box.items.find((item: PokemonBoxItem) => item.id === swap.newPokemonId);
+        // "until" で設定された復帰先を可視化する。
+        const revertSource = [...swaps].reverse().find(
+            s =>
+                s.teamSlotIndex === teamIndex &&
+                s.endSlotId === slotId &&
+                s.endDayIndex === dayIndex &&
+                s.revertPokemonId !== undefined
+        );
+        if (!revertSource || revertSource.revertPokemonId === undefined) {
+            return {
+                hasSwap: false,
+                swappedPokemonName: undefined,
+                swappedPokemonId: undefined,
+                removable: false,
+            };
+        }
         return {
             hasSwap: true,
-            swappedPokemonName: pokemon?.filledNickname(t) || `ID: ${swap.newPokemonId}`,
+            swappedPokemonName: getSwapDisplayName(revertSource.revertPokemonId),
+            swappedPokemonId: undefined,
+            removable: false,
         };
     };
 
@@ -95,7 +125,7 @@ const TimelineRow = React.memo(({
 
             {team.map((item, index) => {
                 const result = resultMap.get(index) ?? null;
-                const { hasSwap, swappedPokemonName } = getSwapInfo(originalSlotId, index);
+                const { hasSwap, swappedPokemonName, swappedPokemonId, removable } = getSwapInfo(originalSlotId, index);
 
                 return (
                     <TimelineCell
@@ -107,6 +137,9 @@ const TimelineRow = React.memo(({
                         hasSwap={hasSwap}
                         swappedPokemonName={swappedPokemonName}
                         onSwapClick={() => onSwapClick?.(originalSlotId, index, dayIndex)}
+                        onRemoveSwapClick={removable && swappedPokemonId !== undefined
+                            ? () => onSwapRemoveClick?.(originalSlotId, index, dayIndex, swappedPokemonId)
+                            : undefined}
                         isFirstSlot={isFirstSlot}
                         compactEmpty={compactEmptyCells}
                         alwaysShowSwapButton={alwaysShowSwapButton}

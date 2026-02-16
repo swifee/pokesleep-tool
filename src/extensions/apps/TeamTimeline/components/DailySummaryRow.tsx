@@ -233,11 +233,11 @@ const DailySummaryRow = React.memo(({
                             </SummaryHeader>
 
                             <EPBox>
-                                <EPLine>❗{formatSummaryEp(skillEP)}EP</EPLine>
-                                <EPLine>
+                                <EPLine data-testid={`daily-summary-ep-berry-${summary.pokemonId}`}>
                                     <LocalFireDepartmentIcon sx={{ width: 12, height: 12, color: '#ff944b' }} />
                                     {formatSummaryEp(berryEP)}EP
                                 </EPLine>
+                                <EPLine data-testid={`daily-summary-ep-skill-${summary.pokemonId}`}>❗{formatSummaryEp(skillEP)}EP</EPLine>
                                 {summary.cookingEP != null ? (
                                     <EPLine>🍳{formatSummaryEp(convertByMode(summary.cookingEP))}EP</EPLine>
                                 ) : (
@@ -248,7 +248,11 @@ const DailySummaryRow = React.memo(({
                             </EPBox>
 
                             <Line>🔍{formatSummaryNumber(totalHelpCount)}</Line>
-                            <Line>
+                            <Line data-testid={`daily-summary-count-berry-${summary.pokemonId}`}>
+                                <LocalFireDepartmentIcon sx={{ width: 14, height: 14, color: '#ff944b' }} />
+                                {formatSummaryNumber(totalBerryCount)}
+                            </Line>
+                            <Line data-testid={`daily-summary-count-skill-${summary.pokemonId}`}>
                                 ❗
                                 <SkillIngredientPopoverTrigger
                                     countLabel={formatSummaryNumber(totalSkillCount)}
@@ -258,10 +262,6 @@ const DailySummaryRow = React.memo(({
                                 {totalSkillOverflowCount > 0 && (
                                     <SkillOverflowIcon>❕{formatSummaryNumber(totalSkillOverflowCount)}</SkillOverflowIcon>
                                 )}
-                            </Line>
-                            <Line>
-                                <LocalFireDepartmentIcon sx={{ width: 14, height: 14, color: '#ff944b' }} />
-                                {formatSummaryNumber(totalBerryCount)}
                             </Line>
                             <IngredientLine>
                                 <IngredientTotalItem>

@@ -13,7 +13,11 @@ import {
     Button,
     Divider,
 } from '@mui/material';
-import { CookingSimulationSettings, CookingCategory } from '../types/CookingTypes';
+import {
+    CookingSimulationSettings,
+    CookingCategory,
+    DEFAULT_RECIPE_LEVEL,
+} from '../types/CookingTypes';
 import { getRecipesByCategory } from '../data/RecipeData';
 import { IngredientNames, IngredientName } from '../../../../data/pokemons';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
@@ -44,9 +48,11 @@ function formatRecipeIngredientSummary(recipe: ReturnType<typeof getRecipesByCat
     return `食材${total}`;
 }
 
+const RECIPE_ICON_SIZE_PX = 12;
+
 const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettingsPanelProps) => {
     const { t } = useTranslation();
-    const [batchLevel, setBatchLevel] = useState<number>(1);
+    const [batchLevel, setBatchLevel] = useState<number>(DEFAULT_RECIPE_LEVEL);
     const [recipeLevelDrafts, setRecipeLevelDrafts] = useState<Record<string, string>>({});
 
     const handleEnabledChange = useCallback((_: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
@@ -171,7 +177,7 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                     {/* 3. Cooking category selector */}
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, fontSize: '0.9rem' }}>
                         <label style={{ marginRight: '0.5rem' }}>
-                            {t('TeamTimeline.cooking category', '今週の料理')}:
+                            {t('TeamTimeline.cooking category short', '料理')}:
                         </label>
                         <Tabs
                             value={settings.category}
@@ -269,7 +275,16 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                                 <Box
                                                     key={`${recipe.name}-${ingredient.name}`}
                                                     component="span"
-                                                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.2 }}
+                                                    sx={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: 0.2,
+                                                        '& svg': {
+                                                            width: `${RECIPE_ICON_SIZE_PX}px`,
+                                                            height: `${RECIPE_ICON_SIZE_PX}px`,
+                                                        },
+                                                    }}
+                                                    data-testid={`recipe-ingredient-icon-${recipe.name}-${ingredient.name}`}
                                                 >
                                                     <IngredientIcon name={ingredient.name} />
                                                     {ingredient.count}
@@ -283,7 +298,7 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                     type="number"
                                     size="small"
                                     variant="standard"
-                                    value={recipeLevelDrafts[recipe.name] ?? String(settings.recipeLevels[recipe.name] ?? 1)}
+                                    value={recipeLevelDrafts[recipe.name] ?? String(settings.recipeLevels[recipe.name] ?? DEFAULT_RECIPE_LEVEL)}
                                     onChange={(e) => {
                                         handleRecipeLevelInputChange(recipe.name, e.target.value);
                                     }}

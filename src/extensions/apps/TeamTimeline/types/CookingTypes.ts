@@ -53,6 +53,14 @@ export interface CookingIngredientUsage {
     readonly fromInitial: number;
 }
 
+/** 料理直前のバッグ内食材スナップショット */
+export interface CookingBagIngredientSnapshotEntry {
+    /** 食材名 */
+    readonly name: IngredientName;
+    /** その時点のバッグ内総数（ポケモン由来 + 初期食材） */
+    readonly count: number;
+}
+
 /** 各食事の料理結果 */
 export interface CookingEventResult {
     /** 食事が発生したスロットID */
@@ -81,6 +89,8 @@ export interface CookingEventResult {
     readonly tastyChancePercent: number;
     /** この食事で消費した料理パワーアップボーナス */
     readonly cookingPowerUpBonusUsed: number;
+    /** 料理直前のバッグ内食材の内訳 */
+    readonly bagIngredientsBeforeCooking?: readonly CookingBagIngredientSnapshotEntry[];
 }
 
 /** 日ごとの料理サマリー */
@@ -123,13 +133,40 @@ export interface CookingSimulationResult {
     readonly leftoverIngredients: LeftoverIngredients;
     /** 料理EP合計 */
     readonly totalCookingEP: number;
+    /** 初期食材由来EP合計 */
+    readonly totalInitialIngredientEP?: number;
+}
+
+/** 平均表示用: 料理ごとの集計 */
+export interface AverageCookingRecipeSummary {
+    /** レシピ名 */
+    readonly recipeName: string;
+    /** 料理の基礎エナジー */
+    readonly eBase: number;
+    /** 期間あたり平均の調理回数 */
+    readonly averageCount: number;
+    /** 1回あたり平均エナジー */
+    readonly averageCookingEP: number;
+}
+
+/** 平均表示用: 料理関連サマリー */
+export interface AverageCookingSummary {
+    /** 料理ごとの平均集計（基礎エナジー降順） */
+    readonly recipes: readonly AverageCookingRecipeSummary[];
+    /** 期間終了時の余り食材平均 */
+    readonly leftoverIngredients: readonly { readonly name: IngredientName; readonly count: number }[];
+    /** 初期食材由来EP合計の試行平均 */
+    readonly averageInitialIngredientEP?: number;
 }
 
 /** 大成功の基礎確率(%) */
 export const BASE_GREAT_SUCCESS_CHANCE = 10;
 
 /** デフォルトの鍋基礎容量 */
-export const DEFAULT_POT_CAPACITY = 15;
+export const DEFAULT_POT_CAPACITY = 81;
+
+/** レシピレベル未設定時のデフォルト値 */
+export const DEFAULT_RECIPE_LEVEL = 50;
 
 /** デフォルトの料理シミュレーション設定を生成 */
 export function createDefaultCookingSettings(): CookingSimulationSettings {

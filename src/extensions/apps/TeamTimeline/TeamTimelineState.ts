@@ -9,16 +9,19 @@ import {
 import {
     TimeSlot,
     SimulationConfig,
+    PokemonSwap,
     DEFAULT_TIME_SLOTS,
     DEFAULT_SIMULATION_CONFIG,
     clampSimulationDays,
     STORAGE_KEY_SLOTS,
     STORAGE_KEY_CONFIG,
     migrateTimeSlot,
+    SWAP_NONE_POKEMON_ID,
 } from './types/TimeSlotTypes';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
 import { TRIAL_COUNT_OPTIONS } from './types/MultiTrialTypes';
 import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
+import { buildExpandedTimeline } from './utils/TimelineDayExpansion';
 import {
     createDefaultTimelineBonusSettings,
     normalizeTimelineBonusSettings,
@@ -31,6 +34,83 @@ export const STORAGE_KEY_SUMMARY_VALUE_MODE = 'PstTeamTimelineSummaryValueMode';
 export const STORAGE_KEY_SEED_MODE = 'PstTeamTimelineSeedMode';
 export const STORAGE_KEY_TRIAL_COUNT = 'PstTeamTimelineTrialCount';
 
+function buildSwapEventsBySlot(
+    swaps: readonly PokemonSwap[],
+    teamSlotIndex: number
+): Map<string, number[]> {
+    const swapsBySlot = new Map<string, number[]>();
+
+    const addEvent = (dayIndex: number, slotId: string, pokemonId: number) => {
+        const key = `${dayIndex}:${slotId}`;
+        const list = swapsBySlot.get(key) ?? [];
+        list.push(pokemonId);
+        swapsBySlot.set(key, list);
+    };
+
+    swaps.forEach((swap) => {
+        if (swap.teamSlotIndex !== teamSlotIndex) {
+            return;
+        }
+        addEvent(swap.dayIndex, swap.slotId, swap.newPokemonId);
+    });
+
+    swaps.forEach((swap) => {
+        if (swap.teamSlotIndex !== teamSlotIndex) {
+            return;
+        }
+        if (!swap.endSlotId || swap.endDayIndex === undefined || swap.revertPokemonId === undefined) {
+            return;
+        }
+        addEvent(swap.endDayIndex, swap.endSlotId, swap.revertPokemonId);
+    });
+
+    return swapsBySlot;
+}
+
+function resolvePokemonIdBeforeSwap(params: {
+    team: readonly (PokemonBoxItem | null)[];
+    timeSlots: readonly TimeSlot[];
+    simulationDays: number;
+    swaps: readonly PokemonSwap[];
+    teamSlotIndex: number;
+    targetDayIndex: number;
+    targetSlotId: string;
+}): number {
+    const {
+        team,
+        timeSlots,
+        simulationDays,
+        swaps,
+        teamSlotIndex,
+        targetDayIndex,
+        targetSlotId,
+    } = params;
+    const originalPokemonId = team[teamSlotIndex]?.id ?? SWAP_NONE_POKEMON_ID;
+    const expandedTimeline = buildExpandedTimeline([...timeSlots], simulationDays);
+    const targetIndex = expandedTimeline.expandedSlots.findIndex(
+        expandedSlot =>
+            expandedSlot.dayIndex === targetDayIndex &&
+            expandedSlot.originalSlotId === targetSlotId
+    );
+    if (targetIndex <= 0) {
+        return originalPokemonId;
+    }
+
+    const swapsBySlot = buildSwapEventsBySlot(swaps, teamSlotIndex);
+    let currentPokemonId = originalPokemonId;
+
+    for (let i = 0; i < targetIndex; i++) {
+        const expandedSlot = expandedTimeline.expandedSlots[i];
+        const slotEvents = swapsBySlot.get(`${expandedSlot.dayIndex}:${expandedSlot.originalSlotId}`);
+        if (!slotEvents || slotEvents.length === 0) {
+            continue;
+        }
+        currentPokemonId = slotEvents[slotEvents.length - 1];
+    }
+
+    return currentPokemonId;
+}
+
 function getResetSimulationFields(): Pick<
     TeamTimelineState,
     | 'simulationLoading'
@@ -40,6 +120,7 @@ function getResetSimulationFields(): Pick<
     | 'multiTrialSelectedIndex'
     | 'multiTrialAverageDailySummaries'
     | 'multiTrialAverageTeamSummary'
+    | 'multiTrialAverageCookingSummary'
 > {
     return {
         simulationLoading: false,
@@ -49,6 +130,7 @@ function getResetSimulationFields(): Pick<
         multiTrialSelectedIndex: null,
         multiTrialAverageDailySummaries: null,
         multiTrialAverageTeamSummary: null,
+        multiTrialAverageCookingSummary: null,
     };
 }
 
@@ -83,6 +165,7 @@ export function createInitialState(): TeamTimelineState {
         multiTrialSelectedIndex: null,
         multiTrialAverageDailySummaries: null,
         multiTrialAverageTeamSummary: null,
+        multiTrialAverageCookingSummary: null,
         bonusSettings: createDefaultTimelineBonusSettings(),
         syncWithIvParameter: true,
         cookingSettings: createDefaultCookingSettings(),
@@ -194,6 +277,7 @@ export function teamTimelineReducer(
                 multiTrialSelectedIndex: null,
                 multiTrialAverageDailySummaries: null,
                 multiTrialAverageTeamSummary: null,
+                multiTrialAverageCookingSummary: null,
             };
         case 'setSimulationPreviewResult':
             return {
@@ -271,23 +355,78 @@ export function teamTimelineReducer(
             ) {
                 return state;
             }
+
+            const teamSlotIndex = state.swapTargetTeamIndex;
+            const targetDayIndex = state.swapTargetDayIndex;
+            const targetSlotId = state.swapTargetSlotId;
+
+            // Remove existing swaps at the same position (and any repeat-generated swaps
+            // for the same teamSlotIndex/slotId on later days if we are re-creating them)
             const filteredSwaps = state.swaps.filter(
                 s => !(
-                    s.dayIndex === state.swapTargetDayIndex &&
-                    s.slotId === state.swapTargetSlotId &&
-                    s.teamSlotIndex === state.swapTargetTeamIndex
+                    s.dayIndex === targetDayIndex &&
+                    s.slotId === targetSlotId &&
+                    s.teamSlotIndex === teamSlotIndex
                 )
             );
-            const newSwap = {
-                dayIndex: state.swapTargetDayIndex,
-                slotId: state.swapTargetSlotId,
-                teamSlotIndex: state.swapTargetTeamIndex,
+            const swapsWithoutOldRepeats = action.repeat
+                ? filteredSwaps.filter(
+                    s => !(
+                        s.slotId === targetSlotId &&
+                        s.teamSlotIndex === teamSlotIndex &&
+                        s.isRepeatGenerated === true
+                    )
+                )
+                : filteredSwaps;
+            const swapsForResolution: PokemonSwap[] = [...swapsWithoutOldRepeats];
+
+            const resolveRevertPokemonId = (dayIndex: number): number => resolvePokemonIdBeforeSwap({
+                team: state.team,
+                timeSlots: state.timeSlots,
+                simulationDays: state.simulationConfig.simulationDays,
+                swaps: swapsForResolution,
+                teamSlotIndex,
+                targetDayIndex: dayIndex,
+                targetSlotId,
+            });
+
+            const newSwap: PokemonSwap = {
+                dayIndex: targetDayIndex,
+                slotId: targetSlotId,
+                teamSlotIndex,
                 newPokemonId: state.pendingSwapPokemonId,
                 initialEnergy: action.initialEnergy,
+                endSlotId: action.endSlotId,
+                endDayIndex: action.endDayIndex,
+                revertPokemonId: resolveRevertPokemonId(targetDayIndex),
             };
+            const allNewSwaps: PokemonSwap[] = [newSwap];
+            swapsForResolution.push(newSwap);
+
+            if (action.repeat) {
+                const simulationDays = state.simulationConfig.simulationDays;
+                for (let d = targetDayIndex + 1; d < simulationDays; d++) {
+                    const repeatedSwap: PokemonSwap = {
+                        dayIndex: d,
+                        slotId: targetSlotId,
+                        teamSlotIndex,
+                        newPokemonId: state.pendingSwapPokemonId,
+                        initialEnergy: action.initialEnergy,
+                        endSlotId: action.endSlotId,
+                        endDayIndex: action.endDayIndex !== undefined
+                            ? action.endDayIndex + (d - targetDayIndex)
+                            : undefined,
+                        isRepeatGenerated: true,
+                        revertPokemonId: resolveRevertPokemonId(d),
+                    };
+                    allNewSwaps.push(repeatedSwap);
+                    swapsForResolution.push(repeatedSwap);
+                }
+            }
+
             return {
                 ...state,
-                swaps: [...filteredSwaps, newSwap],
+                swaps: [...swapsWithoutOldRepeats, ...allNewSwaps],
                 swapTargetSlotId: null,
                 swapTargetTeamIndex: null,
                 swapTargetDayIndex: null,
@@ -331,12 +470,22 @@ export function teamTimelineReducer(
         }
         case 'removeSwap': {
             const newSwaps = state.swaps.filter(
-                swap =>
-                    !(
-                        swap.dayIndex === action.dayIndex &&
+                (swap) => {
+                    const isSameSlotTarget =
                         swap.slotId === action.slotId &&
-                        swap.teamSlotIndex === action.teamIndex
-                    )
+                        swap.teamSlotIndex === action.teamIndex;
+                    if (!isSameSlotTarget) {
+                        return true;
+                    }
+
+                    if (action.removeFutureRepeats && action.pokemonId !== undefined) {
+                        const isSamePokemon = swap.newPokemonId === action.pokemonId;
+                        const isCurrentOrFuture = swap.dayIndex >= action.dayIndex;
+                        return !(isSamePokemon && isCurrentOrFuture);
+                    }
+
+                    return swap.dayIndex !== action.dayIndex;
+                }
             );
             return {
                 ...state,
@@ -364,6 +513,7 @@ export function teamTimelineReducer(
                 multiTrialSelectedIndex: action.medianIndex,
                 multiTrialAverageDailySummaries: action.averageDailySummaries,
                 multiTrialAverageTeamSummary: action.averageTeamSummary,
+                multiTrialAverageCookingSummary: action.averageCookingSummary,
                 simulationLoading: false,
             };
         case 'setMultiTrialSelectedIndex':
@@ -375,6 +525,7 @@ export function teamTimelineReducer(
                 multiTrialSelectedIndex: null,
                 multiTrialAverageDailySummaries: null,
                 multiTrialAverageTeamSummary: null,
+                multiTrialAverageCookingSummary: null,
                 simulationResult: null,
             };
         case 'setBonusSettings':

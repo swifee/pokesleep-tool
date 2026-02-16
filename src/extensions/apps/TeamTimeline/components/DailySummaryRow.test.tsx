@@ -240,6 +240,28 @@ describe('DailySummaryRow', () => {
         expect(text).toContain('食材合計: 5');
     });
 
+    it('renders berry before skill in individual card EP and count lines', () => {
+        const items = [createPokemon('Pikachu', 20, 'OrderMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+            />
+        );
+
+        const berryEpLine = screen.getByTestId(`daily-summary-ep-berry-${items[0].id}`);
+        const skillEpLine = screen.getByTestId(`daily-summary-ep-skill-${items[0].id}`);
+        const berryCountLine = screen.getByTestId(`daily-summary-count-berry-${items[0].id}`);
+        const skillCountLine = screen.getByTestId(`daily-summary-count-skill-${items[0].id}`);
+
+        expect(berryEpLine.compareDocumentPosition(skillEpLine) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(berryCountLine.compareDocumentPosition(skillCountLine) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    });
+
     it('opens skill ingredient popover by clicking the skill count number', () => {
         const items = [createPokemon('Pikachu', 20, 'SkillIngMon')];
         const box = new PokemonBox(items);

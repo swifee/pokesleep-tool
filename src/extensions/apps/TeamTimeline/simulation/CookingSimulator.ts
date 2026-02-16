@@ -4,9 +4,11 @@ import { recipeLevelBonus } from '../../../../util/PokemonStrength';
 import { getRecipesByCategory } from '../data/RecipeData';
 import {
     BASE_GREAT_SUCCESS_CHANCE,
+    CookingBagIngredientSnapshotEntry,
     CookingCategory,
     CookingEventResult,
     CookingIngredientUsage,
+    DEFAULT_RECIPE_LEVEL,
     IngredientBag,
     LeftoverIngredients,
     PokemonCookingAttribution,
@@ -14,6 +16,8 @@ import {
 } from '../types/CookingTypes';
 import { MealType } from '../types/TimeSlotTypes';
 import { SeededRandom } from './SeededRandom';
+
+const BAG_COUNT_EPSILON = 1e-9;
 
 /**
  * レシピ選択の結果
@@ -140,6 +144,33 @@ function getAvailableCount(bag: IngredientBag, name: IngredientName): number {
 }
 
 /**
+ * 料理実行直前のバッグ内食材の内訳をスナップショットする
+ *
+ * @param bag 食材バッグ
+ * @returns 食材ごとの総数（0より大きいもののみ）
+ */
+function createBagIngredientSnapshot(
+    bag: IngredientBag,
+): CookingBagIngredientSnapshotEntry[] {
+    const snapshot: CookingBagIngredientSnapshotEntry[] = [];
+
+    for (const [name, entry] of bag) {
+        let totalCount = entry.initialCount;
+        for (const count of entry.pokemonSources.values()) {
+            totalCount += count;
+        }
+        if (totalCount > BAG_COUNT_EPSILON) {
+            snapshot.push({
+                name,
+                count: totalCount,
+            });
+        }
+    }
+
+    return snapshot;
+}
+
+/**
  * 最適なレシピを選択する
  *
  * 指定カテゴリのレシピの中から、鍋容量と食材の制約を満たし、
@@ -190,7 +221,7 @@ export function selectBestRecipe(
             (sum, ing) => sum + ingredientStrength[ing.name] * ing.count, 0,
         );
         const eBase = Math.round(rawStrength * (1 + recipe.recipeBonus));
-        const level = recipeLevels[recipe.name] ?? 1;
+        const level = recipeLevels[recipe.name] ?? DEFAULT_RECIPE_LEVEL;
         const levelBonus = recipeLevelBonus[Math.min(level, 65)] ?? 0;
         const eDisplay = eBase + Math.round(eBase * levelBonus / 100);
         const eFinal = Math.round(
@@ -300,6 +331,7 @@ export function executeMealCooking(params: ExecuteMealCookingParams): ExecuteMea
     const effectivePotCapacity = calculateEffectivePotCapacity(
         basePotCapacity, isGoodCampTicket, cookingPowerUpBonus,
     );
+    const bagIngredientsBeforeCooking = createBagIngredientSnapshot(bag);
 
     const selected = selectBestRecipe(
         category, bag, effectivePotCapacity, recipeLevels, fieldBonus, eventBonus,
@@ -321,6 +353,7 @@ export function executeMealCooking(params: ExecuteMealCookingParams): ExecuteMea
             effectivePotCapacity,
             tastyChancePercent: BASE_GREAT_SUCCESS_CHANCE + tastyChanceAccumulated,
             cookingPowerUpBonusUsed: cookingPowerUpBonus,
+            bagIngredientsBeforeCooking,
         };
         return { result, newTastyChanceAccumulated: tastyChanceAccumulated };
     }
@@ -358,6 +391,7 @@ export function executeMealCooking(params: ExecuteMealCookingParams): ExecuteMea
         effectivePotCapacity,
         tastyChancePercent,
         cookingPowerUpBonusUsed: cookingPowerUpBonus,
+        bagIngredientsBeforeCooking,
     };
 
     return { result, newTastyChanceAccumulated };
@@ -452,4 +486,41 @@ export function computePokemonCookingAttributions(
     }
 
     return attributions;
+}
+
+/**
+ * 初期食材由来の料理EP合計を計算する
+ *
+ * 各料理イベントで使われた食材のうち、初期食材から消費した割合を
+ * 食材エナジー比で算出し、料理EPへ按分する。
+ *
+ * @param events 料理イベント結果の配列
+ * @returns 初期食材由来EP合計
+ */
+export function computeInitialIngredientAttributedEP(
+    events: readonly CookingEventResult[],
+): number {
+    let totalInitialIngredientEP = 0;
+
+    for (const event of events) {
+        if (event.cookingEP === 0 || event.ingredientsUsed.length === 0) {
+            continue;
+        }
+
+        let totalIngredientStrength = 0;
+        let initialIngredientStrength = 0;
+        for (const usage of event.ingredientsUsed) {
+            const unitStrength = ingredientStrength[usage.name];
+            totalIngredientStrength += unitStrength * usage.count;
+            initialIngredientStrength += unitStrength * usage.fromInitial;
+        }
+
+        if (totalIngredientStrength === 0 || initialIngredientStrength <= 0) {
+            continue;
+        }
+
+        totalInitialIngredientEP += event.cookingEP * (initialIngredientStrength / totalIngredientStrength);
+    }
+
+    return totalInitialIngredientEP;
 }

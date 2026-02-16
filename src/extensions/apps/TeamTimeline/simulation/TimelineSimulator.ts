@@ -47,7 +47,10 @@ import {
     executeMealCooking,
     computeLeftoverIngredients,
     computePokemonCookingAttributions,
+    computeInitialIngredientAttributedEP,
 } from './CookingSimulator';
+
+const INACTIVE_WAKE_RECOVERY_DIVISOR = 20;
 
 export interface SimulationAnalysisOptions {
     disabledPokemonIds?: readonly number[];
@@ -315,6 +318,7 @@ function runCookingPostProcess(
     const pokemonAttributions = computePokemonCookingAttributions(allEvents);
 
     const totalCookingEP = allEvents.reduce((sum, e) => sum + e.cookingEP, 0);
+    const totalInitialIngredientEP = computeInitialIngredientAttributedEP(allEvents);
 
     return {
         events: allEvents,
@@ -322,6 +326,7 @@ function runCookingPostProcess(
         pokemonAttributions,
         leftoverIngredients,
         totalCookingEP,
+        totalInitialIngredientEP,
     };
 }
 
@@ -389,6 +394,23 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         const list = swapsBySlot.get(key) || [];
         list.push(swap);
         swapsBySlot.set(key, list);
+    });
+
+    // 4.1 endSlotId がある swap に対し、終了時点の revert swap を自動生成
+    swaps.forEach(swap => {
+        if (swap.endSlotId && swap.endDayIndex !== undefined && swap.revertPokemonId !== undefined) {
+            const revertKey = `${swap.endDayIndex}:${swap.endSlotId}`;
+            const revertSwap: PokemonSwap = {
+                dayIndex: swap.endDayIndex,
+                slotId: swap.endSlotId,
+                teamSlotIndex: swap.teamSlotIndex,
+                newPokemonId: swap.revertPokemonId,
+                initialEnergy: 0,  // Will be overridden by pokemonLastEnergy tracking
+            };
+            const list = swapsBySlot.get(revertKey) || [];
+            list.push(revertSwap);
+            swapsBySlot.set(revertKey, list);
+        }
     });
 
     // 5. 現在のチームを追跡（入れ替えで変化する）
@@ -474,13 +496,50 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 
         // 睡眠開始を追跡
         if (getDisplayLabel(slot) === 'sleep') {
+            // 非編成ポケモンの起床回復計算にも使うため、既知の全ポケモンで睡眠開始時刻を更新
+            pokemonStates.forEach(state => {
+                state.sleepStartTime = slot.time;
+            });
             for (const pokemon of currentActiveTeam) {
                 const state = pokemonStates.get(pokemon.id);
                 if (state) {
-                    state.sleepStartTime = slot.time;
                     state.berryBurstDisguiseLocked = false;
                 }
             }
+        }
+
+        // 非編成ポケモンは、起床ごとに通常起床回復量の 1/20 だけ自然回復させる
+        if (getDisplayLabel(slot) === 'wake') {
+            const currentAssignedTeamMemberIds = new Set<number>(
+                currentTargetableTeamBase.map(pokemon => pokemon.id)
+            );
+
+            pokemonStates.forEach(state => {
+                if (currentAssignedTeamMemberIds.has(state.pokemon.id)) {
+                    return;
+                }
+                if (!state.sleepStartTime) {
+                    return;
+                }
+
+                const sleepMinutes = calculateDuration(state.sleepStartTime, slot.time);
+                const passiveWakeInput: WakeRecoveryInput = {
+                    sleepMinutes,
+                    recoveryFactor: state.pokemon.iv.nature.energyRecoveryFactor,
+                    hasEnergyRecoveryBonus: hasEnergyRecoveryBonus(state.pokemon, energyRecoveryOptions),
+                    teamErbCount: 0,
+                    usedSleepScore: state.usedSleepScore,
+                };
+                const passiveWakeOutput = calculateWakeRecovery(passiveWakeInput);
+                state.usedSleepScore += passiveWakeOutput.sleepScoreUsed;
+                state.sleepStartTime = null;
+
+                if (state.currentEnergy < ENERGY_MAX_NORMAL) {
+                    const passiveRecovery = passiveWakeOutput.recoveredEnergy / INACTIVE_WAKE_RECOVERY_DIVISOR;
+                    state.currentEnergy = Math.min(state.currentEnergy + passiveRecovery, ENERGY_MAX_NORMAL);
+                    pokemonLastEnergy.set(state.pokemon.id, state.currentEnergy);
+                }
+            });
         }
 
         // Phase 1: 各ポケモンのおてつだい計算

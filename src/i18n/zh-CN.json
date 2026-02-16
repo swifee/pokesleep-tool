@@ -265,6 +265,7 @@
             "individual results stacked": "个别\n成绩",
             "team average": "团队平均",
             "set initial energy": "设置初始体力",
+            "swap settings": "替换设置",
             "energy": "体力",
             "confirm": "确定",
             "sleep state sleep": "就寝",
@@ -278,7 +279,12 @@
         "value mode period total": "期间合计",
         "value mode daily average": "1日平均",
         "resimulation changed notice": "成员编成已变更。",
-        "resimulate": "重新模拟"
+        "resimulate": "重新模拟",
+        "cooking category short": "料理",
+        "swap until suffix": "为止",
+        "swap until not set": "未设定",
+        "swap repeat": "重复",
+        "swap next day prefix": "{{count}}天后 "
     },
         "rp collection": "食材几率、技能几率参照了 RP Collection 的数据。",
         "movie detail": "订阅频道・点赞・评论・Hype等都会给我带来很大的鼓励！",

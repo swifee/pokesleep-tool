@@ -31,6 +31,28 @@ describe('TimelineCell swap ui', () => {
         expect(container.querySelector('.swap-trigger')).toBeNull();
     });
 
+    it('calls onRemoveSwapClick when x button is pressed and does not open swap selector', () => {
+        const onSwapClick = vi.fn();
+        const onRemoveSwapClick = vi.fn();
+
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                hasSwap
+                swappedPokemonName="デデンネ"
+                onSwapClick={onSwapClick}
+                onRemoveSwapClick={onRemoveSwapClick}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: '入れ替え設定を解除' }));
+        expect(onRemoveSwapClick).toHaveBeenCalledTimes(1);
+        expect(onSwapClick).not.toHaveBeenCalled();
+    });
+
     it('shows swap icon button when no swap is configured', () => {
         const { container } = render(
             <TimelineCell

@@ -5,7 +5,7 @@ import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import SubSkill from '../../../../util/SubSkill';
 import SubSkillList from '../../../../util/SubSkillList';
 import { loadHelpEventBonus } from '../../../../data/events';
-import { PokemonSwap, SimulationResult, TimeSlot } from '../types/TimeSlotTypes';
+import { PokemonSwap, SimulationResult, SWAP_NONE_POKEMON_ID, TimeSlot } from '../types/TimeSlotTypes';
 import { createDefaultTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
 
 const processSkillTriggersMock = vi.fn();
@@ -334,6 +334,142 @@ describe('TimelineSimulator', () => {
 
         const endPokemonId = result.slotResults.get('sleep-end__day0')?.[0]?.pokemonId;
         expect(endPokemonId).toBe(pokemonB.id);
+    });
+
+    it('endSlotId指定時は指定時刻に投入前ポケモンへ復帰する', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemonA = createBerryBurstDisguisePokemon(2);
+        const pokemonB = createBerryBurstDisguisePokemon(4);
+        const box = new PokemonBox([pokemonA, pokemonB]);
+
+        const result = runSimulation({
+            team: [pokemonA, null, null, null, null],
+            timeSlots: [
+                { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+                { id: 'lunch', time: '12:00', sleepState: 'none', hasMeal: false },
+                { id: 'dinner', time: '18:00', sleepState: 'none', hasMeal: false },
+            ],
+            config: { seed: 51234, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            swaps: [{
+                dayIndex: 0,
+                slotId: 'wake',
+                teamSlotIndex: 0,
+                newPokemonId: pokemonB.id,
+                initialEnergy: 80,
+                endSlotId: 'dinner',
+                endDayIndex: 0,
+                revertPokemonId: pokemonA.id,
+            }],
+            box,
+        });
+
+        const lunchPokemonId = result.slotResults.get('lunch__day0')?.[0]?.pokemonId;
+        const dinnerPokemonId = result.slotResults.get('dinner__day0')?.[0]?.pokemonId;
+        const dayEndPokemonId = result.slotResults.get('sleep-end__day0')?.[0]?.pokemonId;
+
+        expect(lunchPokemonId).toBe(pokemonB.id);
+        expect(dinnerPokemonId).toBe(pokemonB.id);
+        expect(dayEndPokemonId).toBe(pokemonA.id);
+    });
+
+    it('再編成時は前回編成時の最終げんきを引き継ぐ', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemonA = createBerryBurstDisguisePokemon(2);
+        const box = new PokemonBox([pokemonA]);
+
+        const result = runSimulation({
+            team: [pokemonA, null, null, null, null],
+            timeSlots: [
+                { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+                { id: 'lunch', time: '12:00', sleepState: 'none', hasMeal: false },
+                { id: 'dinner', time: '18:00', sleepState: 'none', hasMeal: false },
+            ],
+            config: { seed: 14567, initialEnergy: 40, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            swaps: [
+                {
+                    dayIndex: 0,
+                    slotId: 'wake',
+                    teamSlotIndex: 0,
+                    newPokemonId: SWAP_NONE_POKEMON_ID,
+                    initialEnergy: 0,
+                },
+                {
+                    dayIndex: 0,
+                    slotId: 'lunch',
+                    teamSlotIndex: 0,
+                    newPokemonId: pokemonA.id,
+                    initialEnergy: 10,
+                },
+            ],
+            box,
+        });
+
+        const wakeResult = result.slotResults.get('wake__day0')?.find(r => r.pokemonId === pokemonA.id);
+        const dinnerResult = result.slotResults.get('dinner__day0')?.find(r => r.pokemonId === pokemonA.id);
+
+        expect(wakeResult).toBeDefined();
+        expect(dinnerResult).toBeDefined();
+        expect(dinnerResult!.energyStart).toBeCloseTo(wakeResult!.energyEnd, 6);
+        expect(dinnerResult!.energyStart).toBeGreaterThan(10);
+    });
+
+    it('非編成中に起床が発生した場合は1/20回復して再編成時に反映される', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemonA = createBerryBurstDisguisePokemon(2);
+        const box = new PokemonBox([pokemonA]);
+
+        const result = runSimulation({
+            team: [pokemonA, null, null, null, null],
+            timeSlots: [
+                { id: 'sleep', time: '23:55', sleepState: 'sleep', hasMeal: false },
+                { id: 'wake', time: '00:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 24680, initialEnergy: 20, simulationDays: 2 },
+            bonusSettings: defaultBonusSettings,
+            swaps: [
+                {
+                    dayIndex: 0,
+                    slotId: 'wake',
+                    teamSlotIndex: 0,
+                    newPokemonId: SWAP_NONE_POKEMON_ID,
+                    initialEnergy: 0,
+                },
+                {
+                    dayIndex: 1,
+                    slotId: 'wake',
+                    teamSlotIndex: 0,
+                    newPokemonId: pokemonA.id,
+                    initialEnergy: 1,
+                },
+            ],
+            box,
+        });
+
+        const day0WakeResult = result.slotResults.get('wake__day0')?.find(r => r.pokemonId === pokemonA.id);
+        const day1SleepEndResult = result.slotResults
+            .get('sleep-end__day1')
+            ?.find(r => r.pokemonId === pokemonA.id);
+
+        expect(day0WakeResult).toBeDefined();
+        expect(day1SleepEndResult).toBeDefined();
+        expect(day1SleepEndResult!.energyStart).toBeGreaterThan(day0WakeResult!.energyEnd);
+        expect(day1SleepEndResult!.energyStart).toBeLessThanOrEqual(100);
     });
 
     it('Helping Bonusは自分自身を含めておてつだい速度に反映される', () => {
