@@ -81,6 +81,8 @@ export interface CookingEventResult {
     readonly eFinal: number;
     /** 使用食材の内訳 */
     readonly ingredientsUsed: readonly CookingIngredientUsage[];
+    /** 鍋空きに後配分した追加食材の内訳 */
+    readonly extraIngredientsUsed?: readonly CookingIngredientUsage[];
     /** 鍋の空き容量 */
     readonly remainingPotCapacity: number;
     /** 有効鍋容量(基礎 × キャンチケ + 料理パワーアップ) */

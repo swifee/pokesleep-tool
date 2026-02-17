@@ -55,6 +55,23 @@ interface ExecuteMealCookingResult {
     newTastyChanceAccumulated: number;
 }
 
+export interface PlannedExtraIngredient {
+    name: IngredientName;
+    count: number;
+}
+
+type IngredientCountMap = Map<IngredientName, number>;
+
+const EXTRA_INGREDIENT_PRIORITY: readonly IngredientName[] = Object.entries(ingredientStrength)
+    .filter(([, strength]) => strength > 0)
+    .sort(([nameA, strengthA], [nameB, strengthB]) => {
+        if (strengthB !== strengthA) {
+            return strengthB - strengthA;
+        }
+        return nameA.localeCompare(nameB);
+    })
+    .map(([name]) => name as IngredientName);
+
 /**
  * 初期食材から食材バッグを作成する
  *
@@ -132,7 +149,7 @@ export function calculateEffectivePotCapacity(
  * @param name 食材名
  * @returns バッグ内の合計数（ポケモン由来 + 初期食材）
  */
-function getAvailableCount(bag: IngredientBag, name: IngredientName): number {
+export function getAvailableIngredientCount(bag: IngredientBag, name: IngredientName): number {
     const entry = bag.get(name);
     if (entry == null) return 0;
 
@@ -141,6 +158,133 @@ function getAvailableCount(bag: IngredientBag, name: IngredientName): number {
         pokemonTotal += count;
     }
     return pokemonTotal + entry.initialCount;
+}
+
+function snapshotToCountMap(
+    snapshot: readonly CookingBagIngredientSnapshotEntry[] | undefined,
+): IngredientCountMap {
+    const map: IngredientCountMap = new Map();
+    if (!snapshot) {
+        return map;
+    }
+    for (const ingredient of snapshot) {
+        if (ingredient.count > BAG_COUNT_EPSILON) {
+            map.set(ingredient.name, ingredient.count);
+        }
+    }
+    return map;
+}
+
+function usagesToCountMap(
+    usages: readonly CookingIngredientUsage[],
+): IngredientCountMap {
+    const map: IngredientCountMap = new Map();
+    for (const usage of usages) {
+        map.set(usage.name, (map.get(usage.name) ?? 0) + usage.count);
+    }
+    return map;
+}
+
+/**
+ * 各料理イベントの鍋空きに投入する追加食材を計画する
+ *
+ * ルール:
+ * - その料理時点で所持していた食材のみを使用する
+ * - 未来のベース料理成立を壊さない（時系列制約）
+ * - 食材の基礎エナジーが高い順で投入
+ */
+export function planExtraIngredientsByEvent(
+    events: readonly CookingEventResult[],
+): readonly PlannedExtraIngredient[][] {
+    if (events.length === 0) {
+        return [];
+    }
+
+    const slacks: IngredientCountMap[] = events.map((event) => {
+        const before = snapshotToCountMap(event.bagIngredientsBeforeCooking);
+        const demand = usagesToCountMap(event.ingredientsUsed);
+        const ingredientNames = new Set<IngredientName>([
+            ...before.keys(),
+            ...demand.keys(),
+        ]);
+
+        const slackMap: IngredientCountMap = new Map();
+        for (const name of ingredientNames) {
+            const slack = (before.get(name) ?? 0) - (demand.get(name) ?? 0);
+            if (slack > BAG_COUNT_EPSILON) {
+                slackMap.set(name, slack);
+            }
+        }
+        return slackMap;
+    });
+
+    const minSuffixSlack: IngredientCountMap[] = new Array(events.length);
+    for (let i = events.length - 1; i >= 0; i--) {
+        const current = slacks[i] ?? new Map();
+        if (i === events.length - 1) {
+            minSuffixSlack[i] = new Map(current);
+            continue;
+        }
+
+        const next = minSuffixSlack[i + 1] ?? new Map();
+        const mergedNames = new Set<IngredientName>([
+            ...current.keys(),
+            ...next.keys(),
+        ]);
+        const merged: IngredientCountMap = new Map();
+        for (const name of mergedNames) {
+            const currentSlack = current.get(name) ?? 0;
+            const nextSlack = next.get(name) ?? 0;
+            const minSlack = Math.min(currentSlack, nextSlack);
+            if (minSlack > BAG_COUNT_EPSILON) {
+                merged.set(name, minSlack);
+            }
+        }
+        minSuffixSlack[i] = merged;
+    }
+
+    const consumedPrefix: IngredientCountMap = new Map();
+    const plan: PlannedExtraIngredient[][] = [];
+
+    for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        let remainingPotCapacity = event.remainingPotCapacity;
+        const allocation: PlannedExtraIngredient[] = [];
+
+        if (remainingPotCapacity <= BAG_COUNT_EPSILON) {
+            plan.push(allocation);
+            continue;
+        }
+
+        const currentSlack = slacks[i] ?? new Map();
+        const currentMinSuffix = minSuffixSlack[i] ?? new Map();
+
+        for (const ingredientName of EXTRA_INGREDIENT_PRIORITY) {
+            if (remainingPotCapacity <= BAG_COUNT_EPSILON) {
+                break;
+            }
+
+            const alreadyConsumed = consumedPrefix.get(ingredientName) ?? 0;
+            const byCurrent = (currentSlack.get(ingredientName) ?? 0) - alreadyConsumed;
+            const byFuture = (currentMinSuffix.get(ingredientName) ?? 0) - alreadyConsumed;
+            const allocatable = Math.min(byCurrent, byFuture, remainingPotCapacity);
+
+            if (allocatable <= BAG_COUNT_EPSILON) {
+                continue;
+            }
+
+            allocation.push({
+                name: ingredientName,
+                count: allocatable,
+            });
+            consumedPrefix.set(ingredientName, alreadyConsumed + allocatable);
+            remainingPotCapacity -= allocatable;
+        }
+
+        plan.push(allocation);
+    }
+
+    return plan;
 }
 
 /**
@@ -207,7 +351,7 @@ export function selectBestRecipe(
         // バッグに十分な食材があることを確認
         let feasible = true;
         for (const ing of recipe.ingredients) {
-            if (getAvailableCount(bag, ing.name) < ing.count) {
+            if (getAvailableIngredientCount(bag, ing.name) < ing.count) {
                 feasible = false;
                 break;
             }
@@ -251,54 +395,73 @@ export function deductIngredientsFromBag(
     bag: IngredientBag,
     recipe: RecipeDefinition,
 ): CookingIngredientUsage[] {
-    const usages: CookingIngredientUsage[] = [];
+    return deductIngredientCountsFromBag(
+        bag,
+        recipe.ingredients.map((ingredient) => ({
+            name: ingredient.name,
+            count: ingredient.count,
+        })),
+    );
+}
 
-    for (const { name, count: required } of recipe.ingredients) {
-        const entry = bag.get(name);
-        if (entry == null) {
-            // バッグにエントリがない場合（通常は発生しないがガード）
-            usages.push({
-                name,
-                count: required,
-                pokemonAttribution: new Map(),
-                fromInitial: required,
-            });
-            continue;
-        }
-
-        // ポケモン由来の合計数を計算
-        let pokemonTotal = 0;
-        for (const c of entry.pokemonSources.values()) {
-            pokemonTotal += c;
-        }
-
-        const pokemonAttribution = new Map<number, number>();
-        let fromInitial = 0;
-
-        if (pokemonTotal >= required) {
-            // ポケモン由来だけで足りる場合: 比例配分で消費
-            for (const [pokemonId, pokemonCount] of entry.pokemonSources) {
-                const ratio = pokemonCount / pokemonTotal;
-                const deduction = required * ratio;
-                pokemonAttribution.set(pokemonId, deduction);
-                entry.pokemonSources.set(pokemonId, pokemonCount - deduction);
-            }
-        } else {
-            // ポケモン由来では不足: 全量消費し、残りは初期食材から
-            for (const [pokemonId, pokemonCount] of entry.pokemonSources) {
-                pokemonAttribution.set(pokemonId, pokemonCount);
-                entry.pokemonSources.set(pokemonId, 0);
-            }
-            fromInitial = required - pokemonTotal;
-            entry.initialCount -= fromInitial;
-        }
-
-        usages.push({
+function deductIngredientFromBag(
+    bag: IngredientBag,
+    name: IngredientName,
+    required: number,
+): CookingIngredientUsage {
+    const entry = bag.get(name);
+    if (entry == null) {
+        return {
             name,
             count: required,
-            pokemonAttribution,
-            fromInitial,
-        });
+            pokemonAttribution: new Map(),
+            fromInitial: required,
+        };
+    }
+
+    let pokemonTotal = 0;
+    for (const c of entry.pokemonSources.values()) {
+        pokemonTotal += c;
+    }
+
+    const pokemonAttribution = new Map<number, number>();
+    let fromInitial = 0;
+
+    if (pokemonTotal >= required) {
+        for (const [pokemonId, pokemonCount] of entry.pokemonSources) {
+            const ratio = pokemonCount / pokemonTotal;
+            const deduction = required * ratio;
+            pokemonAttribution.set(pokemonId, deduction);
+            entry.pokemonSources.set(pokemonId, pokemonCount - deduction);
+        }
+    } else {
+        for (const [pokemonId, pokemonCount] of entry.pokemonSources) {
+            pokemonAttribution.set(pokemonId, pokemonCount);
+            entry.pokemonSources.set(pokemonId, 0);
+        }
+        fromInitial = required - pokemonTotal;
+        entry.initialCount -= fromInitial;
+    }
+
+    return {
+        name,
+        count: required,
+        pokemonAttribution,
+        fromInitial,
+    };
+}
+
+export function deductIngredientCountsFromBag(
+    bag: IngredientBag,
+    ingredientCounts: readonly { name: IngredientName; count: number }[],
+): CookingIngredientUsage[] {
+    const usages: CookingIngredientUsage[] = [];
+
+    for (const { name, count } of ingredientCounts) {
+        if (count <= BAG_COUNT_EPSILON) {
+            continue;
+        }
+        usages.push(deductIngredientFromBag(bag, name, count));
     }
 
     return usages;
@@ -339,23 +502,27 @@ export function executeMealCooking(params: ExecuteMealCookingParams): ExecuteMea
 
     // 作れるレシピがない場合はスキップ結果を返す
     if (selected == null) {
+        const tastyChancePercent = BASE_GREAT_SUCCESS_CHANCE + tastyChanceAccumulated;
+        const isGreatSuccess = random.chance(tastyChancePercent / 100);
+        const newTastyChanceAccumulated = isGreatSuccess ? 0 : tastyChanceAccumulated;
         const result: CookingEventResult = {
             mealSlotId,
             mealType,
             recipeName: null,
-            isGreatSuccess: false,
+            isGreatSuccess,
             cookingEP: 0,
             eBase: 0,
             eDisplay: 0,
             eFinal: 0,
             ingredientsUsed: [],
+            extraIngredientsUsed: [],
             remainingPotCapacity: effectivePotCapacity,
             effectivePotCapacity,
-            tastyChancePercent: BASE_GREAT_SUCCESS_CHANCE + tastyChanceAccumulated,
+            tastyChancePercent,
             cookingPowerUpBonusUsed: cookingPowerUpBonus,
             bagIngredientsBeforeCooking,
         };
-        return { result, newTastyChanceAccumulated: tastyChanceAccumulated };
+        return { result, newTastyChanceAccumulated };
     }
 
     // 食材を消費
@@ -387,6 +554,7 @@ export function executeMealCooking(params: ExecuteMealCookingParams): ExecuteMea
         eDisplay: selected.eDisplay,
         eFinal: selected.eFinal,
         ingredientsUsed,
+        extraIngredientsUsed: [],
         remainingPotCapacity,
         effectivePotCapacity,
         tastyChancePercent,
@@ -451,13 +619,14 @@ export function computePokemonCookingAttributions(
     const attributionMap = new Map<number, number>();
 
     for (const event of events) {
-        if (event.cookingEP === 0 || event.ingredientsUsed.length === 0) {
+        const allUsages = [...event.ingredientsUsed, ...(event.extraIngredientsUsed ?? [])];
+        if (event.cookingEP === 0 || allUsages.length === 0) {
             continue;
         }
 
         // このイベントの食材エナジー合計を計算
         let totalIngredientStrength = 0;
-        for (const usage of event.ingredientsUsed) {
+        for (const usage of allUsages) {
             totalIngredientStrength += ingredientStrength[usage.name] * usage.count;
         }
 
@@ -466,7 +635,7 @@ export function computePokemonCookingAttributions(
         }
 
         // 各ポケモンの貢献度を計算
-        for (const usage of event.ingredientsUsed) {
+        for (const usage of allUsages) {
             const unitStrength = ingredientStrength[usage.name];
 
             for (const [pokemonId, pokemonCount] of usage.pokemonAttribution) {
@@ -503,13 +672,14 @@ export function computeInitialIngredientAttributedEP(
     let totalInitialIngredientEP = 0;
 
     for (const event of events) {
-        if (event.cookingEP === 0 || event.ingredientsUsed.length === 0) {
+        const allUsages = [...event.ingredientsUsed, ...(event.extraIngredientsUsed ?? [])];
+        if (event.cookingEP === 0 || allUsages.length === 0) {
             continue;
         }
 
         let totalIngredientStrength = 0;
         let initialIngredientStrength = 0;
-        for (const usage of event.ingredientsUsed) {
+        for (const usage of allUsages) {
             const unitStrength = ingredientStrength[usage.name];
             totalIngredientStrength += unitStrength * usage.count;
             initialIngredientStrength += unitStrength * usage.fromInitial;

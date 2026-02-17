@@ -26,6 +26,9 @@ const CookingResultRow = React.memo(({ event, teamSize }: CookingResultRowProps)
     const usedIngredients = sortIngredientsByCountDesc(
         event.ingredientsUsed.map(u => ({ name: u.name, count: u.count }))
     );
+    const extraIngredients = sortIngredientsByCountDesc(
+        (event.extraIngredientsUsed ?? []).map(u => ({ name: u.name, count: u.count }))
+    );
     const bagIngredientsBeforeCooking = sortIngredientsByCountDesc(
         (event.bagIngredientsBeforeCooking ?? []).filter(ing => ing.count > 0)
     );
@@ -97,6 +100,19 @@ const CookingResultRow = React.memo(({ event, teamSize }: CookingResultRowProps)
                             {formatIngredientCount(ing.count)}
                         </IngredientBadge>
                     ))}
+                    {extraIngredients.length > 0 && (
+                        <ExtraIngredientsGroup>
+                            <span>+</span>
+                            <span>(</span>
+                            {extraIngredients.map((ing) => (
+                                <IngredientBadge key={`extra-${ing.name}`}>
+                                    <IngredientIcon name={ing.name} />
+                                    {formatIngredientCount(ing.count)}
+                                </IngredientBadge>
+                            ))}
+                            <span>)</span>
+                        </ExtraIngredientsGroup>
+                    )}
                     <PotInfo>{'\u934B\u7A7A\u304D'}{event.remainingPotCapacity}</PotInfo>
                 </IngredientInfo>
             </ContentCell>
@@ -230,6 +246,15 @@ const IngredientBadge = styled('span')({
         width: '12px',
         height: '12px',
     },
+});
+
+const ExtraIngredientsGroup = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '1px',
+    fontSize: '10px',
+    lineHeight: '13px',
+    letterSpacing: '-0.5px',
 });
 
 const PotInfo = styled('span')({

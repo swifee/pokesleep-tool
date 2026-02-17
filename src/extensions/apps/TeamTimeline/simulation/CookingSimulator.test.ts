@@ -3,6 +3,7 @@ import {
     createIngredientBag,
     computeInitialIngredientAttributedEP,
     executeMealCooking,
+    planExtraIngredientsByEvent,
 } from './CookingSimulator';
 import SeededRandom from './SeededRandom';
 
@@ -83,5 +84,152 @@ describe('CookingSimulator', () => {
         ]);
 
         expect(totalInitialIngredientEP).toBe(40);
+    });
+
+    it('advances tasty chain even when no recipe is available', () => {
+        const bag = createIngredientBag({});
+        const random = new SeededRandom(20260216);
+
+        const { result, newTastyChanceAccumulated } = executeMealCooking({
+            bag,
+            category: 'curry',
+            recipeLevels: {},
+            basePotCapacity: 12,
+            isGoodCampTicket: false,
+            cookingPowerUpBonus: 0,
+            tastyChanceAccumulated: 90,
+            fieldBonus: 0,
+            eventBonus: 0,
+            random,
+            mealSlotId: 'meal-skip',
+            mealType: 'dinner',
+        });
+
+        expect(result.recipeName).toBeNull();
+        expect(result.cookingEP).toBe(0);
+        expect(result.isGreatSuccess).toBe(true);
+        expect(newTastyChanceAccumulated).toBe(0);
+    });
+
+    it('plans extra ingredients with future-time constraints', () => {
+        const plan = planExtraIngredientsByEvent([
+            {
+                mealSlotId: 'slot-1',
+                mealType: 'breakfast',
+                recipeName: 'recipeA',
+                isGreatSuccess: false,
+                cookingEP: 100,
+                eBase: 100,
+                eDisplay: 100,
+                eFinal: 100,
+                ingredientsUsed: [
+                    {
+                        name: 'apple',
+                        count: 8,
+                        pokemonAttribution: new Map(),
+                        fromInitial: 0,
+                    },
+                ],
+                remainingPotCapacity: 5,
+                effectivePotCapacity: 20,
+                tastyChancePercent: 10,
+                cookingPowerUpBonusUsed: 0,
+                bagIngredientsBeforeCooking: [
+                    { name: 'apple', count: 10 },
+                ],
+            },
+            {
+                mealSlotId: 'slot-2',
+                mealType: 'lunch',
+                recipeName: 'recipeB',
+                isGreatSuccess: false,
+                cookingEP: 100,
+                eBase: 100,
+                eDisplay: 100,
+                eFinal: 100,
+                ingredientsUsed: [
+                    {
+                        name: 'apple',
+                        count: 2,
+                        pokemonAttribution: new Map(),
+                        fromInitial: 0,
+                    },
+                ],
+                remainingPotCapacity: 5,
+                effectivePotCapacity: 20,
+                tastyChancePercent: 10,
+                cookingPowerUpBonusUsed: 0,
+                bagIngredientsBeforeCooking: [
+                    { name: 'apple', count: 2 },
+                ],
+            },
+        ]);
+
+        expect(plan[0]).toEqual([]);
+        expect(plan[1]).toEqual([]);
+    });
+
+    it('prioritizes higher base-energy ingredients for extra allocation', () => {
+        const plan = planExtraIngredientsByEvent([
+            {
+                mealSlotId: 'slot-1',
+                mealType: 'breakfast',
+                recipeName: 'recipeA',
+                isGreatSuccess: false,
+                cookingEP: 100,
+                eBase: 100,
+                eDisplay: 100,
+                eFinal: 100,
+                ingredientsUsed: [],
+                remainingPotCapacity: 3,
+                effectivePotCapacity: 20,
+                tastyChancePercent: 10,
+                cookingPowerUpBonusUsed: 0,
+                bagIngredientsBeforeCooking: [
+                    { name: 'apple', count: 5 },
+                    { name: 'mushroom', count: 5 },
+                ],
+            },
+        ]);
+
+        expect(plan[0]?.[0]?.name).toBe('mushroom');
+        expect(plan[0]?.[0]?.count).toBe(3);
+    });
+
+    it('includes extra ingredients in initial ingredient attributed EP', () => {
+        const totalInitialIngredientEP = computeInitialIngredientAttributedEP([
+            {
+                mealSlotId: 'slot-1',
+                mealType: 'breakfast',
+                recipeName: 'recipeA',
+                isGreatSuccess: false,
+                cookingEP: 120,
+                eBase: 100,
+                eDisplay: 100,
+                eFinal: 100,
+                ingredientsUsed: [
+                    {
+                        name: 'apple',
+                        count: 10,
+                        pokemonAttribution: new Map([[1, 10]]),
+                        fromInitial: 0,
+                    },
+                ],
+                extraIngredientsUsed: [
+                    {
+                        name: 'milk',
+                        count: 10,
+                        pokemonAttribution: new Map(),
+                        fromInitial: 10,
+                    },
+                ],
+                remainingPotCapacity: 0,
+                effectivePotCapacity: 30,
+                tastyChancePercent: 10,
+                cookingPowerUpBonusUsed: 0,
+            },
+        ]);
+
+        expect(totalInitialIngredientEP).toBeCloseTo(62.55, 2);
     });
 });

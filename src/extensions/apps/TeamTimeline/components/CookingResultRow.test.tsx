@@ -28,6 +28,7 @@ const EVENT: CookingEventResult = {
     eDisplay: 0,
     eFinal: 0,
     ingredientsUsed: [],
+    extraIngredientsUsed: [],
     remainingPotCapacity: 0,
     effectivePotCapacity: 15,
     tastyChancePercent: 10,
@@ -60,5 +61,49 @@ describe('CookingResultRow', () => {
         expect(screen.getByText('9')).toBeDefined();
         expect(screen.getByText('egg')).toBeDefined();
         expect(screen.getByText('4')).toBeDefined();
+    });
+
+    it('renders extra ingredients with plus and parentheses', () => {
+        const event: CookingEventResult = {
+            ...EVENT,
+            ingredientsUsed: [
+                {
+                    name: 'corn',
+                    count: 25,
+                    pokemonAttribution: new Map(),
+                    fromInitial: 0,
+                },
+                {
+                    name: 'egg',
+                    count: 20,
+                    pokemonAttribution: new Map(),
+                    fromInitial: 0,
+                },
+            ],
+            extraIngredientsUsed: [
+                {
+                    name: 'mushroom',
+                    count: 8,
+                    pokemonAttribution: new Map(),
+                    fromInitial: 0,
+                },
+                {
+                    name: 'apple',
+                    count: 10,
+                    pokemonAttribution: new Map(),
+                    fromInitial: 0,
+                },
+            ],
+            remainingPotCapacity: 0,
+        };
+
+        render(<CookingResultRow event={event} teamSize={5} />);
+
+        expect(screen.getByText('+')).toBeDefined();
+        expect(screen.getAllByText('(').length).toBeGreaterThan(0);
+        expect(screen.getByText('corn')).toBeDefined();
+        expect(screen.getByText('egg')).toBeDefined();
+        expect(screen.getByText('mushroom')).toBeDefined();
+        expect(screen.getByText('apple')).toBeDefined();
     });
 });

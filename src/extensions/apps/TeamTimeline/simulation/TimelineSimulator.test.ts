@@ -727,4 +727,41 @@ describe('TimelineSimulator', () => {
         const disabledWake = disabledErb.slotResults.get('wake__day0')?.[0]?.wakeRecovery ?? 0;
         expect(normalWake).toBeGreaterThan(disabledWake);
     });
+
+    it('レシピ未成立食事にあまり食材を後配分し、ごちゃまぜ料理として表示用結果を作る', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemon = createBerryBurstDisguisePokemon(1);
+        const result = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots: [
+                { id: 'meal-only', time: '07:00', sleepState: 'wake', hasMeal: true },
+            ],
+            config: { seed: 32100, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            cookingSettings: {
+                enabled: true,
+                category: 'curry',
+                recipeLevels: {},
+                basePotCapacity: 3,
+                initialIngredients: {
+                    apple: 2,
+                    milk: 2,
+                },
+            },
+        });
+
+        const cookingEvent = result.cookingResult?.events[0];
+        expect(cookingEvent).toBeDefined();
+        expect(cookingEvent?.recipeName).toBe('mixedCurry');
+        expect(cookingEvent?.cookingEP ?? 0).toBeGreaterThan(0);
+        expect((cookingEvent?.extraIngredientsUsed ?? []).length).toBeGreaterThan(0);
+
+        const fixedLeftoverTotal = Object.values(result.cookingResult?.leftoverIngredients.total ?? {})
+            .reduce((sum, value) => sum + (value ?? 0), 0);
+        expect(fixedLeftoverTotal).toBeCloseTo(4, 6);
+    });
 });
