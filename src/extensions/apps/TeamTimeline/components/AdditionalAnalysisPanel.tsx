@@ -29,6 +29,7 @@ import {
     SummaryValueMode,
     toSummaryModeValue,
 } from '../utils/SummaryValueModeUtils';
+import { EpText } from './EpValue';
 
 interface AdditionalAnalysisPanelProps {
     quickModeEnabled: boolean;
@@ -37,6 +38,7 @@ interface AdditionalAnalysisPanelProps {
     valueMode: SummaryValueMode;
     contributionMembers: readonly PokemonBoxItem[];
     contributionResults: ReadonlyMap<number, ContributionEpAnalysisResult>;
+    contributionActiveMinutesByPokemonId: ReadonlyMap<number, number>;
     contributionLoadingIds: ReadonlySet<number>;
     contributionBatchLoading: boolean;
     contributionBatchProgress: number;
@@ -99,6 +101,33 @@ function formatContributionMetric(
     const reversedDeltaPercent = deltaPercent === null ? null : -deltaPercent;
     const modeAdjustedDeltaEP = toSummaryModeValue(reversedDeltaEP, valueMode, simulationDays);
     return `${formatContributionNumber(modeAdjustedDeltaEP)} EP (${formatContributionPercent(reversedDeltaPercent)})`;
+}
+
+function getModeAdjustedContributionEP(
+    deltaEP: number,
+    valueMode: SummaryValueMode,
+    simulationDays: number,
+): number {
+    const reversedDeltaEP = -deltaEP;
+    return toSummaryModeValue(reversedDeltaEP, valueMode, simulationDays);
+}
+
+function getModeAdjustedActiveMinutes(
+    activeMinutes: number,
+    valueMode: SummaryValueMode,
+    simulationDays: number,
+): number {
+    return toSummaryModeValue(activeMinutes, valueMode, simulationDays);
+}
+
+function convertTo24hContributionEP(
+    modeAdjustedContributionEP: number,
+    activeMinutes: number,
+): number | null {
+    if (!Number.isFinite(activeMinutes) || activeMinutes <= 0) {
+        return null;
+    }
+    return modeAdjustedContributionEP * (1440 / activeMinutes);
 }
 
 function formatEnergySkillDisplayName(skillLabel: string): string {
@@ -277,6 +306,7 @@ const AdditionalAnalysisPanel = React.memo(({
     valueMode,
     contributionMembers,
     contributionResults,
+    contributionActiveMinutesByPokemonId,
     contributionLoadingIds,
     contributionBatchLoading,
     contributionBatchProgress,
@@ -367,6 +397,54 @@ const AdditionalAnalysisPanel = React.memo(({
             simulationDays
         )}`
         : '';
+    const contribution24hEpByPokemonId = React.useMemo(() => {
+        const map = new Map<number, number>();
+        contributionMembers.forEach((member) => {
+            const result = contributionResults.get(member.id);
+            if (!result) {
+                return;
+            }
+            const modeAdjustedContributionEP = getModeAdjustedContributionEP(
+                result.deltaEP,
+                resolvedValueMode,
+                simulationDays
+            );
+            const activeMinutes = contributionActiveMinutesByPokemonId.get(member.id) ?? 0;
+            const modeAdjustedActiveMinutes = getModeAdjustedActiveMinutes(
+                activeMinutes,
+                resolvedValueMode,
+                simulationDays
+            );
+            const converted24hEP = convertTo24hContributionEP(
+                modeAdjustedContributionEP,
+                modeAdjustedActiveMinutes
+            );
+            if (converted24hEP === null || !Number.isFinite(converted24hEP)) {
+                return;
+            }
+            map.set(member.id, converted24hEP);
+        });
+        return map;
+    }, [
+        contributionMembers,
+        contributionResults,
+        contributionActiveMinutesByPokemonId,
+        resolvedValueMode,
+        simulationDays,
+    ]);
+    const areAllContributionMembersResolved = React.useMemo(
+        () => contributionMembers.every(member => contributionResults.has(member.id)),
+        [contributionMembers, contributionResults]
+    );
+    const totalContribution24hEP = React.useMemo(
+        () => Array.from(contribution24hEpByPokemonId.values()).reduce((sum, value) => sum + value, 0),
+        [contribution24hEpByPokemonId]
+    );
+    const shouldShowContribution24hPercent = (
+        areAllContributionMembersResolved
+        && Number.isFinite(totalContribution24hEP)
+        && totalContribution24hEP !== 0
+    );
 
     return (
         <Box sx={{ mt: '18px' }} data-testid="additional-analysis-panel">
@@ -449,6 +527,20 @@ const AdditionalAnalysisPanel = React.memo(({
                                 const isBatchItemLoading = contributionBatchLoading && progress > 0 && progress < 100;
                                 const keepFilledWhenCompleted = contributionBatchLoading && progress >= 100;
                                 const isLoading = contributionLoadingIds.has(member.id) || isBatchItemLoading;
+                                const converted24hEP = contribution24hEpByPokemonId.get(member.id) ?? null;
+                                const contribution24hLabel = t('TeamTimeline.analysis contribution 24h label', '24h換算');
+                                const converted24hPercent = (
+                                    converted24hEP === null || !shouldShowContribution24hPercent
+                                )
+                                    ? null
+                                    : (converted24hEP / totalContribution24hEP) * 100;
+                                const contribution24hMetric = converted24hEP === null
+                                    ? ''
+                                    : `${contribution24hLabel}:${formatContributionNumber(converted24hEP)} EP${
+                                        converted24hPercent === null
+                                            ? ''
+                                            : `(${formatContributionPercent(converted24hPercent)})`
+                                    }`;
                                 return (
                                     <Box
                                         key={`contribution-row-${member.id}`}
@@ -475,12 +567,15 @@ const AdditionalAnalysisPanel = React.memo(({
                                         <ResultCell>
                                             {result && (
                                                 <Typography sx={{ fontSize: '12px' }}>
-                                                    {formatContributionMetric(
-                                                        result.deltaEP,
-                                                        result.deltaPercent,
-                                                        resolvedValueMode,
-                                                        simulationDays
-                                                    )}
+                                                    <EpText
+                                                        text={`${formatContributionMetric(
+                                                            result.deltaEP,
+                                                            result.deltaPercent,
+                                                            resolvedValueMode,
+                                                            simulationDays
+                                                        )}${contribution24hMetric ? `  ${contribution24hMetric}` : ''}`}
+                                                        keyPrefix={`contribution-metric-${member.id}`}
+                                                    />
                                                 </Typography>
                                             )}
                                         </ResultCell>
@@ -593,10 +688,10 @@ const AdditionalAnalysisPanel = React.memo(({
                                                         {skillLabel}
                                                     </Typography>
                                                     <Typography sx={{ fontSize: '12px', minWidth: 0 }}>
-                                                        {selfMetric}
+                                                        <EpText text={selfMetric} keyPrefix={`energy-self-${target.pokemonId}`} />
                                                     </Typography>
                                                     <Typography sx={{ fontSize: '12px', minWidth: 0 }}>
-                                                        {teamMetric}
+                                                        <EpText text={teamMetric} keyPrefix={`energy-team-${target.pokemonId}`} />
                                                     </Typography>
                                                 </>
                                             )}
@@ -630,7 +725,7 @@ const AdditionalAnalysisPanel = React.memo(({
                                     >
                                         {energySkillTeamResult && (
                                             <Typography sx={{ fontSize: '12px', minWidth: 0 }}>
-                                                {energySkillTeamMetric}
+                                                <EpText text={energySkillTeamMetric} keyPrefix="energy-team-overall" />
                                             </Typography>
                                         )}
                                     </Box>
@@ -695,12 +790,15 @@ const AdditionalAnalysisPanel = React.memo(({
                                     )}
                                     {helpingBonusResult && (
                                         <Typography sx={{ fontSize: '12px' }}>
-                                            {formatContributionMetric(
-                                                helpingBonusResult.teamDeltaEP,
-                                                helpingBonusResult.teamDeltaPercent,
-                                                resolvedValueMode,
-                                                simulationDays
-                                            )}
+                                            <EpText
+                                                text={formatContributionMetric(
+                                                    helpingBonusResult.teamDeltaEP,
+                                                    helpingBonusResult.teamDeltaPercent,
+                                                    resolvedValueMode,
+                                                    simulationDays
+                                                )}
+                                                keyPrefix="helping-bonus-metric"
+                                            />
                                         </Typography>
                                     )}
                                 </ResultCell>
@@ -762,12 +860,15 @@ const AdditionalAnalysisPanel = React.memo(({
                                     )}
                                     {energyRecoveryBonusResult && (
                                         <Typography sx={{ fontSize: '12px' }}>
-                                            {formatContributionMetric(
-                                                energyRecoveryBonusResult.teamDeltaEP,
-                                                energyRecoveryBonusResult.teamDeltaPercent,
-                                                resolvedValueMode,
-                                                simulationDays
-                                            )}
+                                            <EpText
+                                                text={formatContributionMetric(
+                                                    energyRecoveryBonusResult.teamDeltaEP,
+                                                    energyRecoveryBonusResult.teamDeltaPercent,
+                                                    resolvedValueMode,
+                                                    simulationDays
+                                                )}
+                                                keyPrefix="energy-recovery-bonus-metric"
+                                            />
                                         </Typography>
                                     )}
                                 </ResultCell>

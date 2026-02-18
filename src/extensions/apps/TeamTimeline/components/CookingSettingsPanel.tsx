@@ -21,6 +21,7 @@ import {
 import { getRecipesByCategory } from '../data/RecipeData';
 import { IngredientNames, IngredientName } from '../../../../data/pokemons';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
+import TeamTimelineIcon from './TimelineIcons';
 
 interface CookingSettingsPanelProps {
     settings: CookingSimulationSettings;
@@ -32,6 +33,62 @@ const MAX_POT_CAPACITY = 99;
 const POT_CAPACITY_STEP = 3;
 const MIN_RECIPE_LEVEL = 1;
 const MAX_RECIPE_LEVEL = 65;
+const LEVEL_INPUT_STEP = 5;
+const INGREDIENT_INPUT_STEP = 5;
+const NUMERIC_INPUT_WIDTH = '5ch';
+const NUMERIC_TEXT_FIELD_SX = {
+    width: NUMERIC_INPUT_WIDTH,
+    '& .MuiInputBase-input': {
+        textAlign: 'center',
+    },
+    '& input[type=number]': {
+        MozAppearance: 'textfield',
+    },
+    '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+        WebkitAppearance: 'none',
+        margin: 0,
+    },
+};
+const STEP_BUTTON_SX = {
+    minWidth: '1.5rem',
+    width: '1.5rem',
+    height: '1.5rem',
+    px: 0,
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center',
+    border: 'none',
+    boxShadow: 'none',
+    backgroundColor: 'transparent',
+    color: 'inherit',
+    '& .step-button-circle': {
+        width: '1.2rem',
+        height: '1.2rem',
+        borderRadius: '50%',
+        backgroundColor: '#b3b3b3',
+        color: '#fff',
+        fontWeight: 700,
+        fontSize: '0.95rem',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    '&:hover': {
+        border: 'none',
+        boxShadow: 'none',
+        backgroundColor: 'transparent',
+    },
+    '&:hover .step-button-circle': {
+        backgroundColor: '#999999',
+    },
+};
+const STEP_BUTTON_SYMBOL_SX = {
+    display: 'block',
+    lineHeight: 1,
+    transform: 'translate(0.4px, -0.6px)',
+};
 
 const POT_CAPACITY_OPTIONS = Array.from(
     { length: ((MAX_POT_CAPACITY - MIN_POT_CAPACITY) / POT_CAPACITY_STEP) + 1 },
@@ -43,9 +100,8 @@ function normalizePotCapacity(value: number): number {
     return clamped - (clamped % POT_CAPACITY_STEP);
 }
 
-function formatRecipeIngredientSummary(recipe: ReturnType<typeof getRecipesByCategory>[number]): string {
-    const total = recipe.ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
-    return `食材${total}`;
+function getRecipeIngredientTotal(recipe: ReturnType<typeof getRecipesByCategory>[number]): number {
+    return recipe.ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
 }
 
 const RECIPE_ICON_SIZE_PX = 12;
@@ -109,6 +165,26 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
         });
     }, [handleRecipeLevelChange]);
 
+    const handleRecipeLevelStep = useCallback((recipeName: string, delta: number) => {
+        const draftValue = recipeLevelDrafts[recipeName];
+        const draftParsed = draftValue == null || draftValue.trim() === ''
+            ? Number.NaN
+            : Number.parseInt(draftValue, 10);
+        const current = Number.isNaN(draftParsed)
+            ? (settings.recipeLevels[recipeName] ?? DEFAULT_RECIPE_LEVEL)
+            : draftParsed;
+
+        handleRecipeLevelChange(recipeName, current + delta);
+        setRecipeLevelDrafts((prev) => {
+            if (prev[recipeName] == null) {
+                return prev;
+            }
+            const rest = { ...prev };
+            delete rest[recipeName];
+            return rest;
+        });
+    }, [handleRecipeLevelChange, recipeLevelDrafts, settings.recipeLevels]);
+
     const handleBatchSet = useCallback(() => {
         const recipes = getRecipesByCategory(settings.category);
         const newLevels = { ...settings.recipeLevels };
@@ -125,6 +201,11 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
             initialIngredients: { ...settings.initialIngredients, [ingredientName]: clamped },
         });
     }, [settings, onChange]);
+
+    const handleIngredientStep = useCallback((ingredientName: IngredientName, delta: number) => {
+        const current = settings.initialIngredients[ingredientName] ?? 0;
+        handleIngredientChange(ingredientName, current + delta);
+    }, [handleIngredientChange, settings.initialIngredients]);
 
     const recipes = getRecipesByCategory(settings.category);
     const initialIngredientTotal = IngredientNames.reduce((sum, ingredientName) => {
@@ -176,9 +257,6 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
 
                     {/* 3. Cooking category selector */}
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, fontSize: '0.9rem' }}>
-                        <label style={{ marginRight: '0.5rem' }}>
-                            {t('TeamTimeline.cooking category short', '料理')}:
-                        </label>
                         <Tabs
                             value={settings.category}
                             onChange={handleCategoryChange}
@@ -218,7 +296,7 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                         <TextField
                             type="number"
                             size="small"
-                            variant="outlined"
+                            variant="standard"
                             value={batchLevel}
                             onChange={(e) => {
                                 const v = parseInt(e.target.value, 10);
@@ -227,7 +305,7 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                 }
                             }}
                             inputProps={{ min: MIN_RECIPE_LEVEL, max: MAX_RECIPE_LEVEL }}
-                            sx={{ width: '5rem' }}
+                            sx={NUMERIC_TEXT_FIELD_SX}
                             data-testid="cooking-batch-level-input"
                         />
                         <Button
@@ -241,24 +319,40 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                     </Box>
 
                     {/* Recipe list */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1.5 }}>
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 0.5,
+                            mb: 1.5,
+                            width: 'fit-content',
+                            maxWidth: '100%',
+                        }}
+                        data-testid="recipe-level-list"
+                    >
                         {recipes.map((recipe) => (
                             <Box
                                 key={recipe.name}
                                 sx={{
-                                    display: 'flex',
+                                    display: 'grid',
+                                    gridTemplateColumns: 'minmax(0, 1fr) auto',
                                     alignItems: 'center',
+                                    columnGap: 0.35,
+                                    rowGap: 0.15,
                                     fontSize: '0.85rem',
+                                    width: '100%',
                                 }}
                                 data-testid={`recipe-row-${recipe.name}`}
                             >
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <Box sx={{ minWidth: 0, maxWidth: 'min(100%, 22rem)' }}>
                                     <Box
                                         sx={{
                                             display: 'inline-flex',
                                             alignItems: 'center',
                                             flexWrap: 'wrap',
-                                            gap: 0.5,
+                                            columnGap: 0.4,
+                                            rowGap: 0.05,
+                                            lineHeight: 1.1,
                                         }}
                                     >
                                         <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '15rem' }}>
@@ -269,7 +363,20 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                             sx={{ color: '#666', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 0.4 }}
                                             data-testid={`recipe-ingredients-${recipe.name}`}
                                         >
-                                            {formatRecipeIngredientSummary(recipe)}
+                                            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.15 }}>
+                                                <TeamTimelineIcon
+                                                    name="cooking"
+                                                    sx={{
+                                                        fontSize: `${RECIPE_ICON_SIZE_PX}px`,
+                                                        color: 'inherit',
+                                                        '& path, & rect': {
+                                                            fill: 'currentColor',
+                                                        },
+                                                    }}
+                                                    data-testid={`recipe-ingredients-cooking-icon-${recipe.name}`}
+                                                />
+                                                <Box component="span">{getRecipeIngredientTotal(recipe)}</Box>
+                                            </Box>
                                             <Box component="span">(</Box>
                                             {recipe.ingredients.map((ingredient) => (
                                                 <Box
@@ -294,19 +401,53 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                         </Box>
                                     </Box>
                                 </Box>
-                                <TextField
-                                    type="number"
-                                    size="small"
-                                    variant="standard"
-                                    value={recipeLevelDrafts[recipe.name] ?? String(settings.recipeLevels[recipe.name] ?? DEFAULT_RECIPE_LEVEL)}
-                                    onChange={(e) => {
-                                        handleRecipeLevelInputChange(recipe.name, e.target.value);
+                                <Box
+                                    sx={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'auto auto auto',
+                                        alignItems: 'center',
+                                        columnGap: 0.35,
                                     }}
-                                    onBlur={() => handleRecipeLevelInputBlur(recipe.name)}
-                                    inputProps={{ min: MIN_RECIPE_LEVEL, max: MAX_RECIPE_LEVEL }}
-                                    sx={{ width: '4rem', ml: 1 }}
-                                    data-testid={`recipe-level-input-${recipe.name}`}
-                                />
+                                    data-testid={`recipe-level-controls-${recipe.name}`}
+                                >
+                                    <Button
+                                        variant="contained"
+                                        size="small"
+                                        disableElevation
+                                        sx={STEP_BUTTON_SX}
+                                        onClick={() => handleRecipeLevelStep(recipe.name, -LEVEL_INPUT_STEP)}
+                                        data-testid={`recipe-level-decrement-${recipe.name}`}
+                                    >
+                                        <Box component="span" className="step-button-circle">
+                                            <Box component="span" sx={STEP_BUTTON_SYMBOL_SX}>-</Box>
+                                        </Box>
+                                    </Button>
+                                    <TextField
+                                        type="number"
+                                        size="small"
+                                        variant="standard"
+                                        value={recipeLevelDrafts[recipe.name] ?? String(settings.recipeLevels[recipe.name] ?? DEFAULT_RECIPE_LEVEL)}
+                                        onChange={(e) => {
+                                            handleRecipeLevelInputChange(recipe.name, e.target.value);
+                                        }}
+                                        onBlur={() => handleRecipeLevelInputBlur(recipe.name)}
+                                        inputProps={{ min: MIN_RECIPE_LEVEL, max: MAX_RECIPE_LEVEL }}
+                                        sx={NUMERIC_TEXT_FIELD_SX}
+                                        data-testid={`recipe-level-input-${recipe.name}`}
+                                    />
+                                    <Button
+                                        variant="contained"
+                                        size="small"
+                                        disableElevation
+                                        sx={STEP_BUTTON_SX}
+                                        onClick={() => handleRecipeLevelStep(recipe.name, LEVEL_INPUT_STEP)}
+                                        data-testid={`recipe-level-increment-${recipe.name}`}
+                                    >
+                                        <Box component="span" className="step-button-circle">
+                                            <Box component="span" sx={STEP_BUTTON_SYMBOL_SX}>+</Box>
+                                        </Box>
+                                    </Button>
+                                </Box>
                             </Box>
                         ))}
                     </Box>
@@ -321,7 +462,7 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                     <Box
                         sx={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
                             gap: 0.5,
                         }}
                         data-testid="cooking-initial-ingredients"
@@ -342,6 +483,18 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                 >
                                     <IngredientIcon name={ingredientName} />
                                 </Box>
+                                <Button
+                                    variant="contained"
+                                    size="small"
+                                    disableElevation
+                                    sx={{ ...STEP_BUTTON_SX, ml: 0.5 }}
+                                    onClick={() => handleIngredientStep(ingredientName, -INGREDIENT_INPUT_STEP)}
+                                    data-testid={`ingredient-decrement-${ingredientName}`}
+                                >
+                                    <Box component="span" className="step-button-circle">
+                                        <Box component="span" sx={STEP_BUTTON_SYMBOL_SX}>-</Box>
+                                    </Box>
+                                </Button>
                                 <TextField
                                     type="number"
                                     size="small"
@@ -354,9 +507,21 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                         }
                                     }}
                                     inputProps={{ min: 0 }}
-                                    sx={{ width: '4rem', ml: 1 }}
+                                    sx={NUMERIC_TEXT_FIELD_SX}
                                     data-testid={`ingredient-input-${ingredientName}`}
                                 />
+                                <Button
+                                    variant="contained"
+                                    size="small"
+                                    disableElevation
+                                    sx={STEP_BUTTON_SX}
+                                    onClick={() => handleIngredientStep(ingredientName, INGREDIENT_INPUT_STEP)}
+                                    data-testid={`ingredient-increment-${ingredientName}`}
+                                >
+                                    <Box component="span" className="step-button-circle">
+                                        <Box component="span" sx={STEP_BUTTON_SYMBOL_SX}>+</Box>
+                                    </Box>
+                                </Button>
                             </Box>
                         ))}
                     </Box>

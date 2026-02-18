@@ -1,13 +1,15 @@
 import React from 'react';
 import { styled } from '@mui/system';
-import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CloseIcon from '@mui/icons-material/Close';
 import { IconButton } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { TimeSlotResult } from '../types/TimeSlotTypes';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
+import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import { formatIngredientCount, sortIngredientsByCountDesc } from '../utils/IngredientDisplayUtils';
+import TeamTimelineIcon from './TimelineIcons';
+import EpValue, { EpText } from './EpValue';
 
 interface TimelineCellProps {
     result: TimeSlotResult | null;
@@ -23,6 +25,7 @@ interface TimelineCellProps {
     compactFirstSlot?: boolean;      // Use compact layout for first timeline slot
     alwaysShowSwapButton?: boolean;  // Show swap button without hover
     disableSwapUi?: boolean;         // Hide swap UI entirely for this cell
+    pokemonIdForm?: number;
 }
 
 /**
@@ -41,6 +44,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         compactFirstSlot = false,
         alwaysShowSwapButton = false,
         disableSwapUi = false,
+        pokemonIdForm,
     } = props;
     const { t } = useTranslation();
     const swapButtonTitle = t('TeamTimeline.swap pokemon');
@@ -116,6 +120,43 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         );
     };
     const stripDerivedSuffix = (skillLabel: string): string => skillLabel.replace(/\s*\([^)]*\)\s*$/, '');
+    const SkillPrefixIcons = React.useCallback(({ count = 1, testId }: { count?: number; testId?: string }) => {
+        const normalizedCount = Math.max(1, Math.round(count));
+        return (
+            <span
+                className="skill-prefix-icons"
+                data-testid={testId}
+                data-skill-prefix-count={normalizedCount}
+            >
+                {Array.from({ length: normalizedCount }).map((_, index) => (
+                    <TeamTimelineIcon
+                        key={index}
+                        name="skill"
+                        className="skill-prefix-icon"
+                        data-skill-prefix-icon="true"
+                    />
+                ))}
+            </span>
+        );
+    }, []);
+    const renderTextWithHealIcon = React.useCallback((text: string, keyPrefix: string): React.ReactNode => {
+        const chunks = text.split('❇️');
+        if (chunks.length === 1) {
+            return <EpText text={text} keyPrefix={keyPrefix} />;
+        }
+        return chunks.map((chunk, index) => (
+            <React.Fragment key={`${keyPrefix}-${index}`}>
+                {index > 0 && (
+                    <TeamTimelineIcon
+                        name="heal"
+                        className="heal-inline-icon"
+                        data-heal-icon="true"
+                    />
+                )}
+                <EpText text={chunk} keyPrefix={`${keyPrefix}-ep-${index}`} />
+            </React.Fragment>
+        ));
+    }, []);
     const buildProxyDetailParts = (event: NonNullable<TimeSlotResult['proxySkillEvents']>[number]): string[] => {
         const parts: string[] = [];
         const isMetronomeStockpile =
@@ -139,9 +180,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             parts.push(`🖤-12×${event.badDreamsHitCount}`);
         }
         if ((event.supportSkillBerryEP ?? 0) > 0) {
-            parts.push(`+${Math.round(event.supportSkillBerryEP ?? 0).toLocaleString()}EP`);
+            parts.push(`+${Math.round(event.supportSkillBerryEP ?? 0).toLocaleString()} EP`);
         } else if ((event.directEP ?? 0) > 0) {
-            parts.push(`+${Math.round(event.directEP ?? 0).toLocaleString()}EP`);
+            parts.push(`+${Math.round(event.directEP ?? 0).toLocaleString()} EP`);
         }
         const totalGreatSuccessCount =
             (event.berryBurstGreatSuccessCount ?? 0) + (event.ingredientDrawGreatSuccessCount ?? 0);
@@ -165,6 +206,16 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         }
         return parts;
     };
+    const renderPokemonIcon = () => {
+        if (pokemonIdForm === undefined) {
+            return null;
+        }
+        return (
+            <PokemonIconAnchor data-testid="timeline-cell-pokemon-icon">
+                <PokemonIcon idForm={pokemonIdForm} size={14} />
+            </PokemonIconAnchor>
+        );
+    };
 
     if (result === null) {
         return (
@@ -176,7 +227,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 $compact={isCompactLayout}
                 data-compact-layout={isCompactLayout ? 'true' : 'false'}
             >
-                <EmptyContent />
+                <EmptyContent>
+                    {renderPokemonIcon()}
+                </EmptyContent>
                 {renderSwapInfo()}
                 {renderSwapControl()}
             </StyledCell>
@@ -224,9 +277,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         aggregateDetailParts.push(`🖤-12×${result.badDreamsHitCount}`);
     }
     if (isHelperBoostOnlySupportEvents && result.supportSkillBerryEP > 0) {
-        aggregateDetailParts.push(`+${Math.round(result.supportSkillBerryEP).toLocaleString()}EP`);
+        aggregateDetailParts.push(`+${Math.round(result.supportSkillBerryEP).toLocaleString()} EP`);
     } else if (result.directSkillEP > 0 && result.supportHelpEvents.length === 0) {
-        aggregateDetailParts.push(`+${result.directSkillEP.toLocaleString()}EP`);
+        aggregateDetailParts.push(`+${result.directSkillEP.toLocaleString()} EP`);
     }
     if (totalGreatSuccessCount > 0) {
         aggregateDetailParts.push(`大成功x${totalGreatSuccessCount}`);
@@ -250,14 +303,16 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             result.energizingCheerEvents.forEach((event, index) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`cheer-${index}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}❇️+{Math.round(event.recovery)}
+                        <SkillPrefixIcons />
+                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `cheer-${index}`)}
                     </SkillDetailLine>
                 );
             });
             moonlightEvents.forEach((event, index) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`moonlight-${index}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}❇️+{Math.round(event.recovery)}
+                        <SkillPrefixIcons />
+                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `moonlight-${index}`)}
                     </SkillDetailLine>
                 );
             });
@@ -265,10 +320,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 const ingredients = sortIngredientsByCountDesc(event.ingredients.filter(ingredient => ingredient.count > 0));
                 skillDetailLines.push(
                     <SkillDetailLine key={`support-${eventIndex}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}{' '}
+                        <SkillPrefixIcons />
+                        →{event.targetPokemonName}{' '}
                         <SupportBerryEPBadge>
-                            <LocalFireDepartmentIcon sx={{ width: 14, height: 14, color: '#ff944b' }} />
-                            {Math.round(event.berryEP).toLocaleString()}EP
+                            <TeamTimelineIcon name="berry" />
+                            <EpValue value={Math.round(event.berryEP).toLocaleString()} />
                         </SupportBerryEPBadge>
                         {ingredients.map((ingredient, ingredientIndex) => (
                             <React.Fragment key={`support-ing-${eventIndex}-${ingredientIndex}-${ingredient.name}`}>
@@ -285,7 +341,8 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             cookingMinusEvents.forEach((event, index) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`cooking-minus-${index}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}❇️+{Math.round(event.recovery)}
+                        <SkillPrefixIcons />
+                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `cooking-minus-${index}`)}
                     </SkillDetailLine>
                 );
             });
@@ -300,8 +357,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             const detailParts = buildProxyDetailParts(event);
             skillDetailLines.push(
                 <SkillDetailLine key={`proxy-${index}-${event.source}-${event.triggeredSkillName}`}>
-                    ❗{displaySkillLabel}
-                    {detailParts.length > 0 && `${displaySkillLabel ? ' ' : ''}${detailParts.join(' ')}`}
+                    <SkillPrefixIcons />
+                    {displaySkillLabel}
+                    {detailParts.length > 0 &&
+                        renderTextWithHealIcon(
+                            `${displaySkillLabel ? ' ' : ''}${detailParts.join(' ')}`,
+                            `proxy-detail-${index}`
+                        )}
                     {sortIngredientsByCountDesc((event.skillIngredients ?? []).filter(ingredient => ingredient.count > 0)).map((ingredient, ingredientIndex) => (
                         <React.Fragment key={`proxy-ing-${index}-${ingredientIndex}-${ingredient.name}`}>
                             {' '}
@@ -317,7 +379,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         if (skillIngredients.length > 0 && !hasProxyEventStyle && result.supportHelpEvents.length === 0) {
             skillDetailLines.push(
                 <SkillDetailLine key="skill-ingredients">
-                    ❗
+                    <SkillPrefixIcons />
                     {skillIngredients.map((ingredient, ingredientIndex) => (
                         <React.Fragment key={`skill-ing-${ingredientIndex}-${ingredient.name}`}>
                             {ingredientIndex > 0 && ' '}
@@ -333,17 +395,19 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         if (aggregateDetailParts.length > 0 && !hasProxyEventStyle) {
             skillDetailLines.push(
                 <SkillDetailLine key="aggregate-extra">
-                    ❗{aggregateDetailParts.join(' ')}
+                    <SkillPrefixIcons />
+                    {renderTextWithHealIcon(aggregateDetailParts.join(' '), 'aggregate-extra')}
                 </SkillDetailLine>
             );
         }
     } else if (result.skillTriggerCount > 0 || aggregateDetailParts.length > 0) {
         if (isHelperBoostOnlySupportEvents) {
-            const triggerPrefix = result.skillTriggerCount > 0 ? '❗'.repeat(result.skillTriggerCount) : '❗';
+            const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
             skillDetailLines.push(
                 <SkillDetailLine key="helper-boost-aggregate">
-                    {triggerPrefix}
-                    {aggregateDetailParts.length > 0 && ` ${aggregateDetailParts.join(' ')}`}
+                    <SkillPrefixIcons count={triggerCount} testId="timeline-cell-skill-prefix-helper-boost" />
+                    {aggregateDetailParts.length > 0 &&
+                        renderTextWithHealIcon(` ${aggregateDetailParts.join(' ')}`, 'helper-boost-aggregate')}
                     {skillIngredients.map((ingredient, ingredientIndex) => (
                         <React.Fragment key={`helper-boost-ing-${ingredientIndex}-${ingredient.name}`}>
                             {' '}
@@ -357,10 +421,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             );
         } else {
             if (skillIngredients.length > 0) {
-                const triggerPrefix = result.skillTriggerCount > 0 ? '❗'.repeat(result.skillTriggerCount) : '❗';
+                const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
                 skillDetailLines.push(
                     <SkillDetailLine key="skill-ingredients-aggregate">
-                        {triggerPrefix}
+                        <SkillPrefixIcons count={triggerCount} testId="timeline-cell-skill-prefix-ingredients" />
                         {skillIngredients.map((ingredient, ingredientIndex) => (
                             <React.Fragment key={`skill-ing-aggregate-${ingredientIndex}-${ingredient.name}`}>
                                 {ingredientIndex > 0 && ' '}
@@ -374,13 +438,16 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 );
             }
             if (aggregateDetailParts.length > 0) {
-                const triggerPrefix = result.skillTriggerCount > 0 ? '❗'.repeat(result.skillTriggerCount) : '❗';
+                const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
                 skillDetailLines.push(
-                    <SkillDetailLine key="aggregate">
-                        {triggerPrefix}{aggregateDetailParts.length > 0 ? ` ${aggregateDetailParts.join(' ')}` : ''}
-                    </SkillDetailLine>
-                );
-            }
+                <SkillDetailLine key="aggregate">
+                    <SkillPrefixIcons count={triggerCount} testId="timeline-cell-skill-prefix-aggregate" />
+                    {aggregateDetailParts.length > 0
+                        ? renderTextWithHealIcon(` ${aggregateDetailParts.join(' ')}`, 'aggregate')
+                        : ''}
+                </SkillDetailLine>
+            );
+        }
         }
     }
 
@@ -393,37 +460,59 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             $compact={isCompactLayout}
             data-compact-layout={isCompactLayout ? 'true' : 'false'}
         >
-            {/* Line 1: Energy Value */}
-            <EnergyLine>
-                げんき{Math.round(result.energyEnd)}
-            </EnergyLine>
-            <EnergyBarTrack>
-                <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
-            </EnergyBarTrack>
-
+            <TopEnergyArea>
+                {renderPokemonIcon()}
+                <EnergySummary>
+                    {/* Line 1: Energy Value */}
+                    <EnergyLine>
+                        げんき{Math.round(result.energyEnd)}
+                    </EnergyLine>
+                    <EnergyBarTrack>
+                        <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                    </EnergyBarTrack>
+                </EnergySummary>
+            </TopEnergyArea>
             {/* Line 2: Energy Details */}
             {(result.energyDecay > 0 || result.wakeRecovery > 0 || result.mealRecovery > 0 || totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && (
                 <RecoveryInfoLine>
-                    ({result.energyDecay > 0 && `⌛-${Math.round(result.energyDecay)}`}
+                    {result.energyDecay > 0 && `⌛-${Math.round(result.energyDecay)}`}
                     {result.energyDecay > 0 && (result.wakeRecovery > 0 || result.mealRecovery > 0 || totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && ' '}
-                    {result.wakeRecovery > 0 && `💤+${result.wakeRecovery}`}
+                    {result.wakeRecovery > 0 && (
+                        <>
+                            <TeamTimelineIcon name="sleep" data-testid="timeline-cell-recovery-icon-sleep" />
+                            +{result.wakeRecovery}
+                        </>
+                    )}
                     {result.wakeRecovery > 0 && (result.mealRecovery > 0 || totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && ' '}
-                    {result.mealRecovery > 0 && `🍴+${result.mealRecovery}`}
+                    {result.mealRecovery > 0 && (
+                        <>
+                            <TeamTimelineIcon name="cooking" data-testid="timeline-cell-recovery-icon-cooking" />
+                            +{result.mealRecovery}
+                        </>
+                    )}
                     {result.mealRecovery > 0 && (totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && ' '}
-                    {totalSkillRecoveryInEnergyLine > 0 && `❇️+${totalSkillRecoveryInEnergyLine}`}
+                    {totalSkillRecoveryInEnergyLine > 0 && (
+                        <>
+                            <TeamTimelineIcon name="heal" data-testid="timeline-cell-recovery-icon-heal" data-heal-icon="true" />
+                            +{totalSkillRecoveryInEnergyLine}
+                        </>
+                    )}
                     {totalSkillRecoveryInEnergyLine > 0 && result.badDreamsDamageTaken > 0 && ' '}
-                    {result.badDreamsDamageTaken > 0 && `🖤-${Math.round(result.badDreamsDamageTaken)}`})
+                    {result.badDreamsDamageTaken > 0 && `🖤-${Math.round(result.badDreamsDamageTaken)}`}
                 </RecoveryInfoLine>
             )}
 
             {/* Line 3: Help count & Berries */}
             <ResourceLine>
                 {!(isFirstSlot && result.helpCount === 0) && (
-                    <HelpLine>🔍{result.helpCount}</HelpLine>
+                    <HelpLine>
+                        <TeamTimelineIcon name="work" data-testid="timeline-cell-help-icon-work" />
+                        {result.helpCount}
+                    </HelpLine>
                 )}
                 {result.berryCount > 0 && (
                     <BerryBadge>
-                        <LocalFireDepartmentIcon sx={{ width: 14, height: 14, color: '#ff944b' }} />
+                        <TeamTimelineIcon name="berry" />
                         {result.berryCount}
                     </BerryBadge>
                 )}
@@ -455,7 +544,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             {(skillDetailLines.length > 0 || result.skillOverflowCount > 0) && (
                 <SkillLine>
                     {skillDetailLines}
-                    {result.skillOverflowCount > 0 && <SkillOverflowLine>❕</SkillOverflowLine>}
+                    {result.skillOverflowCount > 0 && (
+                        <SkillOverflowLine>
+                            <TeamTimelineIcon name="skill_none" data-testid="timeline-cell-skill-overflow-icon" />
+                        </SkillOverflowLine>
+                    )}
                 </SkillLine>
             )}
 
@@ -513,13 +606,44 @@ const EmptyContent = styled('div')({
     display: 'flex',
     flex: 1,
     minHeight: 0,
+    alignItems: 'flex-start',
+});
+
+const TopEnergyArea = styled('div')({
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '3px',
+});
+
+const PokemonIconAnchor = styled('span')({
+    width: '14px',
+    height: '14px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+});
+
+const EnergySummary = styled('div')({
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
 });
 
 const HelpLine = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '1px',
     fontWeight: 600,
     fontSize: '12px',
     lineHeight: '15px',
     letterSpacing: '-0.48px',
+    '& svg': {
+        width: '12px',
+        height: '12px',
+    },
 });
 
 const ResourceLine = styled('div')({
@@ -543,6 +667,10 @@ const BerryBadge = styled('span')({
     fontSize: '12px',
     lineHeight: '15px',
     letterSpacing: '-0.48px',
+    '& svg': {
+        width: '12px',
+        height: '12px',
+    },
 });
 
 const IngredientBadge = styled('span')({
@@ -587,12 +715,35 @@ const SkillDetailLine = styled('div')({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: '2px',
+    '& .skill-prefix-icons': {
+        display: 'inline-flex',
+        alignItems: 'center',
+        flexShrink: 0,
+    },
+    '& .skill-prefix-icon': {
+        width: '10px',
+        height: '10px',
+    },
+    '& .skill-prefix-icon + .skill-prefix-icon': {
+        marginLeft: '-3px',
+    },
+    '& .heal-inline-icon': {
+        width: '10px',
+        height: '10px',
+        marginInline: '1px',
+    },
 });
 
 const SkillOverflowLine = styled('div')({
+    display: 'inline-flex',
+    alignItems: 'center',
     fontSize: '10px',
     color: '#9e9e9e',
     fontWeight: 600,
+    '& svg': {
+        width: '10px',
+        height: '10px',
+    },
 });
 
 const SupportBerryEPBadge = styled('span')({
@@ -603,9 +754,8 @@ const SupportBerryEPBadge = styled('span')({
     lineHeight: '13px',
     letterSpacing: '-0.5px',
     '& svg': {
-        width: '14px',
-        height: '14px',
-        color: '#ff944b',
+        width: '12px',
+        height: '12px',
     },
 });
 
@@ -625,14 +775,25 @@ const EnergyLine = styled('div')({
     lineHeight: '13px',
     letterSpacing: '-0.5px',
     minHeight: '13px',
+    marginTop: '-1px',
 });
 
 const RecoveryInfoLine = styled('div')({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: '100%',
+    gap: '1px',
     fontSize: '7px',
     color: '#000',
     lineHeight: '13px',
     letterSpacing: '-0.35px',
     whiteSpace: 'nowrap',
+    marginTop: '-1px',
+    '& svg': {
+        width: '7px',
+        height: '7px',
+    },
 });
 
 const SwapIconButton = styled(IconButton)({
@@ -727,8 +888,9 @@ const SwapRemoveButton = styled('button')({
 });
 
 const EnergyBarTrack = styled('div')({
-    width: '94px',
+    width: '100%',
     height: '3px',
+    marginTop: '-1px',
     borderRadius: '999px',
     backgroundColor: '#d5ead0',
     overflow: 'hidden',

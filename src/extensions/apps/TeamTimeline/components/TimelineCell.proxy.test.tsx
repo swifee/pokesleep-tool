@@ -77,8 +77,8 @@ function stripHtml(html: string): string {
     return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function countSkillPrefix(text: string): number {
-    return (text.match(/❗/g) ?? []).length;
+function countSkillPrefixIcon(html: string): number {
+    return (html.match(/data-skill-prefix-icon="true"/g) ?? []).length;
 }
 
 function runMetronomeWithForcedIndices(indices: number[]): ReturnType<typeof processSkillTriggers> {
@@ -169,7 +169,7 @@ describe('TimelineCell proxy display', () => {
                 />
             );
             const text = stripHtml(html);
-            expect(countSkillPrefix(text)).toBe(1);
+            expect(countSkillPrefixIcon(html)).toBe(1);
             expect(text.includes('(Moonlight)')).toBe(false);
             expect(text.includes('(Nuzzle)')).toBe(false);
             expect(text.includes('(Stockpile)')).toBe(false);
@@ -207,17 +207,15 @@ describe('TimelineCell proxy display', () => {
             })),
         });
 
-        const text = stripHtml(
-            renderToStaticMarkup(
-                <TimelineCell
-                    result={result}
-                    isSleeping={false}
-                    slotId="slot-1"
-                    teamIndex={0}
-                />
-            )
+        const html = renderToStaticMarkup(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
         );
-        expect(countSkillPrefix(text)).toBe(2);
+        expect(countSkillPrefixIcon(html)).toBe(2);
     });
 
     it('ゆびをふる2回(同じスキル): ❗行が2つになる', () => {
@@ -241,17 +239,15 @@ describe('TimelineCell proxy display', () => {
             })),
         });
 
-        const text = stripHtml(
-            renderToStaticMarkup(
-                <TimelineCell
-                    result={result}
-                    isSleeping={false}
-                    slotId="slot-1"
-                    teamIndex={0}
-                />
-            )
+        const html = renderToStaticMarkup(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
         );
-        expect(countSkillPrefix(text)).toBe(2);
+        expect(countSkillPrefixIcon(html)).toBe(2);
     });
 
     it('proxyのげんきオール表示は(ALL)になる', () => {
@@ -269,17 +265,17 @@ describe('TimelineCell proxy display', () => {
             ],
         });
 
-        const text = stripHtml(
-            renderToStaticMarkup(
-                <TimelineCell
-                    result={result}
-                    isSleeping={false}
-                    slotId="slot-1"
-                    teamIndex={0}
-                />
-            )
+        const html = renderToStaticMarkup(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
         );
-        expect(text).toContain('❇️+18(ALL)');
-        expect(text).not.toContain('❇️+18×5');
+        const text = stripHtml(html);
+        expect(text).toContain('+18(ALL)');
+        expect(text).not.toContain('+18×5');
+        expect(html).toContain('data-heal-icon="true"');
     });
 });

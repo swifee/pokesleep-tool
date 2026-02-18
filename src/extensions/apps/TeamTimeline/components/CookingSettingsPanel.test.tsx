@@ -56,6 +56,12 @@ interface FormControlLabelProps extends ChildrenProps {
     label?: React.ReactNode;
 }
 
+interface ButtonProps extends ChildrenProps {
+    sx?: unknown;
+    variant?: string;
+    disableElevation?: boolean;
+}
+
 vi.mock('@mui/material', () => ({
     Box: ({ children, sx, ...rest }: ChildrenProps & { sx?: unknown }) => {
         const sxText = typeof sx === 'object' && sx != null ? JSON.stringify(sx) : undefined;
@@ -64,10 +70,19 @@ vi.mock('@mui/material', () => ({
     Typography: ({ children, ...rest }: ChildrenProps) => <span {...rest}>{children}</span>,
     TextField: ({ type, value, onChange, onBlur, inputProps, size, variant, sx, ...rest }: TextFieldProps) => {
         void inputProps;
-        void size;
-        void variant;
-        void sx;
-        return <input type={type ?? 'text'} value={value} onChange={onChange} onBlur={onBlur} {...rest} />;
+        const sxText = typeof sx === 'object' && sx != null ? JSON.stringify(sx) : undefined;
+        return (
+            <input
+                type={type ?? 'text'}
+                value={value}
+                onChange={onChange}
+                onBlur={onBlur}
+                data-size={size}
+                data-variant={variant}
+                data-sx={sxText}
+                {...rest}
+            />
+        );
     },
     Select: ({ value, onChange, size, variant, sx, children, ...rest }: SelectProps) => {
         void size;
@@ -104,7 +119,11 @@ vi.mock('@mui/material', () => ({
         <input type="checkbox" checked={checked} onChange={onChange} {...rest} />
     ),
     FormControlLabel: ({ control, label }: FormControlLabelProps) => <label>{control}{label}</label>,
-    Button: ({ children, ...rest }: ChildrenProps) => <button type="button" {...rest}>{children}</button>,
+    Button: ({ children, sx, variant, disableElevation, ...rest }: ButtonProps) => {
+        void disableElevation;
+        const sxText = typeof sx === 'object' && sx != null ? JSON.stringify(sx) : undefined;
+        return <button type="button" data-sx={sxText} data-variant={variant} {...rest}>{children}</button>;
+    },
     Divider: () => <hr />,
 }));
 
@@ -116,6 +135,13 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('../../../../ui/IvCalc/IngredientIcon', () => ({
     default: ({ name }: { name: string }) => <span>[{name}]</span>,
+}));
+
+vi.mock('./TimelineIcons', () => ({
+    default: ({ name, sx, ...rest }: { name: string; sx?: unknown; [key: string]: unknown }) => {
+        void sx;
+        return <span {...rest}>[{name}]</span>;
+    },
 }));
 
 vi.mock('../../../../data/pokemons', async () => {
@@ -191,10 +217,10 @@ describe('CookingSettingsPanel', () => {
         expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'salad' }));
     });
 
-    it('shows "料理" label and initializes recipe defaults to 50', () => {
+    it('initializes recipe defaults to 50 and does not show category label prefix', () => {
         render(<CookingSettingsPanel settings={createSettings({ recipeLevels: {} })} onChange={vi.fn()} />);
 
-        expect(screen.getByText('料理:')).toBeDefined();
+        expect(screen.queryByText('料理:')).toBeNull();
         expect((screen.getByTestId('cooking-batch-level-input') as HTMLInputElement).value).toBe('50');
         expect((screen.getByTestId('recipe-level-input-megaStew') as HTMLInputElement).value).toBe('50');
     });
@@ -213,11 +239,95 @@ describe('CookingSettingsPanel', () => {
         }));
     });
 
+    it('steps recipe level by 5 using minus/plus buttons', () => {
+        const onChange = vi.fn();
+        render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
+
+        fireEvent.click(screen.getByTestId('recipe-level-decrement-megaStew'));
+        expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+            recipeLevels: expect.objectContaining({ megaStew: 45 }),
+        }));
+
+        fireEvent.click(screen.getByTestId('recipe-level-increment-megaStew'));
+        expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+            recipeLevels: expect.objectContaining({ megaStew: 55 }),
+        }));
+    });
+
+    it('steps initial ingredient count by 5 using minus/plus buttons', () => {
+        const onChange = vi.fn();
+        render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
+
+        fireEvent.click(screen.getByTestId('ingredient-decrement-apple'));
+        expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+            initialIngredients: expect.objectContaining({ apple: 25 }),
+        }));
+
+        fireEvent.click(screen.getByTestId('ingredient-increment-apple'));
+        expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+            initialIngredients: expect.objectContaining({ apple: 35 }),
+        }));
+    });
+
+    it('uses the same text field style for batch level and recipe level input', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const batchInput = screen.getByTestId('cooking-batch-level-input');
+        const recipeInput = screen.getByTestId('recipe-level-input-megaStew');
+
+        expect(batchInput.getAttribute('data-variant')).toBe(recipeInput.getAttribute('data-variant'));
+        expect(batchInput.getAttribute('data-size')).toBe(recipeInput.getAttribute('data-size'));
+    });
+
+    it('aligns recipe level controls on a fixed grid columns layout', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const recipeListSx = screen.getByTestId('recipe-level-list').getAttribute('data-sx') ?? '';
+        const recipeRowSx = screen.getByTestId('recipe-row-megaStew').getAttribute('data-sx') ?? '';
+        const recipeControlsSx = screen.getByTestId('recipe-level-controls-megaStew').getAttribute('data-sx') ?? '';
+
+        expect(recipeListSx).toContain('"width":"fit-content"');
+        expect(recipeListSx).toContain('"maxWidth":"100%"');
+        expect(recipeRowSx).toContain('"display":"grid"');
+        expect(recipeRowSx).toContain('"gridTemplateColumns":"minmax(0, 1fr) auto"');
+        expect(recipeControlsSx).toContain('"gridTemplateColumns":"auto auto auto"');
+    });
+
+    it('centers numeric text input values', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const batchInputSx = screen.getByTestId('cooking-batch-level-input').getAttribute('data-sx') ?? '';
+        const recipeInputSx = screen.getByTestId('recipe-level-input-megaStew').getAttribute('data-sx') ?? '';
+        const ingredientInputSx = screen.getByTestId('ingredient-input-apple').getAttribute('data-sx') ?? '';
+
+        expect(batchInputSx).toContain('"textAlign":"center"');
+        expect(batchInputSx).toContain('"WebkitAppearance":"none"');
+        expect(batchInputSx).toContain('"MozAppearance":"textfield"');
+        expect(recipeInputSx).toContain('"textAlign":"center"');
+        expect(ingredientInputSx).toContain('"textAlign":"center"');
+    });
+
+    it('renders step buttons as contained circular gray style', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const recipeMinusButton = screen.getByTestId('recipe-level-decrement-megaStew');
+        const sxText = recipeMinusButton.getAttribute('data-sx') ?? '';
+
+        expect(recipeMinusButton.getAttribute('data-variant')).toBe('contained');
+        expect(sxText).toContain('"backgroundColor":"transparent"');
+        expect(sxText).toContain('step-button-circle');
+        expect(sxText).toContain('"width":"1.2rem"');
+        expect(sxText).toContain('"height":"1.2rem"');
+        expect(sxText).toContain('"borderRadius":"50%"');
+    });
+
     it('shows recipe ingredient summary and total initial ingredient count', () => {
         render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
 
         const summary = screen.getByTestId('recipe-ingredients-megaStew');
-        expect(summary.textContent).toContain('食材60');
+        expect(summary.textContent).toContain('[cooking]60');
+        expect(summary.textContent).not.toContain('食材60');
+        expect(screen.getByTestId('recipe-ingredients-cooking-icon-megaStew').textContent).toContain('[cooking]');
         expect(summary.textContent).toContain('[apple]30');
         expect(summary.textContent).toContain('[mushroom]30');
 

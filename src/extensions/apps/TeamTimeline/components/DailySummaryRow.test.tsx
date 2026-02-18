@@ -98,6 +98,27 @@ describe('DailySummaryRow', () => {
         expect(container.querySelectorAll('[data-testid="daily-summary-cell"]')).toHaveLength(3);
     });
 
+    it('uses responsive grid columns so card width follows available columns', () => {
+        const items = [
+            createPokemon('Pikachu', 8, 'One'),
+            createPokemon('Bulbasaur', 9, 'Two'),
+            createPokemon('Charmander', 10, 'Three'),
+        ];
+        const box = new PokemonBox(items);
+        const summaries = items.map((item, index) => createDailySummary(item.id, index + 1));
+
+        render(<DailySummaryRow dailySummaries={summaries} box={box} layoutMode="average" />);
+
+        const grid = screen.getByTestId('daily-summary-grid');
+        const firstCard = screen.getAllByTestId('daily-summary-cell')[0];
+        const gridStyle = window.getComputedStyle(grid);
+        const firstCardStyle = window.getComputedStyle(firstCard);
+
+        expect(gridStyle.display).toBe('grid');
+        expect(gridStyle.gridTemplateColumns.replace(/\s+/g, '')).toContain('repeat(auto-fit,minmax(96px,1fr))');
+        expect(firstCardStyle.width).toBe('100%');
+    });
+
     it('shows 個別成績 as default label in details mode', () => {
         const items = [createPokemon('Pikachu', 12, 'Solo')];
         const box = new PokemonBox(items);
@@ -123,11 +144,11 @@ describe('DailySummaryRow', () => {
         const box = new PokemonBox(items);
         const summaries = [createDailySummary(items[0].id, 1)];
 
-        const { container } = render(<DailySummaryRow dailySummaries={summaries} box={box} layoutMode="details" />);
+        render(<DailySummaryRow dailySummaries={summaries} box={box} layoutMode="details" />);
 
-        const content = container.textContent ?? '';
-        expect(content.indexOf('Solo')).toBeLessThan(content.indexOf('60EP'));
-        expect(content.indexOf('60EP')).toBeLessThan(content.indexOf('🔍1'));
+        const berryEpLine = screen.getByTestId(`daily-summary-ep-berry-${items[0].id}`);
+        const helpCountLine = screen.getByTestId(`daily-summary-count-help-${items[0].id}`);
+        expect(berryEpLine.compareDocumentPosition(helpCountLine) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
     it('renders overflow ingredients in timeline-style format without +溢', () => {
@@ -232,11 +253,11 @@ describe('DailySummaryRow', () => {
 
         const text = document.body.textContent ?? '';
         expect(text).toContain('AverageMon');
-        expect(text).toContain('501EP');
-        expect(text).toContain('1,001EP');
-        expect(text).toContain('1,501EP');
-        expect(text).toContain('3,003EP');
-        expect(text).toContain('🔍2.5');
+        expect(text).toContain('501 EP');
+        expect(text).toContain('1,001 EP');
+        expect(text).toContain('1,501 EP');
+        expect(text).toContain('3,003 EP');
+        expect(screen.getByTestId(`daily-summary-count-help-${items[0].id}`).textContent).toContain('2.5');
         expect(text).toContain('食材合計: 5');
     });
 

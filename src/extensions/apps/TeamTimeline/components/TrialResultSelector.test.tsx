@@ -33,6 +33,22 @@ interface TooltipMockProps {
     };
 }
 
+function reactNodeToText(node: React.ReactNode): string {
+    if (node == null || typeof node === 'boolean') {
+        return '';
+    }
+    if (typeof node === 'string' || typeof node === 'number') {
+        return String(node);
+    }
+    if (Array.isArray(node)) {
+        return node.map(reactNodeToText).join('');
+    }
+    if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+        return reactNodeToText(node.props.children);
+    }
+    return '';
+}
+
 vi.mock('@mui/material', async () => {
     const actual = await vi.importActual<typeof import('@mui/material')>('@mui/material');
     return {
@@ -73,7 +89,7 @@ vi.mock('@mui/material', async () => {
             <div
                 data-testid="mock-tooltip"
                 data-open={open ? 'true' : 'false'}
-                data-title={typeof title === 'string' ? title : ''}
+                data-title={reactNodeToText(title)}
                 data-modifiers={(slotProps?.popper?.modifiers ?? [])
                     .map((modifier) => modifier.name ?? '')
                     .join(',')}

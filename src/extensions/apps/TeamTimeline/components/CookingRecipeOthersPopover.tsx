@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AverageCookingRecipeSummary } from '../types/CookingTypes';
 import { formatSummaryEp } from '../utils/SummaryValueModeUtils';
 import { formatAverageRecipeCount } from '../utils/CookingDisplayUtils';
+import EpValue from './EpValue';
 
 interface CookingRecipeOthersPopoverProps {
     recipes: readonly AverageCookingRecipeSummary[];
@@ -70,7 +71,7 @@ const CookingRecipeOthersPopover = React.memo(({
                         <PopoverItem key={recipe.recipeName}>
                             {t(`TeamTimeline.recipe ${recipe.recipeName}`, recipe.recipeName)}
                             {' : '}
-                            平均{formatSummaryEp(recipe.averageCookingEP)}EP × {formatAverageRecipeCount(recipe.averageCount)}回
+                            平均<EpValue value={formatSummaryEp(recipe.averageCookingEP)} /> × {formatAverageRecipeCount(recipe.averageCount)}回
                         </PopoverItem>
                     ))}
                 </PopoverBody>

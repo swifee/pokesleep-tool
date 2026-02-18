@@ -9,6 +9,8 @@ import type { SummaryLayoutMode } from './DailySummaryRow';
 import IngredientOthersPopover from './IngredientOthersPopover';
 import CookingRecipeOthersPopover from './CookingRecipeOthersPopover';
 import SummaryValueModeToggle from './SummaryValueModeToggle';
+import TeamTimelineIcon from './TimelineIcons';
+import EpValue from './EpValue';
 import {
   calculateIngredientTotalCount,
   formatIngredientCount,
@@ -80,7 +82,6 @@ const TeamSummaryRow = React.memo(({
   const totalIngredientEP = convertByMode(teamSummary.totalIngredientEP);
   const totalSkillEP = convertByMode(teamSummary.totalSkillEP);
   const grandTotalEP = convertByMode(teamSummary.grandTotalEP);
-  const summaryIngredientLabel = teamSummary.totalCookingEP != null ? '料理' : '食材';
   const totalPresentCandyCount = convertByMode(teamSummary.totalPresentCandyCount);
   const totalCookingPotCapacityIncrease = convertByMode(teamSummary.totalCookingPotCapacityIncrease);
   const totalDreamShardCount = convertByMode(teamSummary.totalDreamShardCount);
@@ -100,6 +101,11 @@ const TeamSummaryRow = React.memo(({
     })
     : [];
   const groupedAverageCookingRecipes = groupAverageCookingRecipes(sortedAverageCookingRecipes);
+  const summaryEpValue = formatSummaryEp(
+    teamSummary.totalCookingEP != null
+      ? convertByMode(teamSummary.totalCookingEP)
+      : totalIngredientEP
+  );
 
   return (
     <Wrapper data-layout={layoutMode} data-has-toggle={canShowToggle}>
@@ -121,17 +127,22 @@ const TeamSummaryRow = React.memo(({
       <ContentCell>
         <EPPanel>
           <EPLine>
-            きのみ : {formatSummaryEp(totalBerryEP)}EP
-            <span className="sep" />
-            スキル : {formatSummaryEp(totalSkillEP)}EP
-            <span className="sep" />
-            {summaryIngredientLabel} : {formatSummaryEp(
-              teamSummary.totalCookingEP != null
-                ? convertByMode(teamSummary.totalCookingEP)
-                : totalIngredientEP,
-            )}EP
+            <EPItem data-testid="team-summary-ep-item-berry">
+              <TeamTimelineIcon name="berry" data-testid="team-summary-ep-icon-berry" />
+              <EpValue value={formatSummaryEp(totalBerryEP)} />
+            </EPItem>
+            <EPItem data-testid="team-summary-ep-item-skill">
+              <TeamTimelineIcon name="skill" data-testid="team-summary-ep-icon-skill" />
+              <EpValue value={formatSummaryEp(totalSkillEP)} />
+            </EPItem>
+            <EPItem data-testid={`team-summary-ep-item-${teamSummary.totalCookingEP != null ? 'cooking' : 'ingredient'}`}>
+              <TeamTimelineIcon name="cooking" data-testid="team-summary-ep-icon-cooking" />
+              <EpValue value={summaryEpValue} />
+            </EPItem>
           </EPLine>
-          <TotalLine>total {formatSummaryEp(grandTotalEP)}EP</TotalLine>
+          <TotalLine>
+            total <EpValue value={formatSummaryEp(grandTotalEP)} />
+          </TotalLine>
         </EPPanel>
 
         <IngredientSection>
@@ -157,7 +168,12 @@ const TeamSummaryRow = React.memo(({
           {hasOtherMeta && <MetaLineBreak aria-hidden />}
           {totalPresentCandyCount > 0 && <MetaItem>🍬{formatSummaryNumber(totalPresentCandyCount)}</MetaItem>}
           {totalCookingPotCapacityIncrease > 0 && <MetaItem>鍋容量 : +{formatSummaryNumber(totalCookingPotCapacityIncrease)}</MetaItem>}
-          {totalDreamShardCount > 0 && <MetaItem>ゆめのかけら : +{formatSummaryNumber(totalDreamShardCount)}</MetaItem>}
+          {totalDreamShardCount > 0 && (
+            <MetaItem>
+              <TeamTimelineIcon name="dream" data-testid="team-summary-meta-icon-dream" />
+              +{formatSummaryNumber(totalDreamShardCount)}
+            </MetaItem>
+          )}
           {totalTastyChanceIncreasePercent > 0 && <MetaItem>料理チャンス : +{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</MetaItem>}
         </IngredientSection>
         {layoutMode === 'details' && cookingResult && (
@@ -178,7 +194,7 @@ const TeamSummaryRow = React.memo(({
                                         : t(`TeamTimeline.recipe ${event.recipeName}`, event.recipeName)}
                                 </span>
                                 <span className="cooking-ep">
-                                    {event.cookingEP > 0 ? `${Math.round(event.cookingEP).toLocaleString()}EP` : '-'}
+                                    {event.cookingEP > 0 ? <EpValue value={Math.round(event.cookingEP).toLocaleString()} /> : '-'}
                                 </span>
                                 {event.remainingPotCapacity > 0 && (
                                     <span className="pot-remaining">
@@ -209,7 +225,7 @@ const TeamSummaryRow = React.memo(({
                 <InitialIngredientEpLine>
                     {t('TeamTimeline.cooking initial ingredient ep total', '初期食材由来EP合計')}
                     {' : '}
-                    {formatSummaryEp(convertByMode(cookingResult.totalInitialIngredientEP ?? 0))}EP
+                    <EpValue value={formatSummaryEp(convertByMode(cookingResult.totalInitialIngredientEP ?? 0))} />
                 </InitialIngredientEpLine>
             </CookingSection>
         )}
@@ -228,7 +244,7 @@ const TeamSummaryRow = React.memo(({
                         <span className="recipe-text">
                             {t(`TeamTimeline.recipe ${recipe.recipeName}`, recipe.recipeName)}
                             {' : '}
-                            平均{formatSummaryEp(recipe.averageCookingEP)}EP × {formatAverageRecipeCount(recipe.averageCount)}回
+                            平均<EpValue value={formatSummaryEp(recipe.averageCookingEP)} /> × {formatAverageRecipeCount(recipe.averageCount)}回
                         </span>
                     </AverageCookingRecipeLine>
                 ))}
@@ -254,7 +270,7 @@ const TeamSummaryRow = React.memo(({
                 <InitialIngredientEpLine>
                     {t('TeamTimeline.cooking initial ingredient ep total', '初期食材由来EP合計')}
                     {' : '}
-                    {formatSummaryEp(convertByMode(averageCookingSummary.averageInitialIngredientEP ?? 0))}EP
+                    <EpValue value={formatSummaryEp(convertByMode(averageCookingSummary.averageInitialIngredientEP ?? 0))} />
                 </InitialIngredientEpLine>
             </CookingSection>
         )}
@@ -337,9 +353,16 @@ const IngredientItem = styled('span')({
 });
 
 const MetaItem = styled('span')({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '1px',
   fontSize: '12px',
   lineHeight: '15px',
   letterSpacing: '-0.48px',
+  '& svg': {
+    width: '12px',
+    height: '12px',
+  },
   '& .value': {
     fontWeight: 700,
   },
@@ -366,12 +389,19 @@ const EPLine = styled('div')({
   display: 'flex',
   alignItems: 'center',
   flexWrap: 'wrap',
-  gap: '2px',
+  gap: '6px',
   fontSize: '12px',
   lineHeight: '15px',
   letterSpacing: '-0.48px',
-  '& .sep': {
-    width: '6px',
+});
+
+const EPItem = styled('span')({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '1px',
+  '& svg': {
+    width: '12px',
+    height: '12px',
   },
 });
 

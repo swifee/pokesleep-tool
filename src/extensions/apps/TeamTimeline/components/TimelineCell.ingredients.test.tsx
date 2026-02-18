@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import TimelineCell from './TimelineCell';
 import { TimeSlotResult } from '../types/TimeSlotTypes';
@@ -12,6 +12,12 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('../../../../ui/IvCalc/IngredientIcon', () => ({
     default: ({ name }: { name: string }) => <span>{name}</span>,
+}));
+
+vi.mock('../../../../ui/IvCalc/PokemonIcon', () => ({
+    default: ({ idForm, size }: { idForm: number; size: number }) => (
+        <span data-testid="mock-pokemon-icon">{`${idForm}-${size}`}</span>
+    ),
 }));
 
 function countOccurrences(text: string, token: string): number {
@@ -124,13 +130,14 @@ describe('TimelineCell ingredient ordering', () => {
         );
 
         const content = container.textContent ?? '';
-        expect(content).toContain('❗→SupportTarget');
-        expect(content).toContain('840EP');
-        expect(content).not.toContain('(+840EP)');
-        expect(content.indexOf('840EP')).toBeLessThan(content.indexOf('apple'));
+        expect(content).toContain('→SupportTarget');
+        expect(content).toContain('840 EP');
+        expect(content).not.toContain('(+840 EP)');
+        expect(content.indexOf('840 EP')).toBeLessThan(content.indexOf('apple'));
         expect(countOccurrences(content, 'apple1')).toBe(1);
         expect(countOccurrences(content, 'mushroom1')).toBe(1);
         expect(container.querySelector('svg')).not.toBeNull();
+        expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(1);
     });
 
     it('renders arrows for all team-target skill event names', () => {
@@ -181,10 +188,11 @@ describe('TimelineCell ingredient ordering', () => {
         );
 
         const content = container.textContent ?? '';
-        expect(content).toContain('❗→CheerTarget');
-        expect(content).toContain('❗→MoonTarget');
-        expect(content).toContain('❗→SupportTarget2');
-        expect(content).toContain('❗→MinusTarget');
+        expect(content).toContain('→CheerTarget');
+        expect(content).toContain('→MoonTarget');
+        expect(content).toContain('→SupportTarget2');
+        expect(content).toContain('→MinusTarget');
+        expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(4);
     });
 
     it('renders team-wide recovery as (ALL) instead of target count', () => {
@@ -204,7 +212,40 @@ describe('TimelineCell ingredient ordering', () => {
         );
 
         const content = container.textContent ?? '';
-        expect(content).toContain('❇️+18(ALL)');
-        expect(content).not.toContain('❇️+18×5');
+        expect(content).toContain('+18(ALL)');
+        expect(content).not.toContain('+18×5');
+        expect(container.querySelectorAll('[data-heal-icon="true"]').length).toBeGreaterThan(0);
+    });
+
+    it('renders pokemon icon next to energy display when pokemonIdForm exists', () => {
+        const result = createTimeSlotResult({
+            energyEnd: 60,
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                pokemonIdForm={25}
+            />
+        );
+
+        expect(screen.getByTestId('timeline-cell-pokemon-icon').textContent).toBe('25-14');
+    });
+
+    it('keeps pokemon icon visible for pre-simulation empty cell', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                pokemonIdForm={35}
+            />
+        );
+
+        expect(screen.getByTestId('timeline-cell-pokemon-icon').textContent).toBe('35-14');
     });
 });

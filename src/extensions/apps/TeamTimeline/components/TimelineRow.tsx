@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { TimeSlot, TimeSlotResult, PokemonSwap, SWAP_NONE_POKEMON_ID } from '../types/TimeSlotTypes';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineCell from './TimelineCell';
+import TeamTimelineIcon from './TimelineIcons';
 
 interface TimelineRowProps {
     slot: TimeSlot;
@@ -50,15 +51,20 @@ const TimelineRow = React.memo(({
     const isSleeping = results.length > 0 ? results[0].isSleeping : false;
     const durationMinutes = results.length > 0 ? results[0].durationMinutes : 0;
 
-    const getLabelText = (): string => {
+    const getLabelContent = (): React.ReactNode => {
         if (slot.sleepState === 'wake') {
-            return slot.hasMeal ? '⏰🍴' : '⏰';
+            return (
+                <span className="label-icons">
+                    <TeamTimelineIcon name="wakeup" data-testid="timeline-row-label-wakeup" />
+                    {slot.hasMeal && <TeamTimelineIcon name="cooking" data-testid="timeline-row-label-cooking" />}
+                </span>
+            );
         }
         if (slot.sleepState === 'sleep') {
-            return '🛌';
+            return <TeamTimelineIcon name="sleep" data-testid="timeline-row-label-sleep" />;
         }
         if (slot.hasMeal) {
-            return '🍴';
+            return <TeamTimelineIcon name="cooking" data-testid="timeline-row-label-cooking" />;
         }
         return slot.customLabel || '';
     };
@@ -120,12 +126,15 @@ const TimelineRow = React.memo(({
                 {durationMinutes > 0 && (
                     <div className="duration">{formatDuration(durationMinutes)}</div>
                 )}
-                <div className="label">{getLabelText()}</div>
+                <div className="label">{getLabelContent()}</div>
             </TimeInfoCell>
 
             {team.map((item, index) => {
                 const result = resultMap.get(index) ?? null;
                 const { hasSwap, swappedPokemonName, swappedPokemonId, removable } = getSwapInfo(originalSlotId, index);
+                const resultPokemon = result ? box.getById(result.pokemonId) : null;
+                const swappedPokemon = swappedPokemonId !== undefined ? box.getById(swappedPokemonId) : null;
+                const pokemonIdForm = resultPokemon?.iv.idForm ?? swappedPokemon?.iv.idForm ?? item?.iv.idForm;
 
                 return (
                     <TimelineCell
@@ -145,6 +154,7 @@ const TimelineRow = React.memo(({
                         alwaysShowSwapButton={alwaysShowSwapButton}
                         compactFirstSlot={isFirstTimelineSlot}
                         disableSwapUi={isFirstTimelineSlot}
+                        pokemonIdForm={pokemonIdForm}
                     />
                 );
             })}
@@ -193,6 +203,18 @@ const TimeInfoCell = styled('div')({
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
+        display: 'inline-flex',
+        alignItems: 'center',
+        minHeight: '13px',
+    },
+    '& .label-icons': {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '1px',
+    },
+    '& .label svg': {
+        width: '10px',
+        height: '10px',
     },
 });
 

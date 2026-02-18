@@ -126,7 +126,7 @@ describe('TeamSummaryRow', () => {
     it('hides label in average mode', () => {
         render(<TeamSummaryRow teamSummary={TEAM_SUMMARY} layoutMode="average" />);
         expect(screen.queryByText('合計')).toBeNull();
-        expect(screen.getByText('total 6,000EP')).toBeDefined();
+        expect(document.body.textContent ?? '').toContain('total 6,000 EP');
     });
 
     it('sorts ingredients by count descending and shows ingredient totals in details mode', () => {
@@ -156,33 +156,37 @@ describe('TeamSummaryRow', () => {
         );
 
         const content = container.textContent ?? '';
-        expect(content.indexOf('total 6,000EP')).toBeLessThan(content.indexOf('食材合計: 22'));
+        expect(content.indexOf('total 6,000 EP')).toBeLessThan(content.indexOf('食材合計: 22'));
     });
 
     it('shows EP in berry -> skill -> ingredient order when cooking simulation is off', () => {
-        const { container } = render(
+        render(
             <TeamSummaryRow
                 teamSummary={TEAM_SUMMARY}
                 layoutMode="details"
             />
         );
 
-        const content = container.textContent ?? '';
-        expect(content.indexOf('きのみ : 1,000EP')).toBeLessThan(content.indexOf('スキル : 3,000EP'));
-        expect(content.indexOf('スキル : 3,000EP')).toBeLessThan(content.indexOf('食材 : 2,000EP'));
+        const berryItem = screen.getByTestId('team-summary-ep-item-berry');
+        const skillItem = screen.getByTestId('team-summary-ep-item-skill');
+        const ingredientItem = screen.getByTestId('team-summary-ep-item-ingredient');
+        expect(berryItem.compareDocumentPosition(skillItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(skillItem.compareDocumentPosition(ingredientItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
     it('shows EP in berry -> skill -> cooking order when cooking simulation is on', () => {
-        const { container } = render(
+        render(
             <TeamSummaryRow
                 teamSummary={TEAM_SUMMARY_WITH_COOKING}
                 layoutMode="details"
             />
         );
 
-        const content = container.textContent ?? '';
-        expect(content.indexOf('きのみ : 1,000EP')).toBeLessThan(content.indexOf('スキル : 3,000EP'));
-        expect(content.indexOf('スキル : 3,000EP')).toBeLessThan(content.indexOf('料理 : 2,400EP'));
+        const berryItem = screen.getByTestId('team-summary-ep-item-berry');
+        const skillItem = screen.getByTestId('team-summary-ep-item-skill');
+        const cookingItem = screen.getByTestId('team-summary-ep-item-cooking');
+        expect(berryItem.compareDocumentPosition(skillItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(skillItem.compareDocumentPosition(cookingItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
     it('always keeps top 3 ingredients visible and groups only low ingredients after 4th item', () => {
@@ -238,12 +242,11 @@ describe('TeamSummaryRow', () => {
             />
         );
 
-        const text = document.body.textContent ?? '';
-        expect(text).toContain('きのみ : 1,000EP');
-        expect(text).toContain('食材 : 667EP');
-        expect(text).toContain('スキル : 334EP');
-        expect(text).toContain('total 2,001EP');
-        expect(text).toContain('食材合計: 3');
+        expect(screen.getByTestId('team-summary-ep-item-berry').textContent).toContain('1,000 EP');
+        expect(screen.getByTestId('team-summary-ep-item-ingredient').textContent).toContain('667 EP');
+        expect(screen.getByTestId('team-summary-ep-item-skill').textContent).toContain('334 EP');
+        expect((document.body.textContent ?? '')).toContain('total 2,001 EP');
+        expect((document.body.textContent ?? '')).toContain('食材合計: 3');
     });
 
     it('renders translated recipe names in cooking result', () => {
@@ -267,7 +270,7 @@ describe('TeamSummaryRow', () => {
             />
         );
 
-        expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 321EP');
+        expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 321 EP');
     });
 
     it('renders average cooking summary in requested format and groups recipes below 1.0 count', () => {
@@ -282,8 +285,8 @@ describe('TeamSummaryRow', () => {
         const content = container.textContent ?? '';
         expect(content).toContain('あまり食材平均');
         expect(content).toContain('milk0');
-        expect(content).toContain('translated:TeamTimeline.recipe highBaseVisibleRecipe : 平均9,800EP × 2回');
-        expect(content).toContain('translated:TeamTimeline.recipe lowBaseVisibleRecipe : 平均4,200EP × 1.5回');
+        expect(content).toContain('translated:TeamTimeline.recipe highBaseVisibleRecipe : 平均9,800 EP × 2回');
+        expect(content).toContain('translated:TeamTimeline.recipe lowBaseVisibleRecipe : 平均4,200 EP × 1.5回');
         expect(content.indexOf('translated:TeamTimeline.recipe highBaseVisibleRecipe'))
             .toBeLessThan(content.indexOf('translated:TeamTimeline.recipe lowBaseVisibleRecipe'));
 
@@ -292,7 +295,7 @@ describe('TeamSummaryRow', () => {
 
         fireEvent.click(groupedButton);
         const popoverText = document.body.textContent ?? '';
-        expect(popoverText).toContain('translated:TeamTimeline.recipe groupedRecipe : 平均550EP × 0.06回');
+        expect(popoverText).toContain('translated:TeamTimeline.recipe groupedRecipe : 平均550 EP × 0.06回');
         expect(popoverText).not.toContain('translated:TeamTimeline.recipe excludedRecipe');
     });
 
@@ -307,6 +310,6 @@ describe('TeamSummaryRow', () => {
             />
         );
 
-        expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 263EP');
+        expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 263 EP');
     });
 });

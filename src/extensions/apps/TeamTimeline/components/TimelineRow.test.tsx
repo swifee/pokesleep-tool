@@ -42,7 +42,7 @@ function renderRow(slot: TimeSlot): void {
 }
 
 describe('TimelineRow label rendering', () => {
-    it('shows wake and meal as emoji when wake and meal overlap', () => {
+    it('shows wake and meal icons when wake and meal overlap', () => {
         renderRow({
             id: 'wake-breakfast',
             time: '07:00',
@@ -50,10 +50,11 @@ describe('TimelineRow label rendering', () => {
             hasMeal: true,
         });
 
-        expect(screen.getByText('⏰🍴')).toBeDefined();
+        expect(screen.getByTestId('timeline-row-label-wakeup')).toBeDefined();
+        expect(screen.getByTestId('timeline-row-label-cooking')).toBeDefined();
     });
 
-    it('shows meal emoji for non-wake meal slot', () => {
+    it('shows meal icon for non-wake meal slot', () => {
         renderRow({
             id: 'breakfast',
             time: '08:00',
@@ -61,10 +62,10 @@ describe('TimelineRow label rendering', () => {
             hasMeal: true,
         });
 
-        expect(screen.getByText('🍴')).toBeDefined();
+        expect(screen.getByTestId('timeline-row-label-cooking')).toBeDefined();
     });
 
-    it('shows sleep emoji for sleep slot', () => {
+    it('shows sleep icon for sleep slot', () => {
         renderRow({
             id: 'sleep',
             time: '23:00',
@@ -72,7 +73,7 @@ describe('TimelineRow label rendering', () => {
             hasMeal: false,
         });
 
-        expect(screen.getByText('🛌')).toBeDefined();
+        expect(screen.getByTestId('timeline-row-label-sleep')).toBeDefined();
     });
 });
 

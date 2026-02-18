@@ -189,6 +189,10 @@ function renderPanel(overrides?: Partial<React.ComponentProps<typeof AdditionalA
         valueMode: 'periodTotal',
         contributionMembers: [member1, member2],
         contributionResults: new Map(),
+        contributionActiveMinutesByPokemonId: new Map([
+            [member1.id, 1440],
+            [member2.id, 1440],
+        ]),
         contributionLoadingIds: new Set<number>(),
         contributionBatchLoading: false,
         contributionBatchProgress: 0,
@@ -307,7 +311,7 @@ describe('AdditionalAnalysisPanel', () => {
             },
         });
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
-        expect(screen.getByText('チーム: 500 EP (25%)')).toBeDefined();
+        expect(document.body.textContent ?? '').toContain('チーム: 500 EP (25%)');
     });
 
     it('shows help tooltip on hover for each section title', () => {
@@ -420,6 +424,10 @@ describe('AdditionalAnalysisPanel', () => {
             valueMode: 'dailyAverage',
             contributionMembers: [member1, member2],
             energySkillTargets: energyTargets,
+            contributionActiveMinutesByPokemonId: new Map([
+                [member1.id, 1440],
+                [member2.id, 2880],
+            ]),
             contributionResults: new Map([
                 [member1.id, {
                     pokemonId: member1.id,
@@ -453,9 +461,71 @@ describe('AdditionalAnalysisPanel', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
-        expect(screen.getByText('100 EP (20%)')).toBeDefined();
-        expect(screen.getByText('自身: 50 EP (25%)')).toBeDefined();
-        expect(screen.getByText('チーム: 100 EP (20%)')).toBeDefined();
+        const content = document.body.textContent ?? '';
+        expect(content).toMatch(/100 EP \(20%\)\s+24h換算:400 EP/);
+        expect(content).toContain('自身: 50 EP (25%)');
+        expect(content).toContain('チーム: 100 EP (20%)');
+    });
+
+    it('shows 24h converted percent after all contribution results are available', () => {
+        const member1 = createPokemonBySkill('Charge Energy S');
+        const member2 = createPokemonBySkill('Energy for Everyone S');
+        renderPanel({
+            contributionMembers: [member1, member2],
+            contributionActiveMinutesByPokemonId: new Map([
+                [member1.id, 360],
+                [member2.id, 720],
+            ]),
+            contributionResults: new Map([
+                [member1.id, {
+                    pokemonId: member1.id,
+                    pokemonName: member1.iv.pokemonName,
+                    baseTeamEP: 5000,
+                    scenarioTeamEP: 4700,
+                    deltaEP: -300,
+                    deltaPercent: -6,
+                }],
+                [member2.id, {
+                    pokemonId: member2.id,
+                    pokemonName: member2.iv.pokemonName,
+                    baseTeamEP: 5000,
+                    scenarioTeamEP: 4900,
+                    deltaEP: -100,
+                    deltaPercent: -2,
+                }],
+            ]),
+        });
+        fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
+
+        const content = document.body.textContent ?? '';
+        expect(content).toMatch(/300 EP \(6%\)\s+24h換算:1,200 EP\(85.7%\)/);
+        expect(content).toMatch(/100 EP \(2%\)\s+24h換算:200 EP\(14.3%\)/);
+    });
+
+    it('hides 24h conversion block when active minutes are zero', () => {
+        const member1 = createPokemonBySkill('Charge Energy S');
+        const member2 = createPokemonBySkill('Energy for Everyone S');
+        renderPanel({
+            contributionMembers: [member1, member2],
+            contributionActiveMinutesByPokemonId: new Map([
+                [member1.id, 0],
+                [member2.id, 720],
+            ]),
+            contributionResults: new Map([
+                [member1.id, {
+                    pokemonId: member1.id,
+                    pokemonName: member1.iv.pokemonName,
+                    baseTeamEP: 4000,
+                    scenarioTeamEP: 3600,
+                    deltaEP: -400,
+                    deltaPercent: -10,
+                }],
+            ]),
+        });
+        fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
+
+        expect(document.body.textContent ?? '').toContain('400 EP (10%)');
+        expect((document.body.textContent ?? '')).not.toContain('24h換算:');
     });
 
     it('renders energy skill label without derived/base suffix parentheses', () => {
@@ -568,6 +638,6 @@ describe('AdditionalAnalysisPanel', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
-        expect(screen.getByText('55,593 EP (35.1%)')).toBeDefined();
+        expect(document.body.textContent ?? '').toContain('55,593 EP (35.1%)');
     });
 });

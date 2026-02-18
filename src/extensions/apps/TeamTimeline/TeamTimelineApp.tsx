@@ -2260,6 +2260,7 @@ export default function TeamTimelineApp() {
                                     valueMode={summaryValueMode}
                                     contributionMembers={appearingTimelineMembers}
                                     contributionResults={contributionResults}
+                                    contributionActiveMinutesByPokemonId={timelineDurationSummary.activeMinutesByPokemonId}
                                     contributionLoadingIds={contributionLoadingIds}
                                     contributionBatchLoading={contributionBatchLoading}
                                     contributionBatchProgress={contributionBatchProgress}
