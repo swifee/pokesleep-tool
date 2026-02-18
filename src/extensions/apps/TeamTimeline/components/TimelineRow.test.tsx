@@ -16,13 +16,16 @@ vi.mock('./TimelineCell', () => ({
     default: ({
         swappedPokemonName,
         onRemoveSwapClick,
+        pokemonIdForm,
     }: {
         swappedPokemonName?: string;
         onRemoveSwapClick?: () => void;
+        pokemonIdForm?: number;
     }) => (
         <div data-testid="timeline-cell">
             <span>{swappedPokemonName ?? ''}</span>
             <span data-testid="remove-flag">{onRemoveSwapClick ? '1' : '0'}</span>
+            <span data-testid="pokemon-id-form">{pokemonIdForm === undefined ? '' : String(pokemonIdForm)}</span>
         </div>
     ),
 }));
@@ -78,12 +81,14 @@ describe('TimelineRow label rendering', () => {
 });
 
 describe('TimelineRow swap rendering', () => {
+    const createPokemon = (id: number, idForm: number, nickname: string): PokemonBoxItem => ({
+        id,
+        iv: { idForm },
+        filledNickname: () => nickname,
+    } as unknown as PokemonBoxItem);
+
     it('renders direct swap target with remove action', () => {
-        const swappedIn = {
-            id: 101,
-            iv: { idForm: 25 },
-            filledNickname: () => 'ピカチュウ',
-        } as unknown as PokemonBoxItem;
+        const swappedIn = createPokemon(101, 25, 'ピカチュウ');
         const swaps: PokemonSwap[] = [
             {
                 dayIndex: 0,
@@ -109,5 +114,110 @@ describe('TimelineRow swap rendering', () => {
         const firstCell = screen.getAllByTestId('timeline-cell')[0];
         expect(within(firstCell).getByText('ピカチュウ')).toBeDefined();
         expect(within(firstCell).getByTestId('remove-flag').textContent).toBe('1');
+    });
+
+    it('keeps current pokemon icon on the swap cell before simulation results', () => {
+        const current = createPokemon(1, 260, 'ラグラージ');
+        const swappedIn = createPokemon(2, 154, 'メガニウム');
+        const swaps: PokemonSwap[] = [
+            {
+                dayIndex: 0,
+                slotId: 'slot-2',
+                teamSlotIndex: 0,
+                newPokemonId: swappedIn.id,
+                initialEnergy: 100,
+            },
+        ];
+
+        render(
+            <TimelineRow
+                slot={{ id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: false }}
+                originalSlotId="slot-2"
+                dayIndex={0}
+                slotIndexInDay={1}
+                slotOrderById={new Map([
+                    ['slot-1', 0],
+                    ['slot-2', 1],
+                    ['slot-3', 2],
+                ])}
+                results={[]}
+                team={[current, null, null, null, null]}
+                swaps={swaps}
+                box={new PokemonBox([current, swappedIn])}
+            />
+        );
+
+        const firstCell = screen.getAllByTestId('timeline-cell')[0];
+        expect(within(firstCell).getByTestId('pokemon-id-form').textContent).toBe('260');
+    });
+
+    it('uses swapped pokemon icon from the next slots onward before simulation results', () => {
+        const current = createPokemon(1, 260, 'ラグラージ');
+        const swappedIn = createPokemon(2, 154, 'メガニウム');
+        const swaps: PokemonSwap[] = [
+            {
+                dayIndex: 0,
+                slotId: 'slot-2',
+                teamSlotIndex: 0,
+                newPokemonId: swappedIn.id,
+                initialEnergy: 100,
+            },
+        ];
+
+        render(
+            <TimelineRow
+                slot={{ id: 'slot-3', time: '15:00', sleepState: 'none', hasMeal: false }}
+                originalSlotId="slot-3"
+                dayIndex={0}
+                slotIndexInDay={2}
+                slotOrderById={new Map([
+                    ['slot-1', 0],
+                    ['slot-2', 1],
+                    ['slot-3', 2],
+                ])}
+                results={[]}
+                team={[current, null, null, null, null]}
+                swaps={swaps}
+                box={new PokemonBox([current, swappedIn])}
+            />
+        );
+
+        const firstCell = screen.getAllByTestId('timeline-cell')[0];
+        expect(within(firstCell).getByTestId('pokemon-id-form').textContent).toBe('154');
+    });
+
+    it('does not treat same-slot swap as prior even when slot index basis differs', () => {
+        const current = createPokemon(1, 260, 'ラグラージ');
+        const swappedIn = createPokemon(2, 154, 'メガニウム');
+        const swaps: PokemonSwap[] = [
+            {
+                dayIndex: 0,
+                slotId: 'slot-2',
+                teamSlotIndex: 0,
+                newPokemonId: swappedIn.id,
+                initialEnergy: 100,
+            },
+        ];
+
+        render(
+            <TimelineRow
+                slot={{ id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: false }}
+                originalSlotId="slot-2"
+                dayIndex={0}
+                slotIndexInDay={2}
+                slotOrderById={new Map([
+                    ['slot-1', 0],
+                    ['slot-2', 1],
+                    ['slot-3', 2],
+                ])}
+                results={[]}
+                team={[current, null, null, null, null]}
+                swaps={swaps}
+                box={new PokemonBox([current, swappedIn])}
+            />
+        );
+
+        const firstCell = screen.getAllByTestId('timeline-cell')[0];
+        expect(within(firstCell).getByTestId('pokemon-id-form').textContent).toBe('260');
     });
 });

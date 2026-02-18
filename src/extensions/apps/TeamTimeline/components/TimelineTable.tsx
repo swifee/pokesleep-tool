@@ -90,6 +90,10 @@ const TimelineTable = React.memo(({
     () => buildExpandedTimeline(timeSlots, simulationDays),
     [timeSlots, simulationDays]
   );
+  const slotOrderById = useMemo(() => {
+    const entries = expandedTimeline.baseDaySlots.map((baseSlot, index) => [baseSlot.id, index] as const);
+    return new Map<string, number>(entries);
+  }, [expandedTimeline.baseDaySlots]);
 
   const dayBandBySlotId = useMemo(() => {
     const entries = expandedTimeline.dayBands.map(band => [band.afterDisplaySlotId, band.dayNumber] as const);
@@ -426,6 +430,8 @@ const TimelineTable = React.memo(({
                 slot={expandedSlot.slot}
                 originalSlotId={expandedSlot.originalSlotId}
                 dayIndex={expandedSlot.dayIndex}
+                slotIndexInDay={expandedSlot.slotIndexInDay}
+                slotOrderById={slotOrderById}
                 results={slotResults}
                 team={team}
                 swaps={swaps}

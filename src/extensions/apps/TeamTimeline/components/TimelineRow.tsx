@@ -11,6 +11,8 @@ interface TimelineRowProps {
     slot: TimeSlot;
     originalSlotId: string;
     dayIndex: number;
+    slotIndexInDay?: number;
+    slotOrderById?: ReadonlyMap<string, number>;
     results: TimeSlotResult[];
     team: (PokemonBoxItem | null)[];
     swaps: PokemonSwap[];
@@ -40,6 +42,8 @@ const TimelineRow = React.memo(({
     slot,
     originalSlotId,
     dayIndex,
+    slotIndexInDay,
+    slotOrderById,
     results,
     team,
     swaps,
@@ -112,6 +116,46 @@ const TimelineRow = React.memo(({
         };
     };
 
+    const currentSlotOrder = slotOrderById?.get(originalSlotId) ?? slotIndexInDay;
+    const getLatestPriorSwap = (teamIndex: number): PokemonSwap | undefined => {
+        if (currentSlotOrder === undefined) {
+            return undefined;
+        }
+
+        let latest: PokemonSwap | undefined;
+        let latestDayIndex = -1;
+        let latestSlotOrder = -1;
+
+        for (const swap of swaps) {
+            if (swap.teamSlotIndex !== teamIndex) {
+                continue;
+            }
+            const swapSlotOrder = slotOrderById?.get(swap.slotId);
+            if (swapSlotOrder === undefined) {
+                continue;
+            }
+            const isBeforeCurrentSlot =
+                swap.dayIndex < dayIndex ||
+                (swap.dayIndex === dayIndex && swapSlotOrder < currentSlotOrder);
+            if (!isBeforeCurrentSlot) {
+                continue;
+            }
+
+            const isNewerSwap =
+                swap.dayIndex > latestDayIndex ||
+                (swap.dayIndex === latestDayIndex && swapSlotOrder > latestSlotOrder);
+            if (!isNewerSwap) {
+                continue;
+            }
+
+            latest = swap;
+            latestDayIndex = swap.dayIndex;
+            latestSlotOrder = swapSlotOrder;
+        }
+
+        return latest;
+    };
+
     return (
         <StyledRow $fitToViewport={fitToViewport}>
             <TimeInfoCell $fitToViewport={fitToViewport}>
@@ -126,8 +170,15 @@ const TimelineRow = React.memo(({
                 const result = resultMap.get(index) ?? null;
                 const { hasSwap, swappedPokemonName, swappedPokemonId, removable } = getSwapInfo(originalSlotId, index);
                 const resultPokemon = result ? box.getById(result.pokemonId) : null;
-                const swappedPokemon = swappedPokemonId !== undefined ? box.getById(swappedPokemonId) : null;
-                const pokemonIdForm = resultPokemon?.iv.idForm ?? swappedPokemon?.iv.idForm ?? item?.iv.idForm;
+                const latestPriorSwap = getLatestPriorSwap(index);
+                const priorSwapPokemonIdForm =
+                    latestPriorSwap === undefined
+                        ? undefined
+                        : latestPriorSwap.newPokemonId === SWAP_NONE_POKEMON_ID
+                            ? undefined
+                            : box.getById(latestPriorSwap.newPokemonId)?.iv.idForm;
+                const pokemonIdForm = resultPokemon?.iv.idForm
+                    ?? (latestPriorSwap !== undefined ? priorSwapPokemonIdForm : item?.iv.idForm);
                 const isDragSource =
                     swapDragSource !== null &&
                     swapDragSource.slotId === originalSlotId &&
