@@ -11,6 +11,26 @@ import { formatIngredientCount, sortIngredientsByCountDesc } from '../utils/Ingr
 import TeamTimelineIcon from './TimelineIcons';
 import EpValue, { EpText } from './EpValue';
 
+export type SwapDragState = 'idle' | 'source' | 'target';
+
+export interface SwapCellCoordinate {
+    slotId: string;
+    teamIndex: number;
+    dayIndex: number;
+}
+
+export interface SwapLongPressStartDetail extends SwapCellCoordinate {
+    pointerId: number;
+    pointerType?: string;
+    clientX: number;
+    clientY: number;
+    swappedPokemonName?: string;
+    previewWidth?: number;
+    previewHeight?: number;
+    pointerOffsetX?: number;
+    pointerOffsetY?: number;
+}
+
 interface TimelineCellProps {
     result: TimeSlotResult | null;
     isSleeping: boolean;
@@ -26,6 +46,12 @@ interface TimelineCellProps {
     alwaysShowSwapButton?: boolean;  // Show swap button without hover
     disableSwapUi?: boolean;         // Hide swap UI entirely for this cell
     pokemonIdForm?: number;
+    fitToViewport?: boolean;
+    swapSlotId?: string;             // Original (non-day-suffixed) slot ID used for swap operations
+    dayIndex?: number;               // Current day index in expanded timeline
+    swapDraggable?: boolean;         // Drag handle enabled only for direct swap rows
+    onSwapLongPressStart?: (detail: SwapLongPressStartDetail) => void;
+    swapDragState?: SwapDragState;
 }
 
 /**
@@ -35,6 +61,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     const {
         result,
         isSleeping,
+        teamIndex,
         onSwapClick,
         onRemoveSwapClick,
         hasSwap,
@@ -45,6 +72,12 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         alwaysShowSwapButton = false,
         disableSwapUi = false,
         pokemonIdForm,
+        fitToViewport = false,
+        swapSlotId,
+        dayIndex,
+        swapDraggable = false,
+        onSwapLongPressStart,
+        swapDragState = 'idle',
     } = props;
     const { t } = useTranslation();
     const swapButtonTitle = t('TeamTimeline.swap pokemon');
@@ -53,6 +86,19 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     const showSwapButton = !disableSwapUi && Boolean(onSwapClick) && !hasSwapInfo;
     const isCompactEmptyCell = compactEmpty && result === null;
     const isCompactLayout = isCompactEmptyCell || compactFirstSlot;
+    const isLongPressEnabled =
+        hasSwapInfo &&
+        swapDraggable &&
+        onSwapLongPressStart !== undefined &&
+        swapSlotId !== undefined &&
+        dayIndex !== undefined;
+    const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const dragPointerIdRef = React.useRef<number | null>(null);
+    const dragPointerTypeRef = React.useRef<string | null>(null);
+    const dragStartPointRef = React.useRef<{ x: number; y: number } | null>(null);
+    const longPressTriggeredRef = React.useRef(false);
+    const suppressNextActionClickRef = React.useRef(false);
+    const longPressDelayMs = 175;
 
     const handleSwapButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
@@ -61,6 +107,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 
     const handleSwapInfoClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
+        if (suppressNextActionClickRef.current) {
+            suppressNextActionClickRef.current = false;
+            event.preventDefault();
+            return;
+        }
         if (!onSwapClick) {
             return;
         }
@@ -69,7 +120,130 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 
     const handleSwapRemoveButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
+        if (suppressNextActionClickRef.current) {
+            suppressNextActionClickRef.current = false;
+            event.preventDefault();
+            return;
+        }
         onRemoveSwapClick?.();
+    };
+
+    const clearLongPressTimer = React.useCallback(() => {
+        if (longPressTimerRef.current !== null) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }, []);
+
+    const resetLongPressSession = React.useCallback(() => {
+        clearLongPressTimer();
+        dragPointerIdRef.current = null;
+        dragPointerTypeRef.current = null;
+        dragStartPointRef.current = null;
+        longPressTriggeredRef.current = false;
+    }, [clearLongPressTimer]);
+
+    React.useEffect(() => {
+        return () => {
+            clearLongPressTimer();
+        };
+    }, [clearLongPressTimer]);
+
+    const handleSwapInfoPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (!isLongPressEnabled || !swapSlotId || dayIndex === undefined || !onSwapLongPressStart) {
+            return;
+        }
+        if (event.pointerType === 'mouse' && event.button !== 0) {
+            return;
+        }
+        if (event.pointerType === 'touch' || event.pointerType === 'pen') {
+            event.preventDefault();
+        }
+
+        suppressNextActionClickRef.current = false;
+        resetLongPressSession();
+        const pointerId = event.pointerId;
+        const pointerX = event.clientX;
+        const pointerY = event.clientY;
+        const previewElement = event.currentTarget.parentElement instanceof HTMLElement
+            ? event.currentTarget.parentElement
+            : event.currentTarget;
+        const previewRect = previewElement.getBoundingClientRect();
+        const pointerOffsetX = pointerX - previewRect.left;
+        const pointerOffsetY = pointerY - previewRect.top;
+        dragPointerIdRef.current = event.pointerId;
+        dragPointerTypeRef.current = event.pointerType;
+        dragStartPointRef.current = { x: event.clientX, y: event.clientY };
+        if (event.pointerType === 'mouse') {
+            try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+                void 0;
+            }
+        }
+        longPressTimerRef.current = setTimeout(() => {
+            longPressTriggeredRef.current = true;
+            suppressNextActionClickRef.current = true;
+            onSwapLongPressStart({
+                slotId: swapSlotId,
+                teamIndex,
+                dayIndex,
+                pointerId,
+                pointerType: event.pointerType,
+                clientX: pointerX,
+                clientY: pointerY,
+                swappedPokemonName,
+                previewWidth: previewRect.width,
+                previewHeight: previewRect.height,
+                pointerOffsetX,
+                pointerOffsetY,
+            });
+        }, longPressDelayMs);
+    };
+
+    const handleSwapInfoPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (dragPointerIdRef.current !== event.pointerId || longPressTriggeredRef.current) {
+            return;
+        }
+        const startPoint = dragStartPointRef.current;
+        if (!startPoint) {
+            return;
+        }
+        const movedDistance = Math.hypot(
+            event.clientX - startPoint.x,
+            event.clientY - startPoint.y
+        );
+        if (movedDistance > 8) {
+            resetLongPressSession();
+        }
+    };
+
+    const handleSwapInfoPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (dragPointerIdRef.current !== event.pointerId) {
+            return;
+        }
+        if (dragPointerTypeRef.current === 'mouse') {
+            try {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            } catch {
+                void 0;
+            }
+        }
+        resetLongPressSession();
+    };
+
+    const handleSwapInfoContextMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (!isLongPressEnabled) {
+            return;
+        }
+        event.preventDefault();
+    };
+
+    const handleSwapInfoPointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (dragPointerIdRef.current !== event.pointerId) {
+            return;
+        }
+        resetLongPressSession();
     };
 
     const renderSwapControl = () => {
@@ -95,11 +269,19 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             return null;
         }
         return (
-            <SwapInfoContainer>
+            <SwapInfoContainer
+                $dragState={swapDragState}
+                data-swap-drag-state={swapDragState}
+            >
                 <SwapInfoMainButton
                     type="button"
                     className="swap-info"
                     onClick={onSwapClick ? handleSwapInfoClick : undefined}
+                    onPointerDown={isLongPressEnabled ? handleSwapInfoPointerDown : undefined}
+                    onPointerMove={isLongPressEnabled ? handleSwapInfoPointerMove : undefined}
+                    onPointerUp={isLongPressEnabled ? handleSwapInfoPointerUp : undefined}
+                    onPointerCancel={isLongPressEnabled ? handleSwapInfoPointerCancel : undefined}
+                    onContextMenu={isLongPressEnabled ? handleSwapInfoContextMenu : undefined}
                     title={swapButtonTitle}
                 >
                     <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
@@ -110,6 +292,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                         type="button"
                         className="swap-remove-trigger"
                         onClick={handleSwapRemoveButtonClick}
+                        onPointerDown={isLongPressEnabled ? handleSwapInfoPointerDown : undefined}
+                        onPointerMove={isLongPressEnabled ? handleSwapInfoPointerMove : undefined}
+                        onPointerUp={isLongPressEnabled ? handleSwapInfoPointerUp : undefined}
+                        onPointerCancel={isLongPressEnabled ? handleSwapInfoPointerCancel : undefined}
+                        onContextMenu={isLongPressEnabled ? handleSwapInfoContextMenu : undefined}
                         title={removeSwapButtonTitle}
                         aria-label={removeSwapButtonTitle}
                     >
@@ -225,7 +412,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 $showSwapButton={showSwapButton}
                 $alwaysShowSwapButton={alwaysShowSwapButton}
                 $compact={isCompactLayout}
+                $fitToViewport={fitToViewport}
+                $swapDragState={swapDragState}
                 data-compact-layout={isCompactLayout ? 'true' : 'false'}
+                data-swap-slot-id={swapSlotId}
+                data-swap-team-index={teamIndex}
+                data-swap-day-index={dayIndex}
+                data-swap-drop-enabled={!disableSwapUi && swapSlotId !== undefined && dayIndex !== undefined ? 'true' : 'false'}
             >
                 <EmptyContent>
                     {renderPokemonIcon()}
@@ -458,7 +651,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             $showSwapButton={showSwapButton}
             $alwaysShowSwapButton={alwaysShowSwapButton}
             $compact={isCompactLayout}
+            $fitToViewport={fitToViewport}
+            $swapDragState={swapDragState}
             data-compact-layout={isCompactLayout ? 'true' : 'false'}
+            data-swap-slot-id={swapSlotId}
+            data-swap-team-index={teamIndex}
+            data-swap-day-index={dayIndex}
+            data-swap-drop-enabled={!disableSwapUi && swapSlotId !== undefined && dayIndex !== undefined ? 'true' : 'false'}
         >
             <TopEnergyArea>
                 {renderPokemonIcon()}
@@ -564,11 +763,18 @@ const StyledCell = styled('div')<{
     $showSwapButton: boolean;
     $alwaysShowSwapButton: boolean;
     $compact: boolean;
+    $fitToViewport: boolean;
+    $swapDragState: SwapDragState;
 }>(
-    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact }) => ({
+    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact, $fitToViewport, $swapDragState }) => ({
     position: 'relative',
-    width: '100px',
-    minWidth: '100px',
+    width: $fitToViewport
+        ? 'calc((100% - var(--timeline-time-cell-width, 28px)) / var(--timeline-team-size, 5))'
+        : '100px',
+    minWidth: $fitToViewport ? '0' : '100px',
+    flexBasis: $fitToViewport
+        ? 'calc((100% - var(--timeline-time-cell-width, 28px)) / var(--timeline-team-size, 5))'
+        : 'auto',
     flexShrink: 0,
     boxSizing: 'border-box',
     minHeight: $compact ? '34px' : '109px',
@@ -576,7 +782,9 @@ const StyledCell = styled('div')<{
         ? `2px 2px ${$showSwapButton ? '22px' : '2px'}`
         : `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
     borderLeft: '0.5px solid #e2e2e2',
-    backgroundColor: $isSleeping ? '#f5f6fb' : '#fff',
+    backgroundColor: $swapDragState === 'target'
+        ? '#fff4de'
+        : ($isSleeping ? '#f5f6fb' : '#fff'),
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -817,7 +1025,7 @@ const SwapIconButton = styled(IconButton)({
     },
 });
 
-const SwapInfoContainer = styled('div')({
+const SwapInfoContainer = styled('div')<{ $dragState: SwapDragState }>(({ $dragState }) => ({
     border: '1px solid #62d540',
     marginTop: '2px',
     marginLeft: '0',
@@ -830,7 +1038,15 @@ const SwapInfoContainer = styled('div')({
     display: 'flex',
     alignItems: 'center',
     overflow: 'hidden',
-});
+    ...($dragState === 'source' ? {
+        borderColor: '#1e64d6',
+        backgroundColor: '#edf4ff',
+    } : {}),
+    ...($dragState === 'target' ? {
+        borderColor: '#f59e0b',
+        backgroundColor: '#fff4de',
+    } : {}),
+}));
 
 const SwapInfoMainButton = styled('button')({
     border: 'none',
@@ -849,6 +1065,10 @@ const SwapInfoMainButton = styled('button')({
     fontFamily: '"M PLUS 1p", sans-serif',
     textAlign: 'left',
     cursor: 'pointer',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    WebkitTouchCallout: 'none',
+    touchAction: 'none',
     '&:hover': {
         backgroundColor: '#edffe0',
     },

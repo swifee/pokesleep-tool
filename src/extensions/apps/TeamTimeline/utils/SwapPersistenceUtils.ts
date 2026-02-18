@@ -57,16 +57,10 @@ export function hydrateSwapsWithSerializedPokemon(
         const newPokemonSerialized = swap.newPokemonId === SWAP_NONE_POKEMON_ID
             ? undefined
             : box.getById(swap.newPokemonId)?.serialize() ?? swap.newPokemonSerialized;
-        const revertPokemonSerialized = (
-            swap.revertPokemonId === undefined || swap.revertPokemonId === SWAP_NONE_POKEMON_ID
-        )
-            ? undefined
-            : box.getById(swap.revertPokemonId)?.serialize() ?? swap.revertPokemonSerialized;
 
         return {
             ...swap,
             newPokemonSerialized,
-            revertPokemonSerialized,
         };
     });
 }
@@ -85,19 +79,9 @@ export function normalizeLoadedSwapsWithBox(
             serializedToIds,
             teamIdRemap,
         );
-        const revertPokemonId = swap.revertPokemonId === undefined
-            ? undefined
-            : resolveSwapPokemonId(
-                swap.revertPokemonId,
-                swap.revertPokemonSerialized,
-                box,
-                serializedToIds,
-                teamIdRemap,
-            );
         return {
             ...swap,
             newPokemonId,
-            revertPokemonId,
         };
     });
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import PokemonBox from '../../../../util/PokemonBox';
+import PokemonBox, { type PokemonBoxItem } from '../../../../util/PokemonBox';
 import { SimulationResult, TimeSlot } from '../types/TimeSlotTypes';
 import TimelineTable from './TimelineTable';
 
@@ -23,18 +23,34 @@ vi.mock('./TimelineRow', () => ({
         dayIndex,
         originalSlotId,
         onSwapClick,
+        onSwapLongPressStart,
         onSwapRemoveClick,
         compactEmptyCells,
         alwaysShowSwapButton,
         isFirstTimelineSlot,
+        fitToViewport,
     }: {
         dayIndex: number;
         originalSlotId: string;
         onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
+        onSwapLongPressStart?: (detail: {
+            slotId: string;
+            teamIndex: number;
+            dayIndex: number;
+            pointerId: number;
+            clientX: number;
+            clientY: number;
+            swappedPokemonName?: string;
+            previewWidth?: number;
+            previewHeight?: number;
+            pointerOffsetX?: number;
+            pointerOffsetY?: number;
+        }) => void;
         onSwapRemoveClick?: (slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => void;
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
         isFirstTimelineSlot?: boolean;
+        fitToViewport?: boolean;
     }) => (
         <>
             <button
@@ -43,9 +59,29 @@ vi.mock('./TimelineRow', () => ({
                 data-compact-empty={compactEmptyCells ? 'true' : 'false'}
                 data-always-show-swap={alwaysShowSwapButton ? 'true' : 'false'}
                 data-first-timeline-slot={isFirstTimelineSlot ? 'true' : 'false'}
+                data-fit-to-viewport={fitToViewport ? 'true' : 'false'}
                 onClick={() => onSwapClick?.(originalSlotId, 0, dayIndex)}
             >
                 row
+            </button>
+            <button
+                type="button"
+                data-testid={`swap-longpress-${dayIndex}-${originalSlotId}`}
+                onClick={() => onSwapLongPressStart?.({
+                    slotId: originalSlotId,
+                    teamIndex: 0,
+                    dayIndex,
+                    pointerId: 7,
+                    clientX: 10,
+                    clientY: 10,
+                    swappedPokemonName: 'row',
+                    previewWidth: 150,
+                    previewHeight: 20,
+                    pointerOffsetX: 25,
+                    pointerOffsetY: 10,
+                })}
+            >
+                longpress
             </button>
             <button
                 type="button"
@@ -64,6 +100,11 @@ vi.mock('./DailySummaryRow', () => ({
 
 vi.mock('./TeamSummaryRow', () => ({
     default: () => <div data-testid="team-summary" />,
+}));
+vi.mock('../../../../ui/IvCalc/PokemonIcon', () => ({
+    default: ({ idForm, size }: { idForm: number; size: number }) => (
+        <span data-testid="timeline-header-pokemon-icon">{`icon-${idForm}-${size}`}</span>
+    ),
 }));
 
 const BASE_TIME_SLOTS: TimeSlot[] = [
@@ -87,6 +128,11 @@ const EMPTY_RESULT: SimulationResult = {
         totalDreamShardCount: 0,
     },
 };
+
+const HEADER_TEST_POKEMON: PokemonBoxItem = {
+    iv: { idForm: 213, level: 50 },
+    filledNickname: () => 'ツボツボ',
+} as unknown as PokemonBoxItem;
 
 describe('TimelineTable', () => {
     it('hides text in the top-left corner cell only', () => {
@@ -199,6 +245,25 @@ describe('TimelineTable', () => {
         expect(onHeaderSlotClick).toHaveBeenCalledWith(0);
     });
 
+    it('renders header content in Lv, icon, name order', () => {
+        render(
+            <TimelineTable
+                team={[HEADER_TEST_POKEMON, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={1}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                onHeaderSlotClick={vi.fn()}
+            />
+        );
+
+        const button = screen.getByTestId('timeline-header-slot-button-0');
+        const text = button.textContent ?? '';
+        expect(text.indexOf('Lv.50')).toBeLessThan(text.indexOf('icon-213-30'));
+        expect(text.indexOf('icon-213-30')).toBeLessThan(text.indexOf('ツボツボ'));
+    });
+
     it('passes remove callback to TimelineRow', () => {
         const onSwapRemoveClick = vi.fn();
 
@@ -238,6 +303,23 @@ describe('TimelineTable', () => {
         expect(firstRow.getAttribute('data-always-show-swap')).toBe('true');
     });
 
+    it('fits timeline width to viewport when compact mode is enabled', () => {
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={1}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                compactEmptyCells
+            />
+        );
+
+        expect(screen.getByTestId('timeline-table-container').getAttribute('data-fit-to-viewport')).toBe('true');
+        expect(screen.getByTestId('swap-0-sleep').getAttribute('data-fit-to-viewport')).toBe('true');
+    });
+
     it('marks only the very first row as first timeline slot', () => {
         render(
             <TimelineTable
@@ -252,5 +334,158 @@ describe('TimelineTable', () => {
 
         expect(screen.getByTestId('swap-0-sleep').getAttribute('data-first-timeline-slot')).toBe('true');
         expect(screen.getByTestId('swap-0-night-snack').getAttribute('data-first-timeline-slot')).toBe('false');
+    });
+
+    it('calls onSwapSeriesMove on pointer up after long-press drag', () => {
+        const onSwapSeriesMove = vi.fn();
+        const originalElementFromPoint = (document as Document & {
+            elementFromPoint?: (x: number, y: number) => Element | null;
+        }).elementFromPoint;
+        const sourceCell = document.createElement('div');
+        sourceCell.dataset.swapDropEnabled = 'true';
+        sourceCell.dataset.swapSlotId = 'wake';
+        sourceCell.dataset.swapTeamIndex = '0';
+        sourceCell.dataset.swapDayIndex = '0';
+        document.body.appendChild(sourceCell);
+
+        const targetCell = document.createElement('div');
+        targetCell.dataset.swapDropEnabled = 'true';
+        targetCell.dataset.swapSlotId = 'sleep';
+        targetCell.dataset.swapTeamIndex = '1';
+        targetCell.dataset.swapDayIndex = '1';
+        document.body.appendChild(targetCell);
+
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: (x: number) => (x >= 11 ? targetCell : sourceCell),
+        });
+
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={2}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                onSwapSeriesMove={onSwapSeriesMove}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('swap-longpress-0-wake'));
+        fireEvent.pointerUp(window, { pointerId: 7, clientX: 11, clientY: 10 });
+
+        expect(onSwapSeriesMove).toHaveBeenCalledTimes(1);
+        expect(onSwapSeriesMove).toHaveBeenCalledWith('wake', 0, 0, 'sleep', 1, 1);
+
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: originalElementFromPoint,
+        });
+        sourceCell.remove();
+        targetCell.remove();
+    });
+
+    it('does not call onSwapSeriesMove when dropping on the same cell', () => {
+        const onSwapSeriesMove = vi.fn();
+        const originalElementFromPoint = (document as Document & {
+            elementFromPoint?: (x: number, y: number) => Element | null;
+        }).elementFromPoint;
+        const sourceCell = document.createElement('div');
+        sourceCell.dataset.swapDropEnabled = 'true';
+        sourceCell.dataset.swapSlotId = 'wake';
+        sourceCell.dataset.swapTeamIndex = '0';
+        sourceCell.dataset.swapDayIndex = '0';
+        document.body.appendChild(sourceCell);
+
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: () => sourceCell,
+        });
+
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={2}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                onSwapSeriesMove={onSwapSeriesMove}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('swap-longpress-0-wake'));
+        fireEvent.pointerUp(window, { pointerId: 7, clientX: 10, clientY: 10 });
+
+        expect(onSwapSeriesMove).not.toHaveBeenCalled();
+
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: originalElementFromPoint,
+        });
+        sourceCell.remove();
+    });
+
+    it('shows drag ghost during drag session and hides it after pointer up', () => {
+        const originalElementFromPoint = (document as Document & {
+            elementFromPoint?: (x: number, y: number) => Element | null;
+        }).elementFromPoint;
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: () => null,
+        });
+
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={2}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('swap-longpress-0-wake'));
+        expect(screen.getByTestId('timeline-swap-drag-ghost')).toBeDefined();
+
+        fireEvent.pointerUp(window, { pointerId: 7, clientX: 10, clientY: 10 });
+        expect(screen.queryByTestId('timeline-swap-drag-ghost')).toBeNull();
+
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: originalElementFromPoint,
+        });
+    });
+
+    it('applies lift offset immediately when drag ghost appears', () => {
+        const originalElementFromPoint = (document as Document & {
+            elementFromPoint?: (x: number, y: number) => Element | null;
+        }).elementFromPoint;
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: () => null,
+        });
+
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={2}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('swap-longpress-0-wake'));
+        const ghost = screen.getByTestId('timeline-swap-drag-ghost');
+        expect((ghost as HTMLElement).style.transform).toBe('translate3d(-15px, -10px, 0) scale(1)');
+
+        Object.defineProperty(document, 'elementFromPoint', {
+            configurable: true,
+            value: originalElementFromPoint,
+        });
     });
 });

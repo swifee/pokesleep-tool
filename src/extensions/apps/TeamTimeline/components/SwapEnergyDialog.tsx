@@ -9,9 +9,6 @@ import {
     Slider,
     Box,
     Typography,
-    Select,
-    MenuItem,
-    FormControl,
     FormControlLabel,
     Checkbox,
 } from '@mui/material';
@@ -24,14 +21,8 @@ interface SwapEnergyDialogProps {
     pokemonIdForm?: number;
     defaultEnergy?: number;
     disableEnergySetting?: boolean;
-    onConfirm: (energy: number, endSlotId?: string, endDayIndex?: number, repeat?: boolean) => void;
+    onConfirm: (energy: number, repeat?: boolean) => void;
     onCancel: () => void;
-    /** Available time slots for the "until" dropdown. Each slot has an original slotId, dayIndex, and display time. */
-    availableEndSlots?: { slotId: string; dayIndex: number; time: string }[];
-    /** The day index of the swap start (used to calculate relative day labels) */
-    swapDayIndex?: number;
-    /** Total simulation days */
-    simulationDays?: number;
 }
 
 export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
@@ -42,18 +33,14 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
     disableEnergySetting = false,
     onConfirm,
     onCancel,
-    availableEndSlots = [],
-    swapDayIndex = 0,
 }) => {
     const { t } = useTranslation();
     const [energy, setEnergy] = useState(defaultEnergy);
-    const [endSlotValue, setEndSlotValue] = useState<string>('');
     const [repeat, setRepeat] = useState(false);
 
     useEffect(() => {
         if (open) {
             setEnergy(defaultEnergy);
-            setEndSlotValue('');
             setRepeat(false);
         }
     }, [open, defaultEnergy]);
@@ -69,32 +56,8 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
         }
     };
 
-    // Determine whether the repeat checkbox should be enabled.
-    // Enabled when "until" is not set OR the selected end slot is within ~24 hours (dayDiff <= 1).
-    const isRepeatEnabled = (() => {
-        if (!endSlotValue) return true;
-        const parts = endSlotValue.split('__');
-        const endDayIndex = parseInt(parts[1], 10);
-        const dayDiff = endDayIndex - swapDayIndex;
-        return dayDiff <= 1;
-    })();
-
-    // When repeat becomes disabled, uncheck it
-    useEffect(() => {
-        if (!isRepeatEnabled) {
-            setRepeat(false);
-        }
-    }, [isRepeatEnabled]);
-
     const handleConfirm = () => {
-        let endSlotId: string | undefined;
-        let endDayIndex: number | undefined;
-        if (endSlotValue) {
-            const parts = endSlotValue.split('__');
-            endSlotId = parts[0];
-            endDayIndex = parseInt(parts[1], 10);
-        }
-        onConfirm(energy, endSlotId, endDayIndex, repeat || undefined);
+        onConfirm(energy, repeat || undefined);
     };
 
     return (
@@ -133,72 +96,18 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
                         sx={{ width: '90%' }}
                     />
 
-                    {/* "Until" dropdown */}
-                    {availableEndSlots.length > 0 && (
-                        <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <FormControl size="small" sx={{ minWidth: 160, flex: 1 }}>
-                                <Select
-                                    value={endSlotValue}
-                                    onChange={(e) => setEndSlotValue(e.target.value as string)}
-                                    displayEmpty
+                    <Box sx={{ width: '100%' }}>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={repeat}
+                                    onChange={(e) => setRepeat(e.target.checked)}
                                     size="small"
-                                    renderValue={(value) => {
-                                        if (!value) {
-                                            return t('TeamTimeline.swap until not set');
-                                        }
-                                        const parts = (value as string).split('__');
-                                        const slotId = parts[0];
-                                        const dayIndex = parseInt(parts[1], 10);
-                                        const dayDiff = dayIndex - swapDayIndex;
-                                        const slot = availableEndSlots.find(
-                                            s => s.slotId === slotId && s.dayIndex === dayIndex
-                                        );
-                                        const time = slot?.time ?? '';
-                                        if (dayDiff === 0) {
-                                            return time;
-                                        }
-                                        return `${t('TeamTimeline.swap next day prefix', { count: dayDiff })}${time}`;
-                                    }}
-                                >
-                                    <MenuItem value="">
-                                        {t('TeamTimeline.swap until not set')}
-                                    </MenuItem>
-                                    {availableEndSlots.map((slot) => {
-                                        const dayDiff = slot.dayIndex - swapDayIndex;
-                                        const encodedValue = `${slot.slotId}__${slot.dayIndex}`;
-                                        const label = dayDiff === 0
-                                            ? slot.time
-                                            : `${t('TeamTimeline.swap next day prefix', { count: dayDiff })}${slot.time}`;
-                                        return (
-                                            <MenuItem key={encodedValue} value={encodedValue}>
-                                                {label}
-                                            </MenuItem>
-                                        );
-                                    })}
-                                </Select>
-                            </FormControl>
-                            <Typography variant="body2">
-                                {t('TeamTimeline.swap until suffix')}
-                            </Typography>
-                        </Box>
-                    )}
-
-                    {/* "Repeat" checkbox */}
-                    {availableEndSlots.length > 0 && (
-                        <Box sx={{ width: '100%' }}>
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={repeat}
-                                        onChange={(e) => setRepeat(e.target.checked)}
-                                        disabled={!isRepeatEnabled}
-                                        size="small"
-                                    />
-                                }
-                                label={t('TeamTimeline.swap repeat')}
-                            />
-                        </Box>
-                    )}
+                                />
+                            }
+                            label={t('TeamTimeline.swap repeat')}
+                        />
+                    </Box>
                 </Box>
             </DialogContent>
             <DialogActions>

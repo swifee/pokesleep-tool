@@ -99,7 +99,7 @@ export type TeamTimelineAction =
     | { type: 'openSwapDialog'; slotId: string; teamIndex: number; dayIndex: number }
     | { type: 'closeSwapDialog' }
     | { type: 'setPendingSwap'; pokemonId: number }
-    | { type: 'confirmSwap'; initialEnergy: number; endSlotId?: string; endDayIndex?: number; repeat?: boolean }
+    | { type: 'confirmSwap'; initialEnergy: number; repeat?: boolean }
     | { type: 'confirmSwapDirect'; pokemonId: number; initialEnergy: number }
     | {
         type: 'removeSwap';
@@ -108,6 +108,15 @@ export type TeamTimelineAction =
         dayIndex: number;
         removeFutureRepeats?: boolean;
         pokemonId?: number;
+    }
+    | {
+        type: 'moveSwapSeries';
+        fromSlotId: string;
+        fromTeamIndex: number;
+        fromDayIndex: number;
+        toSlotId: string;
+        toTeamIndex: number;
+        toDayIndex: number;
     }
     | { type: 'clearSwaps' }
     | { type: 'loadSwaps'; swaps: PokemonSwap[] }

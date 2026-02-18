@@ -547,23 +547,6 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         swapsBySlot.set(key, list);
     });
 
-    // 4.1 endSlotId がある swap に対し、終了時点の revert swap を自動生成
-    swaps.forEach(swap => {
-        if (swap.endSlotId && swap.endDayIndex !== undefined && swap.revertPokemonId !== undefined) {
-            const revertKey = `${swap.endDayIndex}:${swap.endSlotId}`;
-            const revertSwap: PokemonSwap = {
-                dayIndex: swap.endDayIndex,
-                slotId: swap.endSlotId,
-                teamSlotIndex: swap.teamSlotIndex,
-                newPokemonId: swap.revertPokemonId,
-                initialEnergy: 0,  // Will be overridden by pokemonLastEnergy tracking
-            };
-            const list = swapsBySlot.get(revertKey) || [];
-            list.push(revertSwap);
-            swapsBySlot.set(revertKey, list);
-        }
-    });
-
     // 5. 現在のチームを追跡（入れ替えで変化する）
     const currentTeam: (PokemonBoxItem | null)[] = [...team];
 

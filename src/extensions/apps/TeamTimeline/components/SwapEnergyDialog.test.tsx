@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SwapEnergyDialog } from './SwapEnergyDialog';
 
@@ -39,5 +39,38 @@ describe('SwapEnergyDialog', () => {
 
         expect(energyInput.getAttribute('disabled')).not.toBeNull();
         expect(energySliderRoot?.className.includes('Mui-disabled')).toBe(true);
+    });
+
+    it('shows repeat checkbox and confirms with repeat flag', () => {
+        const onConfirm = vi.fn();
+
+        render(
+            <SwapEnergyDialog
+                open
+                pokemonName="ピカチュウ"
+                onConfirm={onConfirm}
+                onCancel={vi.fn()}
+            />
+        );
+
+        const repeatCheckbox = screen.getByRole('checkbox');
+        fireEvent.click(repeatCheckbox);
+        fireEvent.click(screen.getByRole('button', { name: 'TeamTimeline.confirm' }));
+
+        expect(onConfirm).toHaveBeenCalledWith(100, true);
+    });
+
+    it('does not render until selector labels', () => {
+        render(
+            <SwapEnergyDialog
+                open
+                pokemonName="ピカチュウ"
+                onConfirm={vi.fn()}
+                onCancel={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByText('TeamTimeline.swap until suffix')).toBeNull();
+        expect(screen.queryByText('TeamTimeline.swap until not set')).toBeNull();
     });
 });

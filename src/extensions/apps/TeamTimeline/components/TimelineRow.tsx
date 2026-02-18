@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { TimeSlot, TimeSlotResult, PokemonSwap, SWAP_NONE_POKEMON_ID } from '../types/TimeSlotTypes';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineCell from './TimelineCell';
+import type { SwapCellCoordinate, SwapDragState, SwapLongPressStartDetail } from './TimelineCell';
 import TeamTimelineIcon from './TimelineIcons';
 
 interface TimelineRowProps {
@@ -20,6 +21,10 @@ interface TimelineRowProps {
     compactEmptyCells?: boolean;
     alwaysShowSwapButton?: boolean;
     isFirstTimelineSlot?: boolean;
+    fitToViewport?: boolean;
+    onSwapLongPressStart?: (detail: SwapLongPressStartDetail) => void;
+    swapDragSource?: SwapCellCoordinate | null;
+    swapDragTarget?: SwapCellCoordinate | null;
 }
 
 function formatDuration(minutes: number): string {
@@ -45,6 +50,10 @@ const TimelineRow = React.memo(({
     compactEmptyCells = false,
     alwaysShowSwapButton = false,
     isFirstTimelineSlot = false,
+    fitToViewport = false,
+    onSwapLongPressStart,
+    swapDragSource = null,
+    swapDragTarget = null,
 }: TimelineRowProps) => {
     const { t } = useTranslation();
 
@@ -95,33 +104,17 @@ const TimelineRow = React.memo(({
             };
         }
 
-        // "until" で設定された復帰先を可視化する。
-        const revertSource = [...swaps].reverse().find(
-            s =>
-                s.teamSlotIndex === teamIndex &&
-                s.endSlotId === slotId &&
-                s.endDayIndex === dayIndex &&
-                s.revertPokemonId !== undefined
-        );
-        if (!revertSource || revertSource.revertPokemonId === undefined) {
-            return {
-                hasSwap: false,
-                swappedPokemonName: undefined,
-                swappedPokemonId: undefined,
-                removable: false,
-            };
-        }
         return {
-            hasSwap: true,
-            swappedPokemonName: getSwapDisplayName(revertSource.revertPokemonId),
+            hasSwap: false,
+            swappedPokemonName: undefined,
             swappedPokemonId: undefined,
             removable: false,
         };
     };
 
     return (
-        <StyledRow>
-            <TimeInfoCell>
+        <StyledRow $fitToViewport={fitToViewport}>
+            <TimeInfoCell $fitToViewport={fitToViewport}>
                 <div className="time">{slot.time}</div>
                 {durationMinutes > 0 && (
                     <div className="duration">{formatDuration(durationMinutes)}</div>
@@ -135,6 +128,22 @@ const TimelineRow = React.memo(({
                 const resultPokemon = result ? box.getById(result.pokemonId) : null;
                 const swappedPokemon = swappedPokemonId !== undefined ? box.getById(swappedPokemonId) : null;
                 const pokemonIdForm = resultPokemon?.iv.idForm ?? swappedPokemon?.iv.idForm ?? item?.iv.idForm;
+                const isDragSource =
+                    swapDragSource !== null &&
+                    swapDragSource.slotId === originalSlotId &&
+                    swapDragSource.teamIndex === index &&
+                    swapDragSource.dayIndex === dayIndex;
+                const isDragTarget =
+                    swapDragTarget !== null &&
+                    swapDragTarget.slotId === originalSlotId &&
+                    swapDragTarget.teamIndex === index &&
+                    swapDragTarget.dayIndex === dayIndex;
+                const swapDragState: SwapDragState = isDragSource
+                    ? 'source'
+                    : isDragTarget
+                        ? 'target'
+                        : 'idle';
+                const canDragSwap = removable && swappedPokemonId !== undefined && !isFirstTimelineSlot;
 
                 return (
                     <TimelineCell
@@ -155,6 +164,12 @@ const TimelineRow = React.memo(({
                         compactFirstSlot={isFirstTimelineSlot}
                         disableSwapUi={isFirstTimelineSlot}
                         pokemonIdForm={pokemonIdForm}
+                        fitToViewport={fitToViewport}
+                        swapSlotId={originalSlotId}
+                        dayIndex={dayIndex}
+                        swapDraggable={canDragSwap}
+                        onSwapLongPressStart={onSwapLongPressStart}
+                        swapDragState={swapDragState}
                     />
                 );
             })}
@@ -162,18 +177,22 @@ const TimelineRow = React.memo(({
     );
 });
 
-const StyledRow = styled('div')({
+const StyledRow = styled('div')<{
+    $fitToViewport: boolean;
+}>(({ $fitToViewport }) => ({
     display: 'flex',
-    minWidth: '540px',
-    width: 'max-content',
+    minWidth: $fitToViewport ? '0' : '540px',
+    width: $fitToViewport ? '100%' : 'max-content',
     backgroundColor: '#fff',
     borderRadius: '6px',
     overflow: 'hidden',
-});
+}));
 
-const TimeInfoCell = styled('div')({
-    width: '40px',
-    minWidth: '40px',
+const TimeInfoCell = styled('div')<{
+    $fitToViewport: boolean;
+}>(({ $fitToViewport }) => ({
+    width: $fitToViewport ? 'var(--timeline-time-cell-width, 28px)' : '40px',
+    minWidth: $fitToViewport ? 'var(--timeline-time-cell-width, 28px)' : '40px',
     flexShrink: 0,
     boxSizing: 'border-box',
     padding: '3px',
@@ -216,6 +235,6 @@ const TimeInfoCell = styled('div')({
         width: '10px',
         height: '10px',
     },
-});
+}));
 
 export default TimelineRow;

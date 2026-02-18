@@ -23,14 +23,12 @@ describe('SwapPersistenceUtils', () => {
                 teamSlotIndex: 0,
                 newPokemonId: memberB.id,
                 initialEnergy: 80,
-                revertPokemonId: memberA.id,
             },
         ];
 
         const hydrated = hydrateSwapsWithSerializedPokemon(swaps, box);
 
         expect(hydrated[0].newPokemonSerialized).toBe(memberB.serialize());
-        expect(hydrated[0].revertPokemonSerialized).toBe(memberA.serialize());
     });
 
     it('normalizes stale pokemon ids by serialized fallback', () => {
@@ -45,15 +43,12 @@ describe('SwapPersistenceUtils', () => {
                 newPokemonId: memberB.id,
                 newPokemonSerialized: memberA.serialize(),
                 initialEnergy: 100,
-                revertPokemonId: memberA.id,
-                revertPokemonSerialized: memberB.serialize(),
             },
         ];
 
         const normalized = normalizeLoadedSwapsWithBox(swaps, box, new Map());
 
         expect(normalized[0].newPokemonId).toBe(memberA.id);
-        expect(normalized[0].revertPokemonId).toBe(memberB.id);
     });
 
     it('keeps legacy ids when serialized fallback is unavailable', () => {

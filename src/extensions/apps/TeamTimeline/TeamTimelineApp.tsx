@@ -84,7 +84,6 @@ import {
     normalizeLoadedSwapsWithBox,
 } from './utils/SwapPersistenceUtils';
 import { isSwapReassignment } from './utils/SwapReassignmentUtils';
-import { buildExpandedTimeline } from './utils/TimelineDayExpansion';
 import {
     loadTimelineBonusSettingsFromIvStorage,
     saveTimelineBonusSettingsToIvStorage,
@@ -195,23 +194,11 @@ function migrateSwap(rawSwap: unknown): PokemonSwap | null {
     const dayIndex = typeof candidate.dayIndex === 'number'
         ? Math.max(0, Math.floor(candidate.dayIndex))
         : 0;
-    const endSlotId = typeof candidate.endSlotId === 'string'
-        ? candidate.endSlotId
-        : undefined;
-    const endDayIndex = typeof candidate.endDayIndex === 'number'
-        ? Math.max(0, Math.floor(candidate.endDayIndex))
-        : undefined;
     const isRepeatGenerated = candidate.isRepeatGenerated === true
         ? true
         : undefined;
-    const revertPokemonId = typeof candidate.revertPokemonId === 'number'
-        ? candidate.revertPokemonId
-        : undefined;
     const newPokemonSerialized = typeof candidate.newPokemonSerialized === 'string'
         ? candidate.newPokemonSerialized
-        : undefined;
-    const revertPokemonSerialized = typeof candidate.revertPokemonSerialized === 'string'
-        ? candidate.revertPokemonSerialized
         : undefined;
     return {
         dayIndex,
@@ -220,11 +207,7 @@ function migrateSwap(rawSwap: unknown): PokemonSwap | null {
         newPokemonId: candidate.newPokemonId,
         newPokemonSerialized,
         initialEnergy: candidate.initialEnergy,
-        endSlotId,
-        endDayIndex,
         isRepeatGenerated,
-        revertPokemonId,
-        revertPokemonSerialized,
     };
 }
 
@@ -857,6 +840,25 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'openSwapDialog', slotId, teamIndex, dayIndex });
     }, []);
 
+    const handleSwapSeriesMove = useCallback((
+        fromSlotId: string,
+        fromTeamIndex: number,
+        fromDayIndex: number,
+        toSlotId: string,
+        toTeamIndex: number,
+        toDayIndex: number
+    ) => {
+        dispatch({
+            type: 'moveSwapSeries',
+            fromSlotId,
+            fromTeamIndex,
+            fromDayIndex,
+            toSlotId,
+            toTeamIndex,
+            toDayIndex,
+        });
+    }, []);
+
     const handleSwapRemoveRequest = useCallback((slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => {
         const hasFutureRepeat = state.swaps.some(
             swap =>
@@ -901,8 +903,8 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'setPendingSwap', pokemonId: item.id });
     }, []);
 
-    const handleEnergyConfirm = useCallback((energy: number, endSlotId?: string, endDayIndex?: number, repeat?: boolean) => {
-        dispatch({ type: 'confirmSwap', initialEnergy: energy, endSlotId, endDayIndex, repeat });
+    const handleEnergyConfirm = useCallback((energy: number, repeat?: boolean) => {
+        dispatch({ type: 'confirmSwap', initialEnergy: energy, repeat });
     }, []);
 
     const handleEnergyCancel = useCallback(() => {
@@ -932,34 +934,6 @@ export default function TeamTimelineApp() {
         if (!pokemon) return undefined;
         return pokemon.iv.idForm;
     }, [state.pendingSwapPokemonId]);
-
-    // Compute available end time slot options for the "until" dropdown in SwapEnergyDialog
-    const availableEndSlots = useMemo(() => {
-        if (state.swapTargetSlotId === null || state.swapTargetDayIndex === null) {
-            return [];
-        }
-        const targetSlotId = state.swapTargetSlotId.replace(/__day\d+$/, '');
-        const targetDayIndex = state.swapTargetDayIndex;
-        const expandedTimeline = buildExpandedTimeline(
-            state.timeSlots,
-            state.simulationConfig.simulationDays
-        );
-        const targetExpandedIndex = expandedTimeline.expandedSlots.findIndex(
-            expandedSlot =>
-                expandedSlot.dayIndex === targetDayIndex &&
-                expandedSlot.originalSlotId === targetSlotId
-        );
-        if (targetExpandedIndex < 0) {
-            return [];
-        }
-        return expandedTimeline.expandedSlots
-            .slice(targetExpandedIndex + 1)
-            .map(expandedSlot => ({
-                slotId: expandedSlot.originalSlotId,
-                dayIndex: expandedSlot.dayIndex,
-                time: expandedSlot.slot.time,
-            }));
-    }, [state.swapTargetSlotId, state.swapTargetDayIndex, state.timeSlots, state.simulationConfig]);
 
     const disableSwapEnergySetting = useMemo(() => (
         isSwapReassignment({
@@ -2317,6 +2291,7 @@ export default function TeamTimelineApp() {
                                     swaps={state.swaps}
                                     box={boxRef.current!}
                                     onSwapClick={handleSwapClick}
+                                    onSwapSeriesMove={handleSwapSeriesMove}
                                     onSwapRemoveClick={handleSwapRemoveRequest}
                                     onHeaderSlotClick={handleSlotClick}
                                     onOpenTimeSlotSettings={handleOpenTimeSlotSettings}
@@ -2373,6 +2348,7 @@ export default function TeamTimelineApp() {
                                             swaps={state.swaps}
                                             box={boxRef.current!}
                                             onSwapClick={handleSwapClick}
+                                            onSwapSeriesMove={handleSwapSeriesMove}
                                             onSwapRemoveClick={handleSwapRemoveRequest}
                                             onOpenTimeSlotSettings={handleOpenTimeSlotSettings}
                                             showSummaryRows={false}
@@ -2488,9 +2464,6 @@ export default function TeamTimelineApp() {
                 disableEnergySetting={disableSwapEnergySetting}
                 onConfirm={handleEnergyConfirm}
                 onCancel={handleEnergyCancel}
-                availableEndSlots={availableEndSlots}
-                swapDayIndex={state.swapTargetDayIndex ?? 0}
-                simulationDays={state.simulationConfig.simulationDays}
             />
             <SwapRemoveConfirmDialog
                 open={pendingSwapRemoval !== null}

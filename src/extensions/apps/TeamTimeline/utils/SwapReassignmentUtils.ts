@@ -25,19 +25,6 @@ function buildSwapEventsBySlot(swaps: readonly PokemonSwap[]): Map<string, Pokem
 
     swaps.forEach(addSwapEvent);
 
-    swaps.forEach((swap) => {
-        if (!swap.endSlotId || swap.endDayIndex === undefined || swap.revertPokemonId === undefined) {
-            return;
-        }
-        addSwapEvent({
-            dayIndex: swap.endDayIndex,
-            slotId: swap.endSlotId,
-            teamSlotIndex: swap.teamSlotIndex,
-            newPokemonId: swap.revertPokemonId,
-            initialEnergy: 0,
-        });
-    });
-
     return swapsBySlot;
 }
 

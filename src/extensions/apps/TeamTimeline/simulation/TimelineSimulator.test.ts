@@ -336,48 +336,6 @@ describe('TimelineSimulator', () => {
         expect(endPokemonId).toBe(pokemonB.id);
     });
 
-    it('endSlotId指定時は指定時刻に投入前ポケモンへ復帰する', () => {
-        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
-            const energy = typeof args[2] === 'number' ? args[2] : 50;
-            return createNeutralSkillEffectResult(energy);
-        });
-
-        const pokemonA = createBerryBurstDisguisePokemon(2);
-        const pokemonB = createBerryBurstDisguisePokemon(4);
-        const box = new PokemonBox([pokemonA, pokemonB]);
-
-        const result = runSimulation({
-            team: [pokemonA, null, null, null, null],
-            timeSlots: [
-                { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
-                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
-                { id: 'lunch', time: '12:00', sleepState: 'none', hasMeal: false },
-                { id: 'dinner', time: '18:00', sleepState: 'none', hasMeal: false },
-            ],
-            config: { seed: 51234, initialEnergy: 50, simulationDays: 1 },
-            bonusSettings: defaultBonusSettings,
-            swaps: [{
-                dayIndex: 0,
-                slotId: 'wake',
-                teamSlotIndex: 0,
-                newPokemonId: pokemonB.id,
-                initialEnergy: 80,
-                endSlotId: 'dinner',
-                endDayIndex: 0,
-                revertPokemonId: pokemonA.id,
-            }],
-            box,
-        });
-
-        const lunchPokemonId = result.slotResults.get('lunch__day0')?.[0]?.pokemonId;
-        const dinnerPokemonId = result.slotResults.get('dinner__day0')?.[0]?.pokemonId;
-        const dayEndPokemonId = result.slotResults.get('sleep-end__day0')?.[0]?.pokemonId;
-
-        expect(lunchPokemonId).toBe(pokemonB.id);
-        expect(dinnerPokemonId).toBe(pokemonB.id);
-        expect(dayEndPokemonId).toBe(pokemonA.id);
-    });
-
     it('再編成時は前回編成時の最終げんきを引き継ぐ', () => {
         processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
             const energy = typeof args[2] === 'number' ? args[2] : 50;

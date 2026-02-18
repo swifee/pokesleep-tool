@@ -78,25 +78,19 @@ describe('TimelineRow label rendering', () => {
 });
 
 describe('TimelineRow swap rendering', () => {
-    it('renders revert target at end slot when swap has "until" configuration', () => {
+    it('renders direct swap target with remove action', () => {
         const swappedIn = {
             id: 101,
+            iv: { idForm: 25 },
             filledNickname: () => 'ピカチュウ',
-        } as unknown as PokemonBoxItem;
-        const reverted = {
-            id: 42,
-            filledNickname: () => 'ツボツボ',
         } as unknown as PokemonBoxItem;
         const swaps: PokemonSwap[] = [
             {
                 dayIndex: 0,
-                slotId: 'slot-1',
+                slotId: 'slot-4',
                 teamSlotIndex: 0,
                 newPokemonId: swappedIn.id,
                 initialEnergy: 100,
-                endSlotId: 'slot-4',
-                endDayIndex: 0,
-                revertPokemonId: reverted.id,
             },
         ];
 
@@ -108,12 +102,12 @@ describe('TimelineRow swap rendering', () => {
                 results={[]}
                 team={[null, null, null, null, null]}
                 swaps={swaps}
-                box={new PokemonBox([swappedIn, reverted])}
+                box={new PokemonBox([swappedIn])}
             />
         );
 
         const firstCell = screen.getAllByTestId('timeline-cell')[0];
-        expect(within(firstCell).getByText('ツボツボ')).toBeDefined();
-        expect(within(firstCell).getByTestId('remove-flag').textContent).toBe('0');
+        expect(within(firstCell).getByText('ピカチュウ')).toBeDefined();
+        expect(within(firstCell).getByTestId('remove-flag').textContent).toBe('1');
     });
 });

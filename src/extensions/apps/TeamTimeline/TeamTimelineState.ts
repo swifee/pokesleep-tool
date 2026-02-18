@@ -16,12 +16,10 @@ import {
     STORAGE_KEY_SLOTS,
     STORAGE_KEY_CONFIG,
     migrateTimeSlot,
-    SWAP_NONE_POKEMON_ID,
 } from './types/TimeSlotTypes';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
 import { TRIAL_COUNT_OPTIONS } from './types/MultiTrialTypes';
 import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
-import { buildExpandedTimeline } from './utils/TimelineDayExpansion';
 import {
     createDefaultTimelineBonusSettings,
     normalizeTimelineBonusSettings,
@@ -34,81 +32,55 @@ export const STORAGE_KEY_SUMMARY_VALUE_MODE = 'PstTeamTimelineSummaryValueMode';
 export const STORAGE_KEY_SEED_MODE = 'PstTeamTimelineSeedMode';
 export const STORAGE_KEY_TRIAL_COUNT = 'PstTeamTimelineTrialCount';
 
-function buildSwapEventsBySlot(
-    swaps: readonly PokemonSwap[],
-    teamSlotIndex: number
-): Map<string, number[]> {
-    const swapsBySlot = new Map<string, number[]>();
-
-    const addEvent = (dayIndex: number, slotId: string, pokemonId: number) => {
-        const key = `${dayIndex}:${slotId}`;
-        const list = swapsBySlot.get(key) ?? [];
-        list.push(pokemonId);
-        swapsBySlot.set(key, list);
-    };
-
-    swaps.forEach((swap) => {
-        if (swap.teamSlotIndex !== teamSlotIndex) {
-            return;
-        }
-        addEvent(swap.dayIndex, swap.slotId, swap.newPokemonId);
-    });
-
-    swaps.forEach((swap) => {
-        if (swap.teamSlotIndex !== teamSlotIndex) {
-            return;
-        }
-        if (!swap.endSlotId || swap.endDayIndex === undefined || swap.revertPokemonId === undefined) {
-            return;
-        }
-        addEvent(swap.endDayIndex, swap.endSlotId, swap.revertPokemonId);
-    });
-
-    return swapsBySlot;
+interface SwapPosition {
+    dayIndex: number;
+    slotId: string;
+    teamSlotIndex: number;
 }
 
-function resolvePokemonIdBeforeSwap(params: {
-    team: readonly (PokemonBoxItem | null)[];
-    timeSlots: readonly TimeSlot[];
-    simulationDays: number;
-    swaps: readonly PokemonSwap[];
-    teamSlotIndex: number;
-    targetDayIndex: number;
-    targetSlotId: string;
-}): number {
-    const {
-        team,
-        timeSlots,
-        simulationDays,
-        swaps,
-        teamSlotIndex,
-        targetDayIndex,
-        targetSlotId,
-    } = params;
-    const originalPokemonId = team[teamSlotIndex]?.id ?? SWAP_NONE_POKEMON_ID;
-    const expandedTimeline = buildExpandedTimeline([...timeSlots], simulationDays);
-    const targetIndex = expandedTimeline.expandedSlots.findIndex(
-        expandedSlot =>
-            expandedSlot.dayIndex === targetDayIndex &&
-            expandedSlot.originalSlotId === targetSlotId
-    );
-    if (targetIndex <= 0) {
-        return originalPokemonId;
-    }
+function toSwapPositionKey(position: SwapPosition): string {
+    return `${position.dayIndex}:${position.slotId}:${position.teamSlotIndex}`;
+}
 
-    const swapsBySlot = buildSwapEventsBySlot(swaps, teamSlotIndex);
-    let currentPokemonId = originalPokemonId;
+function getSwapPosition(swap: Pick<PokemonSwap, 'dayIndex' | 'slotId' | 'teamSlotIndex'>): SwapPosition {
+    return {
+        dayIndex: swap.dayIndex,
+        slotId: swap.slotId,
+        teamSlotIndex: swap.teamSlotIndex,
+    };
+}
 
-    for (let i = 0; i < targetIndex; i++) {
-        const expandedSlot = expandedTimeline.expandedSlots[i];
-        const slotEvents = swapsBySlot.get(`${expandedSlot.dayIndex}:${expandedSlot.originalSlotId}`);
-        if (!slotEvents || slotEvents.length === 0) {
-            continue;
+function findSwapAtPosition(
+    swaps: readonly PokemonSwap[],
+    position: SwapPosition
+): PokemonSwap | undefined {
+    for (let index = swaps.length - 1; index >= 0; index--) {
+        const swap = swaps[index];
+        if (
+            swap.dayIndex === position.dayIndex &&
+            swap.slotId === position.slotId &&
+            swap.teamSlotIndex === position.teamSlotIndex
+        ) {
+            return swap;
         }
-        currentPokemonId = slotEvents[slotEvents.length - 1];
     }
+    return undefined;
+}
 
-    return currentPokemonId;
+function collectRepeatSeriesFromSwap(
+    swaps: readonly PokemonSwap[],
+    anchorSwap: PokemonSwap
+): PokemonSwap[] {
+    const repeatedSwaps = swaps
+        .filter(
+            swap =>
+                swap.slotId === anchorSwap.slotId &&
+                swap.teamSlotIndex === anchorSwap.teamSlotIndex &&
+                swap.dayIndex > anchorSwap.dayIndex &&
+                swap.isRepeatGenerated === true
+        )
+        .sort((left, right) => left.dayIndex - right.dayIndex);
+    return [anchorSwap, ...repeatedSwaps];
 }
 
 function getResetSimulationFields(): Pick<
@@ -378,17 +350,6 @@ export function teamTimelineReducer(
                     )
                 )
                 : filteredSwaps;
-            const swapsForResolution: PokemonSwap[] = [...swapsWithoutOldRepeats];
-
-            const resolveRevertPokemonId = (dayIndex: number): number => resolvePokemonIdBeforeSwap({
-                team: state.team,
-                timeSlots: state.timeSlots,
-                simulationDays: state.simulationConfig.simulationDays,
-                swaps: swapsForResolution,
-                teamSlotIndex,
-                targetDayIndex: dayIndex,
-                targetSlotId,
-            });
 
             const newSwap: PokemonSwap = {
                 dayIndex: targetDayIndex,
@@ -396,12 +357,8 @@ export function teamTimelineReducer(
                 teamSlotIndex,
                 newPokemonId: state.pendingSwapPokemonId,
                 initialEnergy: action.initialEnergy,
-                endSlotId: action.endSlotId,
-                endDayIndex: action.endDayIndex,
-                revertPokemonId: resolveRevertPokemonId(targetDayIndex),
             };
             const allNewSwaps: PokemonSwap[] = [newSwap];
-            swapsForResolution.push(newSwap);
 
             if (action.repeat) {
                 const simulationDays = state.simulationConfig.simulationDays;
@@ -412,15 +369,9 @@ export function teamTimelineReducer(
                         teamSlotIndex,
                         newPokemonId: state.pendingSwapPokemonId,
                         initialEnergy: action.initialEnergy,
-                        endSlotId: action.endSlotId,
-                        endDayIndex: action.endDayIndex !== undefined
-                            ? action.endDayIndex + (d - targetDayIndex)
-                            : undefined,
                         isRepeatGenerated: true,
-                        revertPokemonId: resolveRevertPokemonId(d),
                     };
                     allNewSwaps.push(repeatedSwap);
-                    swapsForResolution.push(repeatedSwap);
                 }
             }
 
@@ -490,6 +441,87 @@ export function teamTimelineReducer(
             return {
                 ...state,
                 swaps: newSwaps,
+            };
+        }
+        case 'moveSwapSeries': {
+            const sourcePosition: SwapPosition = {
+                dayIndex: action.fromDayIndex,
+                slotId: action.fromSlotId,
+                teamSlotIndex: action.fromTeamIndex,
+            };
+            const targetPosition: SwapPosition = {
+                dayIndex: action.toDayIndex,
+                slotId: action.toSlotId,
+                teamSlotIndex: action.toTeamIndex,
+            };
+            if (
+                sourcePosition.dayIndex === targetPosition.dayIndex &&
+                sourcePosition.slotId === targetPosition.slotId &&
+                sourcePosition.teamSlotIndex === targetPosition.teamSlotIndex
+            ) {
+                return state;
+            }
+
+            const sourceAnchor = findSwapAtPosition(state.swaps, sourcePosition);
+            if (!sourceAnchor) {
+                return state;
+            }
+
+            const sourceSeries = collectRepeatSeriesFromSwap(state.swaps, sourceAnchor);
+            const sourceSeriesKeySet = new Set(
+                sourceSeries.map((swap) => toSwapPositionKey(getSwapPosition(swap)))
+            );
+            let remainingSwaps = state.swaps.filter(
+                (swap) => !sourceSeriesKeySet.has(toSwapPositionKey(getSwapPosition(swap)))
+            );
+
+            const targetAnchor = findSwapAtPosition(remainingSwaps, targetPosition);
+            if (targetAnchor) {
+                const targetSeries = collectRepeatSeriesFromSwap(remainingSwaps, targetAnchor);
+                const targetSeriesKeySet = new Set(
+                    targetSeries.map((swap) => toSwapPositionKey(getSwapPosition(swap)))
+                );
+                remainingSwaps = remainingSwaps.filter(
+                    (swap) => !targetSeriesKeySet.has(toSwapPositionKey(getSwapPosition(swap)))
+                );
+            }
+
+            const movedSwaps = sourceSeries
+                .map((swap): PokemonSwap | null => {
+                    const dayOffset = swap.dayIndex - sourceAnchor.dayIndex;
+                    const movedDayIndex = targetPosition.dayIndex + dayOffset;
+                    if (movedDayIndex < 0 || movedDayIndex >= state.simulationConfig.simulationDays) {
+                        return null;
+                    }
+                    return {
+                        dayIndex: movedDayIndex,
+                        slotId: targetPosition.slotId,
+                        teamSlotIndex: targetPosition.teamSlotIndex,
+                        newPokemonId: swap.newPokemonId,
+                        newPokemonSerialized: swap.newPokemonSerialized,
+                        initialEnergy: swap.initialEnergy,
+                        isRepeatGenerated: swap.isRepeatGenerated,
+                    };
+                })
+                .filter((swap): swap is PokemonSwap => swap !== null);
+
+            if (movedSwaps.length === 0) {
+                return {
+                    ...state,
+                    swaps: remainingSwaps,
+                };
+            }
+
+            const movedSwapKeySet = new Set(
+                movedSwaps.map((swap) => toSwapPositionKey(getSwapPosition(swap)))
+            );
+            remainingSwaps = remainingSwaps.filter(
+                (swap) => !movedSwapKeySet.has(toSwapPositionKey(getSwapPosition(swap)))
+            );
+
+            return {
+                ...state,
+                swaps: [...remainingSwaps, ...movedSwaps],
             };
         }
         case 'clearSwaps':

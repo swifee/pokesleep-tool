@@ -432,16 +432,8 @@ export interface PokemonSwap {
     newPokemonSerialized?: string;
     /** 初回登場時の初期げんき（デフォルト100） */
     initialEnergy: number;
-    /** End time slot ID (original slot ID without __dayN suffix). If set, the swap reverts at this slot. */
-    endSlotId?: string;
-    /** End day index. If set with endSlotId, specifies which day the swap ends. */
-    endDayIndex?: number;
     /** Whether this swap is auto-generated from a repeat pattern. */
     isRepeatGenerated?: boolean;
-    /** The Pokemon ID to revert to when this swap ends (the previously assigned Pokemon). */
-    revertPokemonId?: number;
-    /** Revert target Pokemon serialized string (ID resequencing-safe fallback). */
-    revertPokemonSerialized?: string;
 }
 
 /** Special Pokemon ID representing "none" (remove Pokemon from slot) */

@@ -198,6 +198,172 @@ describe('removeSwap behavior', () => {
     });
 });
 
+describe('moveSwapSeries behavior', () => {
+    it('moves a single swap to another cell', () => {
+        const state = {
+            ...createInitialState(),
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 0, slotId: 'slot-3', teamSlotIndex: 4, newPokemonId: 777, initialEnergy: 70 },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-4',
+            toTeamIndex: 1,
+            toDayIndex: 0,
+        });
+
+        expect(next.swaps).toEqual([
+            { dayIndex: 0, slotId: 'slot-3', teamSlotIndex: 4, newPokemonId: 777, initialEnergy: 70 },
+            { dayIndex: 0, slotId: 'slot-4', teamSlotIndex: 1, newPokemonId: 999, initialEnergy: 80 },
+        ]);
+    });
+
+    it('moves repeat series together and keeps repeat flags', () => {
+        const state = {
+            ...createInitialState(),
+            simulationConfig: {
+                ...createInitialState().simulationConfig,
+                simulationDays: 4,
+            },
+            swaps: [
+                {
+                    dayIndex: 0,
+                    slotId: 'slot-2',
+                    teamSlotIndex: 0,
+                    newPokemonId: 999,
+                    initialEnergy: 80,
+                },
+                {
+                    dayIndex: 1,
+                    slotId: 'slot-2',
+                    teamSlotIndex: 0,
+                    newPokemonId: 999,
+                    initialEnergy: 80,
+                    isRepeatGenerated: true,
+                },
+                {
+                    dayIndex: 2,
+                    slotId: 'slot-2',
+                    teamSlotIndex: 0,
+                    newPokemonId: 999,
+                    initialEnergy: 80,
+                    isRepeatGenerated: true,
+                },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-5',
+            toTeamIndex: 2,
+            toDayIndex: 1,
+        });
+
+        expect(next.swaps).toEqual([
+            {
+                dayIndex: 1,
+                slotId: 'slot-5',
+                teamSlotIndex: 2,
+                newPokemonId: 999,
+                initialEnergy: 80,
+            },
+            {
+                dayIndex: 2,
+                slotId: 'slot-5',
+                teamSlotIndex: 2,
+                newPokemonId: 999,
+                initialEnergy: 80,
+                isRepeatGenerated: true,
+            },
+            {
+                dayIndex: 3,
+                slotId: 'slot-5',
+                teamSlotIndex: 2,
+                newPokemonId: 999,
+                initialEnergy: 80,
+                isRepeatGenerated: true,
+            },
+        ]);
+    });
+
+    it('overwrites an existing destination repeat series at anchor cell', () => {
+        const state = {
+            ...createInitialState(),
+            simulationConfig: {
+                ...createInitialState().simulationConfig,
+                simulationDays: 5,
+            },
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 111, initialEnergy: 80 },
+                { dayIndex: 1, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 2, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 222, initialEnergy: 50 },
+                { dayIndex: 2, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 222, initialEnergy: 50, isRepeatGenerated: true },
+                { dayIndex: 3, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 222, initialEnergy: 50, isRepeatGenerated: true },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-3',
+            toTeamIndex: 1,
+            toDayIndex: 1,
+        });
+
+        expect(next.swaps).toEqual([
+            { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 111, initialEnergy: 80 },
+            { dayIndex: 2, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+            { dayIndex: 3, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+        ]);
+    });
+
+    it('overwrites conflicts on moved series destinations even when destination anchor is empty', () => {
+        const state = {
+            ...createInitialState(),
+            simulationConfig: {
+                ...createInitialState().simulationConfig,
+                simulationDays: 5,
+            },
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 1, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 2, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 2, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 333, initialEnergy: 60 },
+                { dayIndex: 4, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 444, initialEnergy: 60 },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-4',
+            toTeamIndex: 3,
+            toDayIndex: 1,
+        });
+
+        expect(next.swaps).toEqual([
+            { dayIndex: 4, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 444, initialEnergy: 60 },
+            { dayIndex: 1, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 999, initialEnergy: 80 },
+            { dayIndex: 2, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+            { dayIndex: 3, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+        ]);
+    });
+});
+
 describe('summary value mode storage', () => {
     it('saves and loads dailyAverage mode', () => {
         saveSummaryValueModeToStorage('dailyAverage');
@@ -213,7 +379,7 @@ describe('summary value mode storage', () => {
     });
 });
 
-describe('confirmSwap with endSlotId and repeat', () => {
+describe('confirmSwap with repeat', () => {
     /** Helper to create a state with swap dialog targeting a specific slot */
     function createSwapReadyState(overrides?: {
         simulationDays?: number;
@@ -249,21 +415,21 @@ describe('confirmSwap with endSlotId and repeat', () => {
         };
     }
 
-    it('confirmSwap stores endSlotId and endDayIndex', () => {
+    it('confirmSwap stores basic swap data', () => {
         const state = createSwapReadyState();
 
         const next = teamTimelineReducer(state, {
             type: 'confirmSwap',
             initialEnergy: 80,
-            endSlotId: 'slot-4',
-            endDayIndex: 0,
         });
 
         expect(next.swaps).toHaveLength(1);
         const swap = next.swaps[0];
-        expect(swap.endSlotId).toBe('slot-4');
-        expect(swap.endDayIndex).toBe(0);
-        expect(swap.revertPokemonId).toBe(100); // original team Pokemon id
+        expect(swap.dayIndex).toBe(0);
+        expect(swap.slotId).toBe('slot-2');
+        expect(swap.teamSlotIndex).toBe(0);
+        expect(swap.newPokemonId).toBe(999);
+        expect(swap.initialEnergy).toBe(80);
     });
 
     it('confirmSwap with repeat generates swaps for subsequent days', () => {
@@ -291,161 +457,6 @@ describe('confirmSwap with endSlotId and repeat', () => {
         // Day 2: repeat-generated
         expect(next.swaps[2].dayIndex).toBe(2);
         expect(next.swaps[2].isRepeatGenerated).toBe(true);
-    });
-
-    it('confirmSwap with repeat and endSlotId adjusts endDayIndex for each day', () => {
-        const state = createSwapReadyState({
-            simulationDays: 3,
-            swapTargetDayIndex: 0,
-        });
-
-        const next = teamTimelineReducer(state, {
-            type: 'confirmSwap',
-            initialEnergy: 80,
-            endSlotId: 'slot-4',
-            endDayIndex: 0,
-            repeat: true,
-        });
-
-        expect(next.swaps).toHaveLength(3);
-        expect(next.swaps[0].endDayIndex).toBe(0);
-        expect(next.swaps[1].endDayIndex).toBe(1);
-        expect(next.swaps[2].endDayIndex).toBe(2);
-    });
-
-    it('confirmSwap revertPokemonId uses original team Pokemon', () => {
-        const state = createSwapReadyState({
-            team: [
-                { id: 42 } as PokemonBoxItem,
-                { id: 77 } as PokemonBoxItem,
-                null,
-                null,
-                null,
-            ],
-            swapTargetTeamIndex: 0,
-            pendingSwapPokemonId: 555,
-        });
-
-        const next = teamTimelineReducer(state, {
-            type: 'confirmSwap',
-            initialEnergy: 100,
-        });
-
-        expect(next.swaps).toHaveLength(1);
-        expect(next.swaps[0].revertPokemonId).toBe(42);
-    });
-
-    it('confirmSwap revertPokemonId uses prior swap Pokemon when one exists', () => {
-        // An existing swap at slot-1 day 0 that placed Pokemon 777
-        const existingSwap: PokemonSwap = {
-            dayIndex: 0,
-            slotId: 'slot-1',
-            teamSlotIndex: 0,
-            newPokemonId: 777,
-            initialEnergy: 100,
-        };
-
-        const state = createSwapReadyState({
-            team: [
-                { id: 42 } as PokemonBoxItem,
-                null,
-                null,
-                null,
-                null,
-            ],
-            swapTargetTeamIndex: 0,
-            swapTargetSlotId: 'slot-3',   // later slot than slot-1
-            swapTargetDayIndex: 0,
-            pendingSwapPokemonId: 888,
-            swaps: [existingSwap],
-        });
-
-        const next = teamTimelineReducer(state, {
-            type: 'confirmSwap',
-            initialEnergy: 80,
-        });
-
-        // The new swap should be at slot-3
-        const newSwap = next.swaps.find(s => s.slotId === 'slot-3');
-        expect(newSwap).toBeDefined();
-        // revertPokemonId should be the prior swap's Pokemon, not the original team Pokemon
-        expect(newSwap!.revertPokemonId).toBe(777);
-    });
-
-    it('confirmSwap revertPokemonId follows timeline state after prior swap reverts', () => {
-        const existingSwapWithEnd: PokemonSwap = {
-            dayIndex: 0,
-            slotId: 'slot-2',
-            teamSlotIndex: 0,
-            newPokemonId: 777,
-            initialEnergy: 100,
-            endSlotId: 'slot-3',
-            endDayIndex: 0,
-            revertPokemonId: 42,
-        };
-
-        const state = createSwapReadyState({
-            team: [
-                { id: 42 } as PokemonBoxItem,
-                null,
-                null,
-                null,
-                null,
-            ],
-            swapTargetTeamIndex: 0,
-            swapTargetSlotId: 'slot-4',
-            swapTargetDayIndex: 0,
-            pendingSwapPokemonId: 888,
-            swaps: [existingSwapWithEnd],
-        });
-
-        const next = teamTimelineReducer(state, {
-            type: 'confirmSwap',
-            initialEnergy: 80,
-        });
-
-        const newSwap = next.swaps.find(
-            s => s.dayIndex === 0 && s.slotId === 'slot-4' && s.newPokemonId === 888
-        );
-        expect(newSwap).toBeDefined();
-        expect(newSwap!.revertPokemonId).toBe(42);
-    });
-
-    it('confirmSwap on later day uses carried active pokemon as revert target', () => {
-        const persistentSwap: PokemonSwap = {
-            dayIndex: 0,
-            slotId: 'slot-2',
-            teamSlotIndex: 0,
-            newPokemonId: 777,
-            initialEnergy: 100,
-        };
-
-        const state = createSwapReadyState({
-            simulationDays: 3,
-            team: [
-                { id: 42 } as PokemonBoxItem,
-                null,
-                null,
-                null,
-                null,
-            ],
-            swapTargetTeamIndex: 0,
-            swapTargetSlotId: 'slot-2',
-            swapTargetDayIndex: 1,
-            pendingSwapPokemonId: 888,
-            swaps: [persistentSwap],
-        });
-
-        const next = teamTimelineReducer(state, {
-            type: 'confirmSwap',
-            initialEnergy: 80,
-        });
-
-        const newSwap = next.swaps.find(
-            s => s.dayIndex === 1 && s.slotId === 'slot-2' && s.newPokemonId === 888
-        );
-        expect(newSwap).toBeDefined();
-        expect(newSwap!.revertPokemonId).toBe(777);
     });
 });
 
