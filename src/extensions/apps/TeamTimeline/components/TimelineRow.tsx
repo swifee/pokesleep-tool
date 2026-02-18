@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { TimeSlot, TimeSlotResult, PokemonSwap, SWAP_NONE_POKEMON_ID } from '../types/TimeSlotTypes';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineCell from './TimelineCell';
-import type { SwapCellCoordinate, SwapDragState, SwapLongPressStartDetail } from './TimelineCell';
+import type {
+    SwapCellCoordinate,
+    SwapDragState,
+    SwapLongPressStartDetail,
+    TimelineDisplayMode,
+} from './TimelineCell';
 import TeamTimelineIcon from './TimelineIcons';
 
 interface TimelineRowProps {
@@ -27,15 +32,16 @@ interface TimelineRowProps {
     onSwapLongPressStart?: (detail: SwapLongPressStartDetail) => void;
     swapDragSource?: SwapCellCoordinate | null;
     swapDragTarget?: SwapCellCoordinate | null;
+    displayMode?: TimelineDisplayMode;
 }
 
 function formatDuration(minutes: number): string {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     if (hours === 0) return `${mins}m`;
-    if (mins === 0) return `${hours}h`;
-    if (mins === 30) return `${hours}.5h`;
-    return `${hours}h ${mins}m`;
+    if (mins === 0) return `${hours}H`;
+    if (mins === 30) return `${hours}.5H`;
+    return `${hours}H ${mins}m`;
 }
 
 const TimelineRow = React.memo(({
@@ -58,6 +64,7 @@ const TimelineRow = React.memo(({
     onSwapLongPressStart,
     swapDragSource = null,
     swapDragTarget = null,
+    displayMode = 'detailed',
 }: TimelineRowProps) => {
     const { t } = useTranslation();
 
@@ -160,7 +167,7 @@ const TimelineRow = React.memo(({
         <StyledRow $fitToViewport={fitToViewport}>
             <TimeInfoCell $fitToViewport={fitToViewport}>
                 <div className="time">{slot.time}</div>
-                {durationMinutes > 0 && (
+                {displayMode !== 'simple' && durationMinutes > 0 && (
                     <div className="duration">{formatDuration(durationMinutes)}</div>
                 )}
                 <div className="label">{getLabelContent()}</div>
@@ -221,6 +228,7 @@ const TimelineRow = React.memo(({
                         swapDraggable={canDragSwap}
                         onSwapLongPressStart={onSwapLongPressStart}
                         swapDragState={swapDragState}
+                        displayMode={displayMode}
                     />
                 );
             })}
@@ -242,8 +250,8 @@ const StyledRow = styled('div')<{
 const TimeInfoCell = styled('div')<{
     $fitToViewport: boolean;
 }>(({ $fitToViewport }) => ({
-    width: $fitToViewport ? 'var(--timeline-time-cell-width, 28px)' : '40px',
-    minWidth: $fitToViewport ? 'var(--timeline-time-cell-width, 28px)' : '40px',
+    width: $fitToViewport ? 'var(--timeline-time-cell-width, 40px)' : '40px',
+    minWidth: $fitToViewport ? 'var(--timeline-time-cell-width, 40px)' : '40px',
     flexShrink: 0,
     boxSizing: 'border-box',
     padding: '3px',

@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import PokemonBox from '../../../../util/PokemonBox';
-import { PokemonSwap, TimeSlot } from '../types/TimeSlotTypes';
+import { PokemonSwap, TimeSlot, TimeSlotResult } from '../types/TimeSlotTypes';
 import type { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineRow from './TimelineRow';
 
@@ -219,5 +219,57 @@ describe('TimelineRow swap rendering', () => {
 
         const firstCell = screen.getAllByTestId('timeline-cell')[0];
         expect(within(firstCell).getByTestId('pokemon-id-form').textContent).toBe('260');
+    });
+});
+
+describe('TimelineRow duration rendering', () => {
+    const baseSlot: TimeSlot = {
+        id: 'slot-1',
+        time: '15:00',
+        sleepState: 'none',
+        hasMeal: false,
+    };
+
+    const createResult = (durationMinutes: number): TimeSlotResult => ({
+        slotId: 'slot-1',
+        pokemonId: 1,
+        teamIndex: 0,
+        durationMinutes,
+        isSleeping: false,
+    } as unknown as TimeSlotResult);
+
+    it('uses uppercase H for hour duration in detailed mode', () => {
+        render(
+            <TimelineRow
+                slot={baseSlot}
+                originalSlotId={baseSlot.id}
+                dayIndex={0}
+                results={[createResult(180)]}
+                team={[null, null, null, null, null]}
+                swaps={[]}
+                box={new PokemonBox([])}
+                displayMode="detailed"
+            />
+        );
+
+        expect(screen.getByText('3H')).toBeDefined();
+        expect(screen.queryByText('3h')).toBeNull();
+    });
+
+    it('hides duration in simple mode', () => {
+        render(
+            <TimelineRow
+                slot={baseSlot}
+                originalSlotId={baseSlot.id}
+                dayIndex={0}
+                results={[createResult(180)]}
+                team={[null, null, null, null, null]}
+                swaps={[]}
+                box={new PokemonBox([])}
+                displayMode="simple"
+            />
+        );
+
+        expect(screen.queryByText('3H')).toBeNull();
     });
 });

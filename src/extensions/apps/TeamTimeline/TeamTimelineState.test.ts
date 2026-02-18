@@ -87,26 +87,34 @@ describe('teamTimelineReducer', () => {
         expect(next.simulationResult).toEqual(previewResult);
     });
 
-    it('clears all simulation outputs when selecting team member', () => {
+    it('keeps simulation outputs when selecting team member', () => {
         const state = createStateWithSimulationData();
+        const selectedPokemon = {
+            id: 999,
+            iv: { idForm: 25, level: 60 },
+            filledNickname: () => 'ピカチュウ',
+        } as unknown as PokemonBoxItem;
 
         const next = teamTimelineReducer(state, {
             type: 'selectPokemon',
             index: 0,
-            item: {} as PokemonBoxItem,
+            item: selectedPokemon,
         });
 
-        expect(next.simulationLoading).toBe(false);
-        expect(next.simulationResult).toBeNull();
-        expect(next.simulationError).toBeNull();
-        expect(next.multiTrialResults).toBeNull();
-        expect(next.multiTrialSelectedIndex).toBeNull();
-        expect(next.multiTrialAverageDailySummaries).toBeNull();
-        expect(next.multiTrialAverageTeamSummary).toBeNull();
-        expect(next.multiTrialAverageCookingSummary).toBeNull();
+        expect(next.team[0]).toBe(selectedPokemon);
+        expect(next.boxSelectDialogOpen).toBe(false);
+        expect(next.selectedSlotIndex).toBeNull();
+        expect(next.simulationLoading).toBe(state.simulationLoading);
+        expect(next.simulationResult).toBe(state.simulationResult);
+        expect(next.simulationError).toBe(state.simulationError);
+        expect(next.multiTrialResults).toBe(state.multiTrialResults);
+        expect(next.multiTrialSelectedIndex).toBe(state.multiTrialSelectedIndex);
+        expect(next.multiTrialAverageDailySummaries).toBe(state.multiTrialAverageDailySummaries);
+        expect(next.multiTrialAverageTeamSummary).toBe(state.multiTrialAverageTeamSummary);
+        expect(next.multiTrialAverageCookingSummary).toBe(state.multiTrialAverageCookingSummary);
     });
 
-    it('clears all simulation outputs when removing team member', () => {
+    it('keeps simulation outputs when removing team member', () => {
         const state = createStateWithSimulationData();
 
         const next = teamTimelineReducer(state, {
@@ -114,14 +122,15 @@ describe('teamTimelineReducer', () => {
             index: 0,
         });
 
-        expect(next.simulationLoading).toBe(false);
-        expect(next.simulationResult).toBeNull();
-        expect(next.simulationError).toBeNull();
-        expect(next.multiTrialResults).toBeNull();
-        expect(next.multiTrialSelectedIndex).toBeNull();
-        expect(next.multiTrialAverageDailySummaries).toBeNull();
-        expect(next.multiTrialAverageTeamSummary).toBeNull();
-        expect(next.multiTrialAverageCookingSummary).toBeNull();
+        expect(next.team[0]).toBeNull();
+        expect(next.simulationLoading).toBe(state.simulationLoading);
+        expect(next.simulationResult).toBe(state.simulationResult);
+        expect(next.simulationError).toBe(state.simulationError);
+        expect(next.multiTrialResults).toBe(state.multiTrialResults);
+        expect(next.multiTrialSelectedIndex).toBe(state.multiTrialSelectedIndex);
+        expect(next.multiTrialAverageDailySummaries).toBe(state.multiTrialAverageDailySummaries);
+        expect(next.multiTrialAverageTeamSummary).toBe(state.multiTrialAverageTeamSummary);
+        expect(next.multiTrialAverageCookingSummary).toBe(state.multiTrialAverageCookingSummary);
     });
 
     it('keeps simulation outputs when only swaps are changed', () => {

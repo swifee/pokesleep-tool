@@ -78,11 +78,13 @@ vi.mock('./components/TimelineTable', () => ({
     default: ({
         compactEmptyCells,
         alwaysShowSwapButton,
+        displayMode,
         onHeaderSlotClick,
         onOpenTimeSlotSettings,
     }: {
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
+        displayMode?: 'detailed' | 'simple';
         onHeaderSlotClick?: (index: number) => void;
         onOpenTimeSlotSettings?: () => void;
     }) => (
@@ -90,6 +92,7 @@ vi.mock('./components/TimelineTable', () => ({
             data-testid="timeline-table"
             data-compact-empty={compactEmptyCells ? 'true' : 'false'}
             data-always-show-swap={alwaysShowSwapButton ? 'true' : 'false'}
+            data-display-mode={displayMode ?? 'detailed'}
         >
             <button
                 type="button"

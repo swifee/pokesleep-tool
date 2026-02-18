@@ -12,6 +12,7 @@ import TeamTimelineIcon from './TimelineIcons';
 import EpValue, { EpText } from './EpValue';
 
 export type SwapDragState = 'idle' | 'source' | 'target';
+export type TimelineDisplayMode = 'detailed' | 'simple';
 
 export interface SwapCellCoordinate {
     slotId: string;
@@ -52,6 +53,7 @@ interface TimelineCellProps {
     swapDraggable?: boolean;         // Drag handle enabled only for direct swap rows
     onSwapLongPressStart?: (detail: SwapLongPressStartDetail) => void;
     swapDragState?: SwapDragState;
+    displayMode?: TimelineDisplayMode;
 }
 
 /**
@@ -78,14 +80,18 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         swapDraggable = false,
         onSwapLongPressStart,
         swapDragState = 'idle',
+        displayMode = 'detailed',
     } = props;
     const { t } = useTranslation();
     const swapButtonTitle = t('TeamTimeline.swap pokemon');
     const removeSwapButtonTitle = t('TeamTimeline.swap remove', '入れ替え設定を解除');
     const hasSwapInfo = !disableSwapUi && Boolean(hasSwap && swappedPokemonName);
     const showSwapButton = !disableSwapUi && Boolean(onSwapClick) && !hasSwapInfo;
+    const isSimpleMode = displayMode === 'simple';
+    const shouldAlwaysShowSwapButton = alwaysShowSwapButton || isSimpleMode;
     const isCompactEmptyCell = compactEmpty && result === null;
-    const isCompactLayout = isCompactEmptyCell || compactFirstSlot;
+    const isCompactLayout = isCompactEmptyCell || compactFirstSlot || isSimpleMode;
+    const isNarrowSwapInfoLayout = fitToViewport;
     const isLongPressEnabled =
         hasSwapInfo &&
         swapDraggable &&
@@ -255,7 +261,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             <SwapIconButton
                 type="button"
                 className="swap-trigger"
-                data-always-visible={alwaysShowSwapButton ? 'true' : 'false'}
+                data-always-visible={shouldAlwaysShowSwapButton ? 'true' : 'false'}
                 onClick={handleSwapButtonClick}
                 title={swapButtonTitle}
             >
@@ -274,6 +280,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 data-swap-drag-state={swapDragState}
             >
                 <SwapInfoMainButton
+                    $compactSwapLabel={isNarrowSwapInfoLayout}
                     type="button"
                     className="swap-info"
                     onClick={onSwapClick ? handleSwapInfoClick : undefined}
@@ -284,8 +291,15 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     onContextMenu={isLongPressEnabled ? handleSwapInfoContextMenu : undefined}
                     title={swapButtonTitle}
                 >
-                    <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
-                    <span className="swap-name">{swappedPokemonName}</span>
+                    {!isNarrowSwapInfoLayout && (
+                        <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
+                    )}
+                    <span
+                        className="swap-name"
+                        data-compact-swap-name={isNarrowSwapInfoLayout ? 'true' : 'false'}
+                    >
+                        {swappedPokemonName}
+                    </span>
                 </SwapInfoMainButton>
                 {onRemoveSwapClick && (
                     <SwapRemoveButton
@@ -410,8 +424,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 $isSleeping={isSleeping}
                 $hasSwap={hasSwap}
                 $showSwapButton={showSwapButton}
-                $alwaysShowSwapButton={alwaysShowSwapButton}
+                $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
                 $compact={isCompactLayout}
+                $simple={false}
                 $fitToViewport={fitToViewport}
                 $swapDragState={swapDragState}
                 data-compact-layout={isCompactLayout ? 'true' : 'false'}
@@ -452,6 +467,63 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         hasProxyEventStyle;
     const totalGreatSuccessCount =
         (result.berryBurstGreatSuccessCount ?? 0) + (result.ingredientDrawGreatSuccessCount ?? 0);
+    const simpleCookingCount = result.ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
+
+    if (displayMode === 'simple') {
+        return (
+            <StyledCell
+                $isSleeping={isSleeping}
+                $hasSwap={hasSwap}
+                $showSwapButton={showSwapButton}
+                $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
+                $compact={isCompactLayout}
+                $simple={true}
+                $fitToViewport={fitToViewport}
+                $swapDragState={swapDragState}
+                data-compact-layout={isCompactLayout ? 'true' : 'false'}
+                data-swap-slot-id={swapSlotId}
+                data-swap-team-index={teamIndex}
+                data-swap-day-index={dayIndex}
+                data-swap-drop-enabled={!disableSwapUi && swapSlotId !== undefined && dayIndex !== undefined ? 'true' : 'false'}
+                data-display-mode="simple"
+            >
+                <SimpleLayout>
+                    {renderPokemonIcon()}
+                    <SimpleRightArea>
+                        <SimpleEnergyBarTrack>
+                            <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                        </SimpleEnergyBarTrack>
+                        <SimpleMetricsLine>
+                            <SimpleMetricBadge data-testid="timeline-cell-simple-berry">
+                                <TeamTimelineIcon name="berry" />
+                                {result.berryCount}
+                            </SimpleMetricBadge>
+                            <SimpleMetricBadge data-testid="timeline-cell-simple-cooking">
+                                <TeamTimelineIcon name="cooking" />
+                                {simpleCookingCount}
+                            </SimpleMetricBadge>
+                            {(result.skillTriggerCount > 0 || result.skillOverflowCount > 0) && (
+                                <SimpleSkillIconStack>
+                                    {result.skillTriggerCount > 0 && (
+                                        <SimpleSkillIconItem data-testid="timeline-cell-simple-skill">
+                                            <TeamTimelineIcon name="skill" data-simple-skill-icon="true" />
+                                        </SimpleSkillIconItem>
+                                    )}
+                                    {result.skillOverflowCount > 0 && (
+                                        <SimpleSkillIconItem data-testid="timeline-cell-simple-skill-none">
+                                            <TeamTimelineIcon name="skill_none" data-simple-skill-icon="true" />
+                                        </SimpleSkillIconItem>
+                                    )}
+                                </SimpleSkillIconStack>
+                            )}
+                        </SimpleMetricsLine>
+                    </SimpleRightArea>
+                </SimpleLayout>
+                {renderSwapInfo()}
+                {renderSwapControl()}
+            </StyledCell>
+        );
+    }
 
     const aggregateDetailParts: string[] = [];
     if (result.selfSkillRecovery > 0) {
@@ -649,8 +721,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             $isSleeping={isSleeping}
             $hasSwap={hasSwap}
             $showSwapButton={showSwapButton}
-            $alwaysShowSwapButton={alwaysShowSwapButton}
+            $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
             $compact={isCompactLayout}
+            $simple={false}
             $fitToViewport={fitToViewport}
             $swapDragState={swapDragState}
             data-compact-layout={isCompactLayout ? 'true' : 'false'}
@@ -763,24 +836,27 @@ const StyledCell = styled('div')<{
     $showSwapButton: boolean;
     $alwaysShowSwapButton: boolean;
     $compact: boolean;
+    $simple: boolean;
     $fitToViewport: boolean;
     $swapDragState: SwapDragState;
 }>(
-    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact, $fitToViewport, $swapDragState }) => ({
+    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact, $simple, $fitToViewport, $swapDragState }) => ({
     position: 'relative',
     width: $fitToViewport
-        ? 'calc((100% - var(--timeline-time-cell-width, 28px)) / var(--timeline-team-size, 5))'
+        ? 'calc((100% - var(--timeline-time-cell-width, 40px)) / var(--timeline-team-size, 5))'
         : '100px',
     minWidth: $fitToViewport ? '0' : '100px',
     flexBasis: $fitToViewport
-        ? 'calc((100% - var(--timeline-time-cell-width, 28px)) / var(--timeline-team-size, 5))'
+        ? 'calc((100% - var(--timeline-time-cell-width, 40px)) / var(--timeline-team-size, 5))'
         : 'auto',
     flexShrink: 0,
     boxSizing: 'border-box',
-    minHeight: $compact ? '34px' : '109px',
-    padding: $compact
-        ? `2px 2px ${$showSwapButton ? '22px' : '2px'}`
-        : `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
+    minHeight: ($simple || $compact) ? '34px' : '109px',
+    padding: $simple
+        ? '2px'
+        : $compact
+            ? `2px 2px ${$showSwapButton ? '22px' : '2px'}`
+            : `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
     borderLeft: '0.5px solid #e2e2e2',
     backgroundColor: $swapDragState === 'target'
         ? '#fff4de'
@@ -838,6 +914,73 @@ const EnergySummary = styled('div')({
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
+});
+
+const SimpleLayout = styled('div')({
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '3px',
+    minHeight: '14px',
+});
+
+const SimpleRightArea = styled('div')({
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+});
+
+const SimpleEnergyBarTrack = styled('div')({
+    width: '100%',
+    height: '2px',
+    borderRadius: '999px',
+    backgroundColor: '#d5ead0',
+    overflow: 'hidden',
+});
+
+const SimpleMetricsLine = styled('div')({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    minHeight: '10px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+});
+
+const SimpleMetricBadge = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '1px',
+    fontSize: '8px',
+    lineHeight: '10px',
+    letterSpacing: '-0.4px',
+    color: '#111',
+    '& svg': {
+        width: '9px',
+        height: '9px',
+    },
+});
+
+const SimpleSkillIconStack = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+});
+
+const SimpleSkillIconItem = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '8px',
+    height: '8px',
+    marginRight: '-2px',
+    '&:last-of-type': {
+        marginRight: '0',
+    },
+    '& svg': {
+        width: '8px',
+        height: '8px',
+    },
 });
 
 const HelpLine = styled('span')({
@@ -1048,9 +1191,11 @@ const SwapInfoContainer = styled('div')<{ $dragState: SwapDragState }>(({ $dragS
     } : {}),
 }));
 
-const SwapInfoMainButton = styled('button')({
+const SwapInfoMainButton = styled('button')<{
+    $compactSwapLabel: boolean;
+}>(({ $compactSwapLabel }) => ({
     border: 'none',
-    padding: '1px 0 1px 4px',
+    padding: $compactSwapLabel ? '1px 0 1px 2px' : '1px 0 1px 4px',
     margin: 0,
     flex: 1,
     minWidth: 0,
@@ -1082,8 +1227,10 @@ const SwapInfoMainButton = styled('button')({
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
         display: 'block',
+        fontSize: $compactSwapLabel ? '9px' : '10px',
+        lineHeight: $compactSwapLabel ? '11px' : '13px',
     },
-});
+}));
 
 const SwapRemoveButton = styled('button')({
     border: 'none',

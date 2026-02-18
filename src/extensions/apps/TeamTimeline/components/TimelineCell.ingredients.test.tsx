@@ -248,4 +248,60 @@ describe('TimelineCell ingredient ordering', () => {
 
         expect(screen.getByTestId('timeline-cell-pokemon-icon').textContent).toBe('35-14');
     });
+
+    it('shows simple mode metrics and counts cooking from regular ingredients only', () => {
+        const result = createTimeSlotResult({
+            berryCount: 10,
+            skillTriggerCount: 2,
+            skillOverflowCount: 1,
+            ingredients: [
+                { name: 'apple', count: 2 },
+                { name: 'mushroom', count: 3 },
+            ],
+            skillIngredients: [
+                { name: 'honey', count: 9 },
+            ],
+            overflowIngredients: [
+                { name: 'egg', count: 4 },
+            ],
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                displayMode="simple"
+            />
+        );
+
+        expect(screen.getByTestId('timeline-cell-simple-berry').textContent).toContain('10');
+        expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).toContain('5');
+        expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).not.toContain('14');
+        expect(screen.getByTestId('timeline-cell-simple-skill')).toBeDefined();
+        expect(screen.getByTestId('timeline-cell-simple-skill-none')).toBeDefined();
+        expect(screen.queryByTestId('timeline-cell-help-icon-work')).toBeNull();
+    });
+
+    it('hides simple mode skill icons when trigger and overflow are zero', () => {
+        const result = createTimeSlotResult({
+            skillTriggerCount: 0,
+            skillOverflowCount: 0,
+            ingredients: [{ name: 'apple', count: 1 }],
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                displayMode="simple"
+            />
+        );
+
+        expect(screen.queryByTestId('timeline-cell-simple-skill')).toBeNull();
+        expect(screen.queryByTestId('timeline-cell-simple-skill-none')).toBeNull();
+    });
 });

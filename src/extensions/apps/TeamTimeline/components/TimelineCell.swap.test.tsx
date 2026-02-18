@@ -100,6 +100,80 @@ describe('TimelineCell swap ui', () => {
         expect(trigger?.getAttribute('data-always-visible')).toBe('true');
     });
 
+    it('keeps swap button always visible in simple mode', () => {
+        const { container } = render(
+            <TimelineCell
+                result={{
+                    slotId: 'slot-1',
+                    pokemonId: 1,
+                    teamIndex: 0,
+                    durationMinutes: 60,
+                    isSleeping: false,
+                    helpCount: 0,
+                    skillTriggerCount: 0,
+                    berryCount: 0,
+                    ingredients: [],
+                    skillIngredients: [],
+                    energyStart: 50,
+                    energyEnd: 50,
+                    mealRecovery: 0,
+                    skillRecovery: 0,
+                    wakeRecovery: 0,
+                    energyDecay: 0,
+                    skillOverflowCount: 0,
+                    overflowIngredients: [],
+                    selfSkillRecovery: 0,
+                    directSkillEP: 0,
+                    moonlightGivenRecovery: 0,
+                    moonlightReceivedRecovery: 0,
+                    energizingCheerGivenRecovery: 0,
+                    energizingCheerReceivedRecovery: 0,
+                    energizingCheerEvents: [],
+                    nuzzleTriggeredSkillEvents: [],
+                    proxySkillEvents: [],
+                    presentCandyCount: 0,
+                    berryJuiceCount: 0,
+                    supportSkillBerryCount: 0,
+                    supportSkillBerryEP: 0,
+                    supportHelpEvents: [],
+                    stockpileStoreCount: 0,
+                    stockpileCountAtStore: 0,
+                    stockpileSpitCount: 0,
+                    badDreamsHitCount: 0,
+                    badDreamsTotalDamageGiven: 0,
+                    badDreamsDamageTaken: 0,
+                }}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                displayMode="simple"
+                onSwapClick={vi.fn()}
+            />
+        );
+
+        const trigger = container.querySelector('.swap-trigger') as HTMLElement | null;
+        expect(trigger).not.toBeNull();
+        expect(trigger?.getAttribute('data-always-visible')).toBe('true');
+    });
+
+    it('uses compact layout and always-visible swap button for empty cell in simple mode', () => {
+        const { container } = render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                displayMode="simple"
+                onSwapClick={vi.fn()}
+            />
+        );
+
+        const trigger = container.querySelector('.swap-trigger') as HTMLElement | null;
+        expect(trigger).not.toBeNull();
+        expect(trigger?.getAttribute('data-always-visible')).toBe('true');
+        expect(container.querySelector('[data-compact-layout="true"]')).not.toBeNull();
+    });
+
     it('shows swap info box even in compact empty mode', () => {
         const onSwapClick = vi.fn();
         const { container } = render(
@@ -119,6 +193,24 @@ describe('TimelineCell swap ui', () => {
         expect(container.querySelector('.swap-info')).not.toBeNull();
         fireEvent.click(screen.getByText('ピカチュウ'));
         expect(onSwapClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides leading swap icon and marks compact label in narrow viewport mode', () => {
+        const { container } = render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                hasSwap
+                swappedPokemonName="ラグラージ"
+                fitToViewport
+                onSwapClick={vi.fn()}
+            />
+        );
+
+        expect(container.querySelector('.swap-info .swap-icon')).toBeNull();
+        expect(screen.getByText('ラグラージ').getAttribute('data-compact-swap-name')).toBe('true');
     });
 
     it('hides all swap UI and keeps compact layout when swap UI is disabled', () => {

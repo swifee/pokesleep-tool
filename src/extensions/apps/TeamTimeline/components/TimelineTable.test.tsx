@@ -27,6 +27,7 @@ vi.mock('./TimelineRow', () => ({
         onSwapRemoveClick,
         compactEmptyCells,
         alwaysShowSwapButton,
+        displayMode,
         isFirstTimelineSlot,
         fitToViewport,
     }: {
@@ -49,6 +50,7 @@ vi.mock('./TimelineRow', () => ({
         onSwapRemoveClick?: (slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => void;
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
+        displayMode?: 'detailed' | 'simple';
         isFirstTimelineSlot?: boolean;
         fitToViewport?: boolean;
     }) => (
@@ -58,6 +60,7 @@ vi.mock('./TimelineRow', () => ({
                 data-testid={`swap-${dayIndex}-${originalSlotId}`}
                 data-compact-empty={compactEmptyCells ? 'true' : 'false'}
                 data-always-show-swap={alwaysShowSwapButton ? 'true' : 'false'}
+                data-display-mode={displayMode ?? 'detailed'}
                 data-first-timeline-slot={isFirstTimelineSlot ? 'true' : 'false'}
                 data-fit-to-viewport={fitToViewport ? 'true' : 'false'}
                 onClick={() => onSwapClick?.(originalSlotId, 0, dayIndex)}
@@ -264,6 +267,22 @@ describe('TimelineTable', () => {
         expect(text.indexOf('icon-213-30')).toBeLessThan(text.indexOf('ツボツボ'));
     });
 
+    it('shows plus placeholder in empty header slots', () => {
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={1}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                onHeaderSlotClick={vi.fn()}
+            />
+        );
+
+        expect(screen.getAllByTestId('timeline-header-empty-plus-icon').length).toBeGreaterThan(0);
+    });
+
     it('passes remove callback to TimelineRow', () => {
         const onSwapRemoveClick = vi.fn();
 
@@ -317,7 +336,28 @@ describe('TimelineTable', () => {
         );
 
         expect(screen.getByTestId('timeline-table-container').getAttribute('data-fit-to-viewport')).toBe('true');
+        expect(screen.getByTestId('timeline-table-container').getAttribute('style')).toContain('--timeline-time-cell-width: 40px');
         expect(screen.getByTestId('swap-0-sleep').getAttribute('data-fit-to-viewport')).toBe('true');
+    });
+
+    it('passes simple display mode to rows and fits to viewport', () => {
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={1}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                box={new PokemonBox([])}
+                displayMode="simple"
+            />
+        );
+
+        const firstRow = screen.getByTestId('swap-0-sleep');
+        expect(firstRow.getAttribute('data-display-mode')).toBe('simple');
+        expect(firstRow.getAttribute('data-fit-to-viewport')).toBe('true');
+        expect(screen.getByTestId('timeline-table-container').getAttribute('data-fit-to-viewport')).toBe('true');
+        expect(screen.getByTestId('timeline-table-container').getAttribute('style')).toContain('--timeline-time-cell-width: 40px');
     });
 
     it('marks only the very first row as first timeline slot', () => {

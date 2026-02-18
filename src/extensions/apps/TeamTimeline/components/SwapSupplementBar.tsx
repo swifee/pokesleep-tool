@@ -2,18 +2,28 @@ import React from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
+import { SwapSupplementSequence } from '../utils/SwapSupplementUtils';
 
 export interface SwapSupplementBarProps {
   swapCount: number;
-  swappedPokemonIdForms: number[];
+  swapSequences: SwapSupplementSequence[];
   onClear: () => void;
 }
 
-const CONTROL_BLOCK_WIDTH = 352;
+const CONTROL_BLOCK_MAX_WIDTH = '540px';
+
+function formatMetric(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function formatPercentMetric(value: number): string {
+  return String(Math.round(value));
+}
 
 const SwapSupplementBar = React.memo(({
   swapCount,
-  swappedPokemonIdForms,
+  swapSequences,
   onClear,
 }: SwapSupplementBarProps) => {
   const { t } = useTranslation();
@@ -30,7 +40,8 @@ const SwapSupplementBar = React.memo(({
         flexDirection: 'column',
         alignItems: 'stretch',
         gap: '6px',
-        width: `${CONTROL_BLOCK_WIDTH}px`,
+        width: 'min(540px, 100%)',
+        maxWidth: CONTROL_BLOCK_MAX_WIDTH,
         minHeight: '30px',
         px: '8px',
         py: '5px',
@@ -79,33 +90,100 @@ const SwapSupplementBar = React.memo(({
           {t('TeamTimeline.reset', 'リセット')}
         </Button>
       </Box>
-      {swappedPokemonIdForms.length > 0 && (
+      {swapSequences.length > 0 && (
         <Box
           sx={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: '4px',
-            alignItems: 'center',
-            minHeight: '18px',
+            gap: '3px 9px',
+            alignItems: 'flex-start',
+            minHeight: '22px',
           }}
         >
-          {swappedPokemonIdForms.map((idForm) => (
+          {swapSequences.map((sequence) => (
             <Box
-              key={idForm}
-              data-testid="swap-supplement-icon"
+              key={`swap-sequence-${sequence.teamSlotIndex}`}
+              data-testid="swap-supplement-sequence"
               sx={{
-                width: '22px',
-                height: '22px',
-                borderRadius: '4px',
-                overflow: 'hidden',
-                border: '1px solid #d0e0ff',
-                backgroundColor: '#fff',
                 display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                flexWrap: 'nowrap',
+                alignItems: 'flex-start',
+                gap: '0px',
               }}
             >
-              <PokemonIcon idForm={idForm} size={20} />
+              {sequence.entries.map((entry, index) => (
+                <React.Fragment key={`${sequence.teamSlotIndex}-${entry.pokemonId}-${index}`}>
+                  <Box
+                    data-testid="swap-supplement-icon"
+                    sx={{
+                      width: '28px',
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.5px',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '4px',
+                        overflow: 'hidden',
+                        border: '1px solid #d0e0ff',
+                        backgroundColor: '#fff',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <PokemonIcon idForm={entry.pokemonIdForm} size={20} />
+                    </Box>
+                    <Typography
+                      data-testid="swap-supplement-hours"
+                      sx={{
+                        fontSize: '8px',
+                        lineHeight: '10px',
+                        letterSpacing: '-0.32px',
+                        color: '#000',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {`${formatMetric(entry.activeMinutes / 60)}H`}
+                    </Typography>
+                    <Typography
+                      data-testid="swap-supplement-percent"
+                      sx={{
+                        fontSize: '8px',
+                        lineHeight: '10px',
+                        letterSpacing: '-0.32px',
+                        color: '#000',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {`(${formatPercentMetric(entry.activeRatioPercent)}%)`}
+                    </Typography>
+                  </Box>
+                  {index < sequence.entries.length - 1 && (
+                    <Typography
+                      data-testid="swap-supplement-arrow"
+                      sx={{
+                        mt: 0,
+                        mx: '-3px',
+                        minWidth: '6px',
+                        height: '22px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '7px',
+                        lineHeight: '7px',
+                        color: '#9e9e9e',
+                      }}
+                    >
+                      {'▶'}
+                    </Typography>
+                  )}
+                </React.Fragment>
+              ))}
             </Box>
           ))}
         </Box>

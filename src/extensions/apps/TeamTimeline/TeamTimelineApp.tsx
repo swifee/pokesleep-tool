@@ -1,5 +1,16 @@
 import React, { useReducer, useEffect, useCallback, useState, useRef, useMemo } from 'react';
-import { Tabs, Tab, Box, Typography, Slider, Fade, useMediaQuery, useTheme } from '@mui/material';
+import {
+    Tabs,
+    Tab,
+    Box,
+    Typography,
+    Slider,
+    Fade,
+    useMediaQuery,
+    useTheme,
+    FormControlLabel,
+    Checkbox,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PokemonBox, { PokemonBoxItem } from '../../../util/PokemonBox';
 import {
@@ -62,6 +73,7 @@ import {
     EnergySkillTeamContributionResult,
     EnergySkillContributionTarget,
 } from './types/AdditionalAnalysisTypes';
+import type { TimelineDisplayMode } from './components/TimelineCell';
 import {
     calculateDeltaPercent,
     buildEnergySkillContributionTargets,
@@ -84,6 +96,7 @@ import {
     normalizeLoadedSwapsWithBox,
 } from './utils/SwapPersistenceUtils';
 import { isSwapReassignment } from './utils/SwapReassignmentUtils';
+import { buildSwapSupplementSequences } from './utils/SwapSupplementUtils';
 import {
     loadTimelineBonusSettingsFromIvStorage,
     saveTimelineBonusSettingsToIvStorage,
@@ -249,6 +262,12 @@ function createSwapSignature(swaps: readonly PokemonSwap[]): string {
         .join('|');
 }
 
+function createTeamSignature(team: readonly (PokemonBoxItem | null)[]): string {
+    return team
+        .map((member, index) => `${index}:${member?.id ?? 'null'}`)
+        .join('|');
+}
+
 /**
  * チームタイムラインアプリのメインコンポーネント
  */
@@ -267,6 +286,7 @@ export default function TeamTimelineApp() {
     const [pendingSwapRemoval, setPendingSwapRemoval] = useState<PendingSwapRemoval | null>(null);
     const [removeFutureRepeatChecked, setRemoveFutureRepeatChecked] = useState(false);
     const [analysisQuickModeEnabled, setAnalysisQuickModeEnabled] = useState(true);
+    const [timelineDisplayMode, setTimelineDisplayMode] = useState<TimelineDisplayMode>('detailed');
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [baseAverageMetricsCache, setBaseAverageMetricsCache]
         = useState<AnalysisBaseMetricsCache<AnalysisAverageMetrics> | null>(null);
@@ -467,6 +487,25 @@ export default function TeamTimelineApp() {
         }
         setShowResimulationNotice(true);
     }, [state.swaps, state.simulationResult, isInitialized]);
+
+    const previousTeamSignatureRef = useRef<string | null>(null);
+    useEffect(() => {
+        const signature = createTeamSignature(state.team);
+        if (!isInitialized) {
+            previousTeamSignatureRef.current = signature;
+            return;
+        }
+
+        const previousSignature = previousTeamSignatureRef.current;
+        previousTeamSignatureRef.current = signature;
+        if (previousSignature === null || previousSignature === signature) {
+            return;
+        }
+        if (state.simulationResult === null) {
+            return;
+        }
+        setShowResimulationNotice(true);
+    }, [state.team, state.simulationResult, isInitialized]);
 
     useEffect(() => {
         if (state.simulationConfig.simulationDays < 2) {
@@ -779,6 +818,12 @@ export default function TeamTimelineApp() {
     const handleSummaryValueModeChange = useCallback((mode: SummaryValueMode) => {
         setSummaryValueMode(mode);
     }, []);
+    const handleTimelineDisplayModeChange = useCallback(
+        (event: React.ChangeEvent<HTMLInputElement>) => {
+            setTimelineDisplayMode(event.target.checked ? 'simple' : 'detailed');
+        },
+        []
+    );
 
     // タブ切り替えハンドラー
     const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings' | 'cooking') => {
@@ -955,23 +1000,6 @@ export default function TeamTimelineApp() {
         state.swapTargetDayIndex,
     ]);
 
-    const swappedPokemonIdForms = useMemo(() => {
-        if (!boxRef.current) {
-            return [];
-        }
-        const uniqueIdForms = new Set<number>();
-        state.swaps.forEach((swap) => {
-            if (swap.newPokemonId === SWAP_NONE_POKEMON_ID) {
-                return;
-            }
-            const pokemon = boxRef.current!.items.find((item) => item.id === swap.newPokemonId);
-            if (!pokemon) {
-                return;
-            }
-            uniqueIdForms.add(pokemon.iv.idForm);
-        });
-        return [...uniqueIdForms];
-    }, [state.swaps]);
     const hasConfiguredSwap = state.swaps.length > 0;
 
     const appearingTimelineMembers = useMemo(() => {
@@ -996,6 +1024,20 @@ export default function TeamTimelineApp() {
             state.swaps,
         ]
     );
+    const swapSupplementSequences = useMemo(() => (
+        buildSwapSupplementSequences({
+            team: state.team,
+            swaps: state.swaps,
+            timeSlots: state.timeSlots,
+            durationSummary: timelineDurationSummary,
+            box: boxRef.current ?? undefined,
+        })
+    ), [
+        state.team,
+        state.swaps,
+        state.timeSlots,
+        timelineDurationSummary,
+    ]);
 
     const baseSortedSeeds = useMemo(() => {
         if (state.multiTrialResults && state.multiTrialResults.length > 0) {
@@ -2139,7 +2181,7 @@ export default function TeamTimelineApp() {
 
                     <SwapSupplementBar
                         swapCount={state.swaps.length}
-                        swappedPokemonIdForms={swappedPokemonIdForms}
+                        swapSequences={swapSupplementSequences}
                         onClear={handleClearSwaps}
                     />
 
@@ -2331,6 +2373,28 @@ export default function TeamTimelineApp() {
                                             onSelect={handleSliderChange}
                                         />
                                     )}
+                                    <FormControlLabel
+                                        sx={{ m: 0, mb: '4px' }}
+                                        control={(
+                                            <Checkbox
+                                                checked={timelineDisplayMode === 'simple'}
+                                                onChange={handleTimelineDisplayModeChange}
+                                                size="small"
+                                                sx={{ p: 0, mr: '4px', color: '#9e9e9e', '&.Mui-checked': { color: '#62d540' } }}
+                                            />
+                                        )}
+                                        label={(
+                                            <Typography
+                                                sx={{
+                                                    fontSize: '11px',
+                                                    lineHeight: '13px',
+                                                    letterSpacing: '-0.4px',
+                                                }}
+                                            >
+                                                {t('TeamTimeline.timeline simple view', 'シンプル表示')}
+                                            </Typography>
+                                        )}
+                                    />
                                     <Box
                                         sx={{
                                             width: '100%',
@@ -2350,8 +2414,10 @@ export default function TeamTimelineApp() {
                                             onSwapClick={handleSwapClick}
                                             onSwapSeriesMove={handleSwapSeriesMove}
                                             onSwapRemoveClick={handleSwapRemoveRequest}
+                                            onHeaderSlotClick={handleSlotClick}
                                             onOpenTimeSlotSettings={handleOpenTimeSlotSettings}
                                             showSummaryRows={false}
+                                            displayMode={timelineDisplayMode}
                                         />
                                     </Box>
                                     <TeamSummaryRow

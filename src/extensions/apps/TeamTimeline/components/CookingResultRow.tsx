@@ -7,13 +7,15 @@ import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
 import { formatIngredientCount, sortIngredientsByCountDesc } from '../utils/IngredientDisplayUtils';
 import TeamTimelineIcon from './TimelineIcons';
 import EpValue from './EpValue';
+import type { TimelineDisplayMode } from './TimelineCell';
 
 interface CookingResultRowProps {
     event: CookingEventResult;
     teamSize: number;
+    displayMode?: TimelineDisplayMode;
 }
 
-const CookingResultRow = React.memo(({ event, teamSize }: CookingResultRowProps) => {
+const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed' }: CookingResultRowProps) => {
     const { t } = useTranslation();
     const [anchorElement, setAnchorElement] = React.useState<HTMLButtonElement | null>(null);
     const [helpAnchorElement, setHelpAnchorElement] = React.useState<HTMLButtonElement | null>(null);
@@ -164,28 +166,30 @@ const CookingResultRow = React.memo(({ event, teamSize }: CookingResultRowProps)
                     <RecipeName>{localizedRecipeName}</RecipeName>
                     <CookingEP><EpValue value={Math.round(event.cookingEP).toLocaleString()} /></CookingEP>
                 </CookingInfo>
-                <IngredientInfo>
-                    {usedIngredients.map((ing) => (
-                        <IngredientBadge key={ing.name}>
-                            <IngredientIcon name={ing.name} />
-                            {formatIngredientCount(ing.count)}
-                        </IngredientBadge>
-                    ))}
-                    {extraIngredients.length > 0 && (
-                        <ExtraIngredientsGroup>
-                            <span>+</span>
-                            <span>(</span>
-                            {extraIngredients.map((ing) => (
-                                <IngredientBadge key={`extra-${ing.name}`}>
-                                    <IngredientIcon name={ing.name} />
-                                    {formatIngredientCount(ing.count)}
-                                </IngredientBadge>
-                            ))}
-                            <span>)</span>
-                        </ExtraIngredientsGroup>
-                    )}
-                    <PotInfo>{'\u934B\u7A7A\u304D'}{event.remainingPotCapacity}</PotInfo>
-                </IngredientInfo>
+                {displayMode !== 'simple' && (
+                    <IngredientInfo>
+                        {usedIngredients.map((ing) => (
+                            <IngredientBadge key={ing.name}>
+                                <IngredientIcon name={ing.name} />
+                                {formatIngredientCount(ing.count)}
+                            </IngredientBadge>
+                        ))}
+                        {extraIngredients.length > 0 && (
+                            <ExtraIngredientsGroup>
+                                <span>+</span>
+                                <span>(</span>
+                                {extraIngredients.map((ing) => (
+                                    <IngredientBadge key={`extra-${ing.name}`}>
+                                        <IngredientIcon name={ing.name} />
+                                        {formatIngredientCount(ing.count)}
+                                    </IngredientBadge>
+                                ))}
+                                <span>)</span>
+                            </ExtraIngredientsGroup>
+                        )}
+                        <PotInfo>{'\u934B\u7A7A\u304D'}{event.remainingPotCapacity}</PotInfo>
+                    </IngredientInfo>
+                )}
             </ContentCell>
         </RowContainer>
     );

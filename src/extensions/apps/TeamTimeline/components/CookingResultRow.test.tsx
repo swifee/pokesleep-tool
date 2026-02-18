@@ -147,4 +147,35 @@ describe('CookingResultRow', () => {
         expect(screen.getByText('mushroom')).toBeDefined();
         expect(screen.getByText('apple')).toBeDefined();
     });
+
+    it('hides used ingredients and remaining pot info in simple mode', () => {
+        const event: CookingEventResult = {
+            ...EVENT,
+            ingredientsUsed: [
+                {
+                    name: 'corn',
+                    count: 25,
+                    pokemonAttribution: new Map(),
+                    fromInitial: 0,
+                },
+            ],
+            extraIngredientsUsed: [
+                {
+                    name: 'apple',
+                    count: 10,
+                    pokemonAttribution: new Map(),
+                    fromInitial: 0,
+                },
+            ],
+            remainingPotCapacity: 3,
+        };
+
+        render(<CookingResultRow event={event} teamSize={5} displayMode="simple" />);
+
+        expect(screen.getByText('translated:TeamTimeline.recipe specialAppleCurry')).toBeDefined();
+        expect(screen.queryByText('corn')).toBeNull();
+        expect(screen.queryByText('apple')).toBeNull();
+        expect(screen.queryByText('+')).toBeNull();
+        expect(screen.queryByText(/\u934B\u7A7A\u304D/)).toBeNull();
+    });
 });

@@ -3,13 +3,18 @@ import { styled } from '@mui/system';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CloseIcon from '@mui/icons-material/Close';
+import AddIcon from '@mui/icons-material/Add';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import { TimeSlot, SimulationResult, PokemonSwap } from '../types/TimeSlotTypes';
 import TimelineRow from './TimelineRow';
-import type { SwapCellCoordinate, SwapLongPressStartDetail } from './TimelineCell';
+import type {
+  SwapCellCoordinate,
+  SwapLongPressStartDetail,
+  TimelineDisplayMode,
+} from './TimelineCell';
 import CookingResultRow from './CookingResultRow';
 import DailySummaryRow from './DailySummaryRow';
 import TeamSummaryRow from './TeamSummaryRow';
@@ -37,6 +42,7 @@ interface TimelineTableProps {
   showSummaryRows?: boolean;
   compactEmptyCells?: boolean;
   alwaysShowSwapButton?: boolean;
+  displayMode?: TimelineDisplayMode;
 }
 
 interface SwapDragPreview {
@@ -64,6 +70,7 @@ const TimelineTable = React.memo(({
   showSummaryRows = true,
   compactEmptyCells = false,
   alwaysShowSwapButton = false,
+  displayMode = 'detailed',
 }: TimelineTableProps) => {
   const { t } = useTranslation();
   const [swapDragSource, setSwapDragSource] = useState<SwapCellCoordinate | null>(null);
@@ -78,10 +85,10 @@ const TimelineTable = React.memo(({
   const swapDragGhostRef = useRef<HTMLDivElement | null>(null);
   const dragGhostRafRef = useRef<number | null>(null);
   const dragLiftDistancePx = 10;
-  const fitToViewport = compactEmptyCells;
+  const fitToViewport = compactEmptyCells || displayMode === 'simple';
   const tableSizingStyle = fitToViewport
     ? ({
-      '--timeline-time-cell-width': '28px',
+      '--timeline-time-cell-width': '40px',
       '--timeline-team-size': String(Math.max(team.length, 1)),
     } as React.CSSProperties)
     : undefined;
@@ -356,7 +363,15 @@ const TimelineTable = React.memo(({
 
   const renderHeaderSlotContent = (pokemon: PokemonBoxItem | null): React.ReactNode => {
     if (!pokemon) {
-      return <EmptySlot>-</EmptySlot>;
+      return (
+        <EmptySlot>
+          <span className="lv-placeholder">&nbsp;</span>
+          <span className="icon-placeholder">
+            <AddIcon data-testid="timeline-header-empty-plus-icon" sx={{ fontSize: 16, color: '#fff' }} />
+          </span>
+          <span className="name-placeholder">&nbsp;</span>
+        </EmptySlot>
+      );
     }
 
     return (
@@ -446,6 +461,7 @@ const TimelineTable = React.memo(({
                 onSwapLongPressStart={handleSwapLongPressStart}
                 swapDragSource={swapDragSource}
                 swapDragTarget={swapDragTarget}
+                displayMode={displayMode}
               />
               {result.cookingResult && expandedSlot.slot.hasMeal && (() => {
                   const cookingEvent = result.cookingResult!.events.find(
@@ -458,6 +474,7 @@ const TimelineTable = React.memo(({
                       <CookingResultRow
                           event={cookingEvent}
                           teamSize={team.length}
+                          displayMode={displayMode}
                       />
                   );
               })()}
@@ -535,8 +552,8 @@ const HeaderRow = styled('div')<{ $fitToViewport: boolean }>(({ $fitToViewport }
 }));
 
 const CornerHeaderCell = styled('div')<{ $fitToViewport: boolean }>(({ $fitToViewport }) => ({
-  width: $fitToViewport ? 'var(--timeline-time-cell-width, 28px)' : '40px',
-  minWidth: $fitToViewport ? 'var(--timeline-time-cell-width, 28px)' : '40px',
+  width: $fitToViewport ? 'var(--timeline-time-cell-width, 40px)' : '40px',
+  minWidth: $fitToViewport ? 'var(--timeline-time-cell-width, 40px)' : '40px',
   flexShrink: 0,
   boxSizing: 'border-box',
   padding: '3px',
@@ -569,13 +586,13 @@ const CornerHeaderButton = styled('button')({
 
 const PokemonHeaderCell = styled('div')<{ $fitToViewport: boolean }>(({ $fitToViewport }) => ({
   width: $fitToViewport
-    ? 'calc((100% - var(--timeline-time-cell-width, 28px)) / var(--timeline-team-size, 5))'
+    ? 'calc((100% - var(--timeline-time-cell-width, 40px)) / var(--timeline-team-size, 5))'
     : '100px',
   minWidth: $fitToViewport ? '0' : '100px',
   flexShrink: $fitToViewport ? 1 : 0,
   flexGrow: $fitToViewport ? 1 : 0,
   flexBasis: $fitToViewport
-    ? 'calc((100% - var(--timeline-time-cell-width, 28px)) / var(--timeline-team-size, 5))'
+    ? 'calc((100% - var(--timeline-time-cell-width, 40px)) / var(--timeline-team-size, 5))'
     : 'auto',
   boxSizing: 'border-box',
   borderRight: '0.5px solid #e2e2e2',
@@ -647,8 +664,27 @@ const PokemonNameLine = styled('div')({
 });
 
 const EmptySlot = styled('div')({
-  fontSize: '12px',
-  color: '#999',
+  width: '100%',
+  height: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '1px',
+  '& .icon-placeholder': {
+    width: '32px',
+    height: '32px',
+    borderRadius: '6px',
+    backgroundColor: '#d9d9d9',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  '& .lv-placeholder, & .name-placeholder': {
+    display: 'block',
+    width: '100%',
+    height: '13px',
+  },
 });
 
 const DataSection = styled('div')({

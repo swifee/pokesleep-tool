@@ -169,7 +169,6 @@ export function teamTimelineReducer(
             newTeam[action.index] = action.item;
             return {
                 ...state,
-                ...getResetSimulationFields(),
                 team: newTeam,
                 selectedSlotIndex: null,
                 boxSelectDialogOpen: false,
@@ -180,7 +179,6 @@ export function teamTimelineReducer(
             newTeam[action.index] = null;
             return {
                 ...state,
-                ...getResetSimulationFields(),
                 team: newTeam,
             };
         }
