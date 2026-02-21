@@ -28,6 +28,7 @@ interface TimelineBonusSettingsPanelProps {
     syncWithIvParameter: boolean;
     onSyncChange: (enabled: boolean) => void;
     onSettingsChange: (settings: TimelineBonusSettings) => void;
+    cookingSimEnabled?: boolean;
 }
 
 const RECIPE_BONUS_OPTIONS = [0, 19, 20, 21, 25, 35, 48, 61, 78];
@@ -64,6 +65,7 @@ const TimelineBonusSettingsPanel = React.memo(({
     syncWithIvParameter,
     onSyncChange,
     onSettingsChange,
+    cookingSimEnabled,
 }: TimelineBonusSettingsPanelProps) => {
     const { t } = useTranslation();
     const [eventConfigOpen, setEventConfigOpen] = React.useState(false);
@@ -175,6 +177,12 @@ const TimelineBonusSettingsPanel = React.memo(({
                     <Typography variant="body2">{parameter.recipeLevel}</Typography>
                 </SliderWrap>
             </SectionRow>
+
+            {cookingSimEnabled && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
+                    {t('TeamTimeline.cooking recipe bonus note', '※ 料理シミュレーションOFF時にのみ適用されます')}
+                </Typography>
+            )}
 
             <EventConfigDialog
                 open={eventConfigOpen}

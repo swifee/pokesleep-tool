@@ -1,4 +1,5 @@
 import { IngredientName } from '../../../../data/pokemons';
+import { CookingSimulationResult } from './CookingTypes';
 
 /**
  * 睡眠状態のラベル
@@ -349,6 +350,8 @@ export interface DailySummary {
     totalTastyChanceIncreasePercent: number;
     /** Dream Shard Magnet S系の合計ゆめのかけら獲得量 */
     totalDreamShardCount: number;
+    /** 料理EP（料理シミュレーションON時のみ） */
+    cookingEP?: number;
 }
 
 /**
@@ -373,6 +376,8 @@ export interface TeamSummary {
     totalTastyChanceIncreasePercent: number;
     /** Dream Shard Magnet S系のチーム合計ゆめのかけら獲得量 */
     totalDreamShardCount: number;
+    /** 料理EP合計（料理シミュレーションON時のみ） */
+    totalCookingEP?: number;
 }
 
 /**
@@ -385,6 +390,8 @@ export interface SimulationResult {
     dailySummaries: DailySummary[];
     /** チーム合計 */
     teamSummary: TeamSummary;
+    /** 料理シミュレーション結果（料理シミュレーションON時のみ） */
+    cookingResult?: CookingSimulationResult;
 }
 
 /**
@@ -421,8 +428,12 @@ export interface PokemonSwap {
     teamSlotIndex: number;
     /** 入れ替え先のポケモンID（PokemonBoxItemと同じ形式で保存） */
     newPokemonId: number;
+    /** 入れ替え先ポケモンのシリアライズ文字列（ID再採番対策） */
+    newPokemonSerialized?: string;
     /** 初回登場時の初期げんき（デフォルト100） */
     initialEnergy: number;
+    /** Whether this swap is auto-generated from a repeat pattern. */
+    isRepeatGenerated?: boolean;
 }
 
 /** Special Pokemon ID representing "none" (remove Pokemon from slot) */

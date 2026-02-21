@@ -14,7 +14,7 @@ import {
     loadSyncWithIvParameterFromStorage,
     STORAGE_KEY_SYNC_IV_PARAMETER,
 } from './TeamTimelineState';
-import { SimulationResult } from './types/TimeSlotTypes';
+import { SimulationResult, PokemonSwap } from './types/TimeSlotTypes';
 import type { PokemonBoxItem } from '../../../util/PokemonBox';
 
 function createSimulationResult(grandTotalEP: number): SimulationResult {
@@ -46,6 +46,10 @@ function createStateWithSimulationData() {
         multiTrialSelectedIndex: 0,
         multiTrialAverageDailySummaries: [],
         multiTrialAverageTeamSummary: simulationResult.teamSummary,
+        multiTrialAverageCookingSummary: {
+            recipes: [],
+            leftoverIngredients: [],
+        },
     };
 }
 
@@ -59,6 +63,10 @@ describe('teamTimelineReducer', () => {
         expect(state.seedMode).toBe('random');
         expect(state.multiTrialCount).toBe(1000);
         expect(state.syncWithIvParameter).toBe(true);
+        expect(state.cookingSettings.basePotCapacity).toBe(81);
+        expect(state.cookingSettings.recipeLevels).toEqual({});
+        expect(state.cookingSettings.disabledRecipes).toEqual({});
+        expect(state.cookingSettings.disabledExtraIngredients).toEqual({});
         expect(state.timeSlots).toEqual([
             { id: 'slot-1', time: '07:00', sleepState: 'wake', hasMeal: true },
             { id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: true },
@@ -81,25 +89,34 @@ describe('teamTimelineReducer', () => {
         expect(next.simulationResult).toEqual(previewResult);
     });
 
-    it('clears all simulation outputs when selecting team member', () => {
+    it('keeps simulation outputs when selecting team member', () => {
         const state = createStateWithSimulationData();
+        const selectedPokemon = {
+            id: 999,
+            iv: { idForm: 25, level: 60 },
+            filledNickname: () => 'ピカチュウ',
+        } as unknown as PokemonBoxItem;
 
         const next = teamTimelineReducer(state, {
             type: 'selectPokemon',
             index: 0,
-            item: {} as PokemonBoxItem,
+            item: selectedPokemon,
         });
 
-        expect(next.simulationLoading).toBe(false);
-        expect(next.simulationResult).toBeNull();
-        expect(next.simulationError).toBeNull();
-        expect(next.multiTrialResults).toBeNull();
-        expect(next.multiTrialSelectedIndex).toBeNull();
-        expect(next.multiTrialAverageDailySummaries).toBeNull();
-        expect(next.multiTrialAverageTeamSummary).toBeNull();
+        expect(next.team[0]).toBe(selectedPokemon);
+        expect(next.boxSelectDialogOpen).toBe(false);
+        expect(next.selectedSlotIndex).toBeNull();
+        expect(next.simulationLoading).toBe(state.simulationLoading);
+        expect(next.simulationResult).toBe(state.simulationResult);
+        expect(next.simulationError).toBe(state.simulationError);
+        expect(next.multiTrialResults).toBe(state.multiTrialResults);
+        expect(next.multiTrialSelectedIndex).toBe(state.multiTrialSelectedIndex);
+        expect(next.multiTrialAverageDailySummaries).toBe(state.multiTrialAverageDailySummaries);
+        expect(next.multiTrialAverageTeamSummary).toBe(state.multiTrialAverageTeamSummary);
+        expect(next.multiTrialAverageCookingSummary).toBe(state.multiTrialAverageCookingSummary);
     });
 
-    it('clears all simulation outputs when removing team member', () => {
+    it('keeps simulation outputs when removing team member', () => {
         const state = createStateWithSimulationData();
 
         const next = teamTimelineReducer(state, {
@@ -107,13 +124,15 @@ describe('teamTimelineReducer', () => {
             index: 0,
         });
 
-        expect(next.simulationLoading).toBe(false);
-        expect(next.simulationResult).toBeNull();
-        expect(next.simulationError).toBeNull();
-        expect(next.multiTrialResults).toBeNull();
-        expect(next.multiTrialSelectedIndex).toBeNull();
-        expect(next.multiTrialAverageDailySummaries).toBeNull();
-        expect(next.multiTrialAverageTeamSummary).toBeNull();
+        expect(next.team[0]).toBeNull();
+        expect(next.simulationLoading).toBe(state.simulationLoading);
+        expect(next.simulationResult).toBe(state.simulationResult);
+        expect(next.simulationError).toBe(state.simulationError);
+        expect(next.multiTrialResults).toBe(state.multiTrialResults);
+        expect(next.multiTrialSelectedIndex).toBe(state.multiTrialSelectedIndex);
+        expect(next.multiTrialAverageDailySummaries).toBe(state.multiTrialAverageDailySummaries);
+        expect(next.multiTrialAverageTeamSummary).toBe(state.multiTrialAverageTeamSummary);
+        expect(next.multiTrialAverageCookingSummary).toBe(state.multiTrialAverageCookingSummary);
     });
 
     it('keeps simulation outputs when only swaps are changed', () => {
@@ -136,6 +155,223 @@ describe('teamTimelineReducer', () => {
         expect(next.simulationResult).toBe(state.simulationResult);
         expect(next.multiTrialResults).toBe(state.multiTrialResults);
         expect(next.multiTrialAverageTeamSummary).toBe(state.multiTrialAverageTeamSummary);
+        expect(next.multiTrialAverageCookingSummary).toBe(state.multiTrialAverageCookingSummary);
+    });
+});
+
+describe('removeSwap behavior', () => {
+    it('removeSwap without repeat option removes only the targeted day', () => {
+        const state = {
+            ...createInitialState(),
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 1, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'removeSwap',
+            slotId: 'slot-2',
+            teamIndex: 0,
+            dayIndex: 0,
+        });
+
+        expect(next.swaps).toHaveLength(1);
+        expect(next.swaps[0].dayIndex).toBe(1);
+    });
+
+    it('removeSwap with repeat option removes current and future same-pokemon swaps', () => {
+        const state = {
+            ...createInitialState(),
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 1, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 2, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 3, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 888, initialEnergy: 80 },
+                { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'removeSwap',
+            slotId: 'slot-2',
+            teamIndex: 0,
+            dayIndex: 0,
+            removeFutureRepeats: true,
+            pokemonId: 999,
+        });
+
+        expect(next.swaps).toHaveLength(2);
+        expect(next.swaps).toEqual([
+            { dayIndex: 3, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 888, initialEnergy: 80 },
+            { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+        ]);
+    });
+});
+
+describe('moveSwapSeries behavior', () => {
+    it('moves a single swap to another cell', () => {
+        const state = {
+            ...createInitialState(),
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 0, slotId: 'slot-3', teamSlotIndex: 4, newPokemonId: 777, initialEnergy: 70 },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-4',
+            toTeamIndex: 1,
+            toDayIndex: 0,
+        });
+
+        expect(next.swaps).toEqual([
+            { dayIndex: 0, slotId: 'slot-3', teamSlotIndex: 4, newPokemonId: 777, initialEnergy: 70 },
+            { dayIndex: 0, slotId: 'slot-4', teamSlotIndex: 1, newPokemonId: 999, initialEnergy: 80 },
+        ]);
+    });
+
+    it('moves repeat series together and keeps repeat flags', () => {
+        const state = {
+            ...createInitialState(),
+            simulationConfig: {
+                ...createInitialState().simulationConfig,
+                simulationDays: 4,
+            },
+            swaps: [
+                {
+                    dayIndex: 0,
+                    slotId: 'slot-2',
+                    teamSlotIndex: 0,
+                    newPokemonId: 999,
+                    initialEnergy: 80,
+                },
+                {
+                    dayIndex: 1,
+                    slotId: 'slot-2',
+                    teamSlotIndex: 0,
+                    newPokemonId: 999,
+                    initialEnergy: 80,
+                    isRepeatGenerated: true,
+                },
+                {
+                    dayIndex: 2,
+                    slotId: 'slot-2',
+                    teamSlotIndex: 0,
+                    newPokemonId: 999,
+                    initialEnergy: 80,
+                    isRepeatGenerated: true,
+                },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-5',
+            toTeamIndex: 2,
+            toDayIndex: 1,
+        });
+
+        expect(next.swaps).toEqual([
+            {
+                dayIndex: 1,
+                slotId: 'slot-5',
+                teamSlotIndex: 2,
+                newPokemonId: 999,
+                initialEnergy: 80,
+            },
+            {
+                dayIndex: 2,
+                slotId: 'slot-5',
+                teamSlotIndex: 2,
+                newPokemonId: 999,
+                initialEnergy: 80,
+                isRepeatGenerated: true,
+            },
+            {
+                dayIndex: 3,
+                slotId: 'slot-5',
+                teamSlotIndex: 2,
+                newPokemonId: 999,
+                initialEnergy: 80,
+                isRepeatGenerated: true,
+            },
+        ]);
+    });
+
+    it('overwrites an existing destination repeat series at anchor cell', () => {
+        const state = {
+            ...createInitialState(),
+            simulationConfig: {
+                ...createInitialState().simulationConfig,
+                simulationDays: 5,
+            },
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 111, initialEnergy: 80 },
+                { dayIndex: 1, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 2, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 222, initialEnergy: 50 },
+                { dayIndex: 2, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 222, initialEnergy: 50, isRepeatGenerated: true },
+                { dayIndex: 3, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 222, initialEnergy: 50, isRepeatGenerated: true },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-3',
+            toTeamIndex: 1,
+            toDayIndex: 1,
+        });
+
+        expect(next.swaps).toEqual([
+            { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 111, initialEnergy: 80 },
+            { dayIndex: 2, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+            { dayIndex: 3, slotId: 'slot-3', teamSlotIndex: 1, newPokemonId: 111, initialEnergy: 80, isRepeatGenerated: true },
+        ]);
+    });
+
+    it('overwrites conflicts on moved series destinations even when destination anchor is empty', () => {
+        const state = {
+            ...createInitialState(),
+            simulationConfig: {
+                ...createInitialState().simulationConfig,
+                simulationDays: 5,
+            },
+            swaps: [
+                { dayIndex: 0, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+                { dayIndex: 1, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 2, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+                { dayIndex: 2, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 333, initialEnergy: 60 },
+                { dayIndex: 4, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 444, initialEnergy: 60 },
+            ],
+        };
+
+        const next = teamTimelineReducer(state, {
+            type: 'moveSwapSeries',
+            fromSlotId: 'slot-2',
+            fromTeamIndex: 0,
+            fromDayIndex: 0,
+            toSlotId: 'slot-4',
+            toTeamIndex: 3,
+            toDayIndex: 1,
+        });
+
+        expect(next.swaps).toEqual([
+            { dayIndex: 4, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 444, initialEnergy: 60 },
+            { dayIndex: 1, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 999, initialEnergy: 80 },
+            { dayIndex: 2, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+            { dayIndex: 3, slotId: 'slot-4', teamSlotIndex: 3, newPokemonId: 999, initialEnergy: 80, isRepeatGenerated: true },
+        ]);
     });
 });
 
@@ -151,6 +387,87 @@ describe('summary value mode storage', () => {
 
         localStorage.setItem(STORAGE_KEY_SUMMARY_VALUE_MODE, 'unexpected');
         expect(loadSummaryValueModeFromStorage()).toBe('periodTotal');
+    });
+});
+
+describe('confirmSwap with repeat', () => {
+    /** Helper to create a state with swap dialog targeting a specific slot */
+    function createSwapReadyState(overrides?: {
+        simulationDays?: number;
+        pendingSwapPokemonId?: number;
+        swapTargetSlotId?: string;
+        swapTargetTeamIndex?: number;
+        swapTargetDayIndex?: number;
+        team?: (PokemonBoxItem | null)[];
+        swaps?: PokemonSwap[];
+    }) {
+        const team = overrides?.team ?? [
+            { id: 100 } as PokemonBoxItem,
+            { id: 200 } as PokemonBoxItem,
+            null,
+            null,
+            null,
+        ];
+        const base = createInitialState();
+        return {
+            ...base,
+            team,
+            simulationConfig: {
+                ...base.simulationConfig,
+                simulationDays: overrides?.simulationDays ?? 1,
+            },
+            swapTargetSlotId: overrides?.swapTargetSlotId ?? 'slot-2',
+            swapTargetTeamIndex: overrides?.swapTargetTeamIndex ?? 0,
+            swapTargetDayIndex: overrides?.swapTargetDayIndex ?? 0,
+            swapDialogOpen: false,
+            energyDialogOpen: true,
+            pendingSwapPokemonId: overrides?.pendingSwapPokemonId ?? 999,
+            swaps: overrides?.swaps ?? [],
+        };
+    }
+
+    it('confirmSwap stores basic swap data', () => {
+        const state = createSwapReadyState();
+
+        const next = teamTimelineReducer(state, {
+            type: 'confirmSwap',
+            initialEnergy: 80,
+        });
+
+        expect(next.swaps).toHaveLength(1);
+        const swap = next.swaps[0];
+        expect(swap.dayIndex).toBe(0);
+        expect(swap.slotId).toBe('slot-2');
+        expect(swap.teamSlotIndex).toBe(0);
+        expect(swap.newPokemonId).toBe(999);
+        expect(swap.initialEnergy).toBe(80);
+    });
+
+    it('confirmSwap with repeat generates swaps for subsequent days', () => {
+        const state = createSwapReadyState({
+            simulationDays: 3,
+            swapTargetDayIndex: 0,
+        });
+
+        const next = teamTimelineReducer(state, {
+            type: 'confirmSwap',
+            initialEnergy: 80,
+            repeat: true,
+        });
+
+        expect(next.swaps).toHaveLength(3);
+
+        // Day 0: the original swap
+        expect(next.swaps[0].dayIndex).toBe(0);
+        expect(next.swaps[0].isRepeatGenerated).toBeUndefined();
+
+        // Day 1: repeat-generated
+        expect(next.swaps[1].dayIndex).toBe(1);
+        expect(next.swaps[1].isRepeatGenerated).toBe(true);
+
+        // Day 2: repeat-generated
+        expect(next.swaps[2].dayIndex).toBe(2);
+        expect(next.swaps[2].isRepeatGenerated).toBe(true);
     });
 });
 

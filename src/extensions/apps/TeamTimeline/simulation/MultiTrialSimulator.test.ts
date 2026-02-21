@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DailySummary, SimulationResult, TeamSummary } from '../types/TimeSlotTypes';
+import { CookingSimulationResult } from '../types/CookingTypes';
 import { runMultiTrialSimulation, runMultiTrialSimulationWithProgress } from './MultiTrialSimulator';
 import { createDefaultTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
 
@@ -50,6 +51,25 @@ function createSimulationResult(dailySummaries: DailySummary[], teamSummary: Tea
         slotResults: new Map(),
         dailySummaries,
         teamSummary,
+    };
+}
+
+function createCookingResult(
+    events: CookingSimulationResult['events'],
+    leftoverTotal: CookingSimulationResult['leftoverIngredients']['total'],
+    totalInitialIngredientEP: number = 0,
+): CookingSimulationResult {
+    return {
+        events,
+        dailySummaries: [],
+        pokemonAttributions: [],
+        leftoverIngredients: {
+            byPokemon: new Map(),
+            initialRemaining: {},
+            total: leftoverTotal,
+        },
+        totalCookingEP: events.reduce((sum, event) => sum + event.cookingEP, 0),
+        totalInitialIngredientEP,
     };
 }
 
@@ -247,5 +267,166 @@ describe('runMultiTrialSimulation', () => {
             trialCount: 2,
             seed: 301,
         });
+    });
+
+    it('aggregates average cooking summary by recipe and leftover ingredients', () => {
+        runSimulationMock
+            .mockReturnValueOnce({
+                ...createSimulationResult(
+                    [createDailySummary(1, 10, 100)],
+                    createTeamSummary(1000),
+                ),
+                cookingResult: createCookingResult(
+                    [
+                        {
+                            mealSlotId: 'slot-1',
+                            mealType: 'breakfast',
+                            recipeName: 'recipeA',
+                            isGreatSuccess: false,
+                            cookingEP: 100,
+                            eBase: 1000,
+                            eDisplay: 1100,
+                            eFinal: 100,
+                            ingredientsUsed: [],
+                            remainingPotCapacity: 0,
+                            effectivePotCapacity: 30,
+                            tastyChancePercent: 10,
+                            cookingPowerUpBonusUsed: 0,
+                        },
+                        {
+                            mealSlotId: 'slot-2',
+                            mealType: 'lunch',
+                            recipeName: 'recipeB',
+                            isGreatSuccess: false,
+                            cookingEP: 300,
+                            eBase: 2000,
+                            eDisplay: 2200,
+                            eFinal: 300,
+                            ingredientsUsed: [],
+                            remainingPotCapacity: 0,
+                            effectivePotCapacity: 30,
+                            tastyChancePercent: 10,
+                            cookingPowerUpBonusUsed: 0,
+                        },
+                    ],
+                    { apple: 4 },
+                    120,
+                ),
+            })
+            .mockReturnValueOnce({
+                ...createSimulationResult(
+                    [createDailySummary(1, 20, 200)],
+                    createTeamSummary(2000),
+                ),
+                cookingResult: createCookingResult(
+                    [
+                        {
+                            mealSlotId: 'slot-3',
+                            mealType: 'dinner',
+                            recipeName: 'recipeA',
+                            isGreatSuccess: false,
+                            cookingEP: 200,
+                            eBase: 1000,
+                            eDisplay: 1100,
+                            eFinal: 200,
+                            ingredientsUsed: [],
+                            remainingPotCapacity: 0,
+                            effectivePotCapacity: 30,
+                            tastyChancePercent: 10,
+                            cookingPowerUpBonusUsed: 0,
+                        },
+                        {
+                            mealSlotId: 'slot-4',
+                            mealType: 'breakfast',
+                            recipeName: 'recipeB',
+                            isGreatSuccess: false,
+                            cookingEP: 100,
+                            eBase: 2000,
+                            eDisplay: 2200,
+                            eFinal: 100,
+                            ingredientsUsed: [],
+                            remainingPotCapacity: 0,
+                            effectivePotCapacity: 30,
+                            tastyChancePercent: 10,
+                            cookingPowerUpBonusUsed: 0,
+                        },
+                        {
+                            mealSlotId: 'slot-5',
+                            mealType: 'lunch',
+                            recipeName: 'recipeB',
+                            isGreatSuccess: false,
+                            cookingEP: 300,
+                            eBase: 2000,
+                            eDisplay: 2200,
+                            eFinal: 300,
+                            ingredientsUsed: [],
+                            remainingPotCapacity: 0,
+                            effectivePotCapacity: 30,
+                            tastyChancePercent: 10,
+                            cookingPowerUpBonusUsed: 0,
+                        },
+                    ],
+                    { apple: 2, milk: 6 },
+                    180,
+                ),
+            });
+
+        const result = runMultiTrialSimulation({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 2,
+            initialSeed: 900,
+        });
+
+        expect(result.averageCookingSummary).not.toBeNull();
+        expect(result.averageCookingSummary?.recipes.map(recipe => recipe.recipeName)).toEqual(['recipeB', 'recipeA']);
+        expect(result.averageCookingSummary?.recipes[0]).toMatchObject({
+            recipeName: 'recipeB',
+            averageCount: 1.5,
+            averageCookingEP: 233,
+        });
+        expect(result.averageCookingSummary?.recipes[1]).toMatchObject({
+            recipeName: 'recipeA',
+            averageCount: 1,
+            averageCookingEP: 150,
+        });
+        expect(result.averageCookingSummary?.leftoverIngredients).toEqual([
+            { name: 'apple', count: 3 },
+            { name: 'milk', count: 3 },
+        ]);
+        expect(result.averageCookingSummary?.averageInitialIngredientEP).toBe(150);
+    });
+
+    it('keeps leftover ingredient in average summary even when averaged count rounds to 0', () => {
+        runSimulationMock
+            .mockReturnValueOnce({
+                ...createSimulationResult(
+                    [createDailySummary(1, 10, 100)],
+                    createTeamSummary(1000),
+                ),
+                cookingResult: createCookingResult([], { apple: 0.04 }),
+            })
+            .mockReturnValueOnce({
+                ...createSimulationResult(
+                    [createDailySummary(1, 10, 100)],
+                    createTeamSummary(1000),
+                ),
+                cookingResult: createCookingResult([], {}),
+            });
+
+        const result = runMultiTrialSimulation({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 2,
+            initialSeed: 1000,
+        });
+
+        expect(result.averageCookingSummary?.leftoverIngredients).toEqual([
+            { name: 'apple', count: 0 },
+        ]);
     });
 });

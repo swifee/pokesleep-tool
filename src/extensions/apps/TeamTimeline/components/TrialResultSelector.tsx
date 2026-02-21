@@ -5,6 +5,7 @@ import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { useTranslation } from 'react-i18next';
 import { TrialSummary } from '../types/MultiTrialTypes';
+import EpValue from './EpValue';
 
 export interface TrialResultSelectorProps {
   results: readonly TrialSummary[];
@@ -325,7 +326,13 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
             if (ep === undefined) {
               return `${value + 1}`;
             }
-            return `${value + 1}: ${Math.round(ep).toLocaleString()}EP`;
+            return (
+              <>
+                {value + 1}
+                {': '}
+                <EpValue value={Math.round(ep).toLocaleString()} />
+              </>
+            );
           }}
         />
       </Box>

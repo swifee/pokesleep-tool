@@ -1,12 +1,36 @@
 import React from 'react';
 import { styled } from '@mui/system';
-import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import CloseIcon from '@mui/icons-material/Close';
 import { IconButton } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { TimeSlotResult } from '../types/TimeSlotTypes';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
+import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import { formatIngredientCount, sortIngredientsByCountDesc } from '../utils/IngredientDisplayUtils';
+import TeamTimelineIcon from './TimelineIcons';
+import EpValue, { EpText } from './EpValue';
+
+export type SwapDragState = 'idle' | 'source' | 'target';
+export type TimelineDisplayMode = 'detailed' | 'simple';
+
+export interface SwapCellCoordinate {
+    slotId: string;
+    teamIndex: number;
+    dayIndex: number;
+}
+
+export interface SwapLongPressStartDetail extends SwapCellCoordinate {
+    pointerId: number;
+    pointerType?: string;
+    clientX: number;
+    clientY: number;
+    swappedPokemonName?: string;
+    previewWidth?: number;
+    previewHeight?: number;
+    pointerOffsetX?: number;
+    pointerOffsetY?: number;
+}
 
 interface TimelineCellProps {
     result: TimeSlotResult | null;
@@ -14,6 +38,7 @@ interface TimelineCellProps {
     slotId: string;                  // Time slot ID (e.g., "06:00-12:00")
     teamIndex: number;               // Team slot index (0-4)
     onSwapClick?: () => void;        // Callback for swap button click
+    onRemoveSwapClick?: () => void;  // Callback for swap removal button click
     hasSwap?: boolean;               // Whether this position has a swap
     swappedPokemonName?: string;     // Name of the swapped Pokemon
     isFirstSlot?: boolean;           // Whether this is the first time slot (duration 0)
@@ -21,6 +46,14 @@ interface TimelineCellProps {
     compactFirstSlot?: boolean;      // Use compact layout for first timeline slot
     alwaysShowSwapButton?: boolean;  // Show swap button without hover
     disableSwapUi?: boolean;         // Hide swap UI entirely for this cell
+    pokemonIdForm?: number;
+    fitToViewport?: boolean;
+    swapSlotId?: string;             // Original (non-day-suffixed) slot ID used for swap operations
+    dayIndex?: number;               // Current day index in expanded timeline
+    swapDraggable?: boolean;         // Drag handle enabled only for direct swap rows
+    onSwapLongPressStart?: (detail: SwapLongPressStartDetail) => void;
+    swapDragState?: SwapDragState;
+    displayMode?: TimelineDisplayMode;
 }
 
 /**
@@ -30,7 +63,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     const {
         result,
         isSleeping,
+        teamIndex,
         onSwapClick,
+        onRemoveSwapClick,
         hasSwap,
         swappedPokemonName,
         isFirstSlot,
@@ -38,13 +73,38 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         compactFirstSlot = false,
         alwaysShowSwapButton = false,
         disableSwapUi = false,
+        pokemonIdForm,
+        fitToViewport = false,
+        swapSlotId,
+        dayIndex,
+        swapDraggable = false,
+        onSwapLongPressStart,
+        swapDragState = 'idle',
+        displayMode = 'detailed',
     } = props;
     const { t } = useTranslation();
     const swapButtonTitle = t('TeamTimeline.swap pokemon');
+    const removeSwapButtonTitle = t('TeamTimeline.swap remove', '入れ替え設定を解除');
     const hasSwapInfo = !disableSwapUi && Boolean(hasSwap && swappedPokemonName);
     const showSwapButton = !disableSwapUi && Boolean(onSwapClick) && !hasSwapInfo;
+    const isSimpleMode = displayMode === 'simple';
+    const shouldAlwaysShowSwapButton = alwaysShowSwapButton || isSimpleMode;
     const isCompactEmptyCell = compactEmpty && result === null;
-    const isCompactLayout = isCompactEmptyCell || compactFirstSlot;
+    const isCompactLayout = isCompactEmptyCell || compactFirstSlot || isSimpleMode;
+    const isNarrowSwapInfoLayout = fitToViewport;
+    const isLongPressEnabled =
+        hasSwapInfo &&
+        swapDraggable &&
+        onSwapLongPressStart !== undefined &&
+        swapSlotId !== undefined &&
+        dayIndex !== undefined;
+    const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const dragPointerIdRef = React.useRef<number | null>(null);
+    const dragPointerTypeRef = React.useRef<string | null>(null);
+    const dragStartPointRef = React.useRef<{ x: number; y: number } | null>(null);
+    const longPressTriggeredRef = React.useRef(false);
+    const suppressNextActionClickRef = React.useRef(false);
+    const longPressDelayMs = 175;
 
     const handleSwapButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
@@ -53,10 +113,143 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 
     const handleSwapInfoClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
+        if (suppressNextActionClickRef.current) {
+            suppressNextActionClickRef.current = false;
+            event.preventDefault();
+            return;
+        }
         if (!onSwapClick) {
             return;
         }
         onSwapClick?.();
+    };
+
+    const handleSwapRemoveButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (suppressNextActionClickRef.current) {
+            suppressNextActionClickRef.current = false;
+            event.preventDefault();
+            return;
+        }
+        onRemoveSwapClick?.();
+    };
+
+    const clearLongPressTimer = React.useCallback(() => {
+        if (longPressTimerRef.current !== null) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }, []);
+
+    const resetLongPressSession = React.useCallback(() => {
+        clearLongPressTimer();
+        dragPointerIdRef.current = null;
+        dragPointerTypeRef.current = null;
+        dragStartPointRef.current = null;
+        longPressTriggeredRef.current = false;
+    }, [clearLongPressTimer]);
+
+    React.useEffect(() => {
+        return () => {
+            clearLongPressTimer();
+        };
+    }, [clearLongPressTimer]);
+
+    const handleSwapInfoPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (!isLongPressEnabled || !swapSlotId || dayIndex === undefined || !onSwapLongPressStart) {
+            return;
+        }
+        if (event.pointerType === 'mouse' && event.button !== 0) {
+            return;
+        }
+        if (event.pointerType === 'touch' || event.pointerType === 'pen') {
+            event.preventDefault();
+        }
+
+        suppressNextActionClickRef.current = false;
+        resetLongPressSession();
+        const pointerId = event.pointerId;
+        const pointerX = event.clientX;
+        const pointerY = event.clientY;
+        const previewElement = event.currentTarget.parentElement instanceof HTMLElement
+            ? event.currentTarget.parentElement
+            : event.currentTarget;
+        const previewRect = previewElement.getBoundingClientRect();
+        const pointerOffsetX = pointerX - previewRect.left;
+        const pointerOffsetY = pointerY - previewRect.top;
+        dragPointerIdRef.current = event.pointerId;
+        dragPointerTypeRef.current = event.pointerType;
+        dragStartPointRef.current = { x: event.clientX, y: event.clientY };
+        if (event.pointerType === 'mouse') {
+            try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+                void 0;
+            }
+        }
+        longPressTimerRef.current = setTimeout(() => {
+            longPressTriggeredRef.current = true;
+            suppressNextActionClickRef.current = true;
+            onSwapLongPressStart({
+                slotId: swapSlotId,
+                teamIndex,
+                dayIndex,
+                pointerId,
+                pointerType: event.pointerType,
+                clientX: pointerX,
+                clientY: pointerY,
+                swappedPokemonName,
+                previewWidth: previewRect.width,
+                previewHeight: previewRect.height,
+                pointerOffsetX,
+                pointerOffsetY,
+            });
+        }, longPressDelayMs);
+    };
+
+    const handleSwapInfoPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (dragPointerIdRef.current !== event.pointerId || longPressTriggeredRef.current) {
+            return;
+        }
+        const startPoint = dragStartPointRef.current;
+        if (!startPoint) {
+            return;
+        }
+        const movedDistance = Math.hypot(
+            event.clientX - startPoint.x,
+            event.clientY - startPoint.y
+        );
+        if (movedDistance > 8) {
+            resetLongPressSession();
+        }
+    };
+
+    const handleSwapInfoPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (dragPointerIdRef.current !== event.pointerId) {
+            return;
+        }
+        if (dragPointerTypeRef.current === 'mouse') {
+            try {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            } catch {
+                void 0;
+            }
+        }
+        resetLongPressSession();
+    };
+
+    const handleSwapInfoContextMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (!isLongPressEnabled) {
+            return;
+        }
+        event.preventDefault();
+    };
+
+    const handleSwapInfoPointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (dragPointerIdRef.current !== event.pointerId) {
+            return;
+        }
+        resetLongPressSession();
     };
 
     const renderSwapControl = () => {
@@ -68,7 +261,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             <SwapIconButton
                 type="button"
                 className="swap-trigger"
-                data-always-visible={alwaysShowSwapButton ? 'true' : 'false'}
+                data-always-visible={shouldAlwaysShowSwapButton ? 'true' : 'false'}
                 onClick={handleSwapButtonClick}
                 title={swapButtonTitle}
             >
@@ -82,18 +275,89 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             return null;
         }
         return (
-            <SwapInfoBox
-                type="button"
-                className="swap-info"
-                onClick={onSwapClick ? handleSwapInfoClick : undefined}
-                title={swapButtonTitle}
+            <SwapInfoContainer
+                $dragState={swapDragState}
+                data-swap-drag-state={swapDragState}
             >
-                <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
-                <span className="swap-name">{swappedPokemonName}</span>
-            </SwapInfoBox>
+                <SwapInfoMainButton
+                    $compactSwapLabel={isNarrowSwapInfoLayout}
+                    type="button"
+                    className="swap-info"
+                    onClick={onSwapClick ? handleSwapInfoClick : undefined}
+                    onPointerDown={isLongPressEnabled ? handleSwapInfoPointerDown : undefined}
+                    onPointerMove={isLongPressEnabled ? handleSwapInfoPointerMove : undefined}
+                    onPointerUp={isLongPressEnabled ? handleSwapInfoPointerUp : undefined}
+                    onPointerCancel={isLongPressEnabled ? handleSwapInfoPointerCancel : undefined}
+                    onContextMenu={isLongPressEnabled ? handleSwapInfoContextMenu : undefined}
+                    title={swapButtonTitle}
+                >
+                    {!isNarrowSwapInfoLayout && (
+                        <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
+                    )}
+                    <span
+                        className="swap-name"
+                        data-compact-swap-name={isNarrowSwapInfoLayout ? 'true' : 'false'}
+                    >
+                        {swappedPokemonName}
+                    </span>
+                </SwapInfoMainButton>
+                {onRemoveSwapClick && (
+                    <SwapRemoveButton
+                        type="button"
+                        className="swap-remove-trigger"
+                        onClick={handleSwapRemoveButtonClick}
+                        onPointerDown={isLongPressEnabled ? handleSwapInfoPointerDown : undefined}
+                        onPointerMove={isLongPressEnabled ? handleSwapInfoPointerMove : undefined}
+                        onPointerUp={isLongPressEnabled ? handleSwapInfoPointerUp : undefined}
+                        onPointerCancel={isLongPressEnabled ? handleSwapInfoPointerCancel : undefined}
+                        onContextMenu={isLongPressEnabled ? handleSwapInfoContextMenu : undefined}
+                        title={removeSwapButtonTitle}
+                        aria-label={removeSwapButtonTitle}
+                    >
+                        <CloseIcon className="swap-remove-icon" sx={{ fontSize: 12 }} />
+                    </SwapRemoveButton>
+                )}
+            </SwapInfoContainer>
         );
     };
     const stripDerivedSuffix = (skillLabel: string): string => skillLabel.replace(/\s*\([^)]*\)\s*$/, '');
+    const SkillPrefixIcons = React.useCallback(({ count = 1, testId }: { count?: number; testId?: string }) => {
+        const normalizedCount = Math.max(1, Math.round(count));
+        return (
+            <span
+                className="skill-prefix-icons"
+                data-testid={testId}
+                data-skill-prefix-count={normalizedCount}
+            >
+                {Array.from({ length: normalizedCount }).map((_, index) => (
+                    <TeamTimelineIcon
+                        key={index}
+                        name="skill"
+                        className="skill-prefix-icon"
+                        data-skill-prefix-icon="true"
+                    />
+                ))}
+            </span>
+        );
+    }, []);
+    const renderTextWithHealIcon = React.useCallback((text: string, keyPrefix: string): React.ReactNode => {
+        const chunks = text.split('❇️');
+        if (chunks.length === 1) {
+            return <EpText text={text} keyPrefix={keyPrefix} />;
+        }
+        return chunks.map((chunk, index) => (
+            <React.Fragment key={`${keyPrefix}-${index}`}>
+                {index > 0 && (
+                    <TeamTimelineIcon
+                        name="heal"
+                        className="heal-inline-icon"
+                        data-heal-icon="true"
+                    />
+                )}
+                <EpText text={chunk} keyPrefix={`${keyPrefix}-ep-${index}`} />
+            </React.Fragment>
+        ));
+    }, []);
     const buildProxyDetailParts = (event: NonNullable<TimeSlotResult['proxySkillEvents']>[number]): string[] => {
         const parts: string[] = [];
         const isMetronomeStockpile =
@@ -117,9 +381,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             parts.push(`🖤-12×${event.badDreamsHitCount}`);
         }
         if ((event.supportSkillBerryEP ?? 0) > 0) {
-            parts.push(`+${Math.round(event.supportSkillBerryEP ?? 0).toLocaleString()}EP`);
+            parts.push(`+${Math.round(event.supportSkillBerryEP ?? 0).toLocaleString()} EP`);
         } else if ((event.directEP ?? 0) > 0) {
-            parts.push(`+${Math.round(event.directEP ?? 0).toLocaleString()}EP`);
+            parts.push(`+${Math.round(event.directEP ?? 0).toLocaleString()} EP`);
         }
         const totalGreatSuccessCount =
             (event.berryBurstGreatSuccessCount ?? 0) + (event.ingredientDrawGreatSuccessCount ?? 0);
@@ -143,6 +407,16 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         }
         return parts;
     };
+    const renderPokemonIcon = () => {
+        if (pokemonIdForm === undefined) {
+            return null;
+        }
+        return (
+            <PokemonIconAnchor data-testid="timeline-cell-pokemon-icon">
+                <PokemonIcon idForm={pokemonIdForm} size={14} />
+            </PokemonIconAnchor>
+        );
+    };
 
     if (result === null) {
         return (
@@ -150,11 +424,20 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 $isSleeping={isSleeping}
                 $hasSwap={hasSwap}
                 $showSwapButton={showSwapButton}
-                $alwaysShowSwapButton={alwaysShowSwapButton}
+                $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
                 $compact={isCompactLayout}
+                $simple={false}
+                $fitToViewport={fitToViewport}
+                $swapDragState={swapDragState}
                 data-compact-layout={isCompactLayout ? 'true' : 'false'}
+                data-swap-slot-id={swapSlotId}
+                data-swap-team-index={teamIndex}
+                data-swap-day-index={dayIndex}
+                data-swap-drop-enabled={!disableSwapUi && swapSlotId !== undefined && dayIndex !== undefined ? 'true' : 'false'}
             >
-                <EmptyContent />
+                <EmptyContent>
+                    {renderPokemonIcon()}
+                </EmptyContent>
                 {renderSwapInfo()}
                 {renderSwapControl()}
             </StyledCell>
@@ -184,6 +467,63 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         hasProxyEventStyle;
     const totalGreatSuccessCount =
         (result.berryBurstGreatSuccessCount ?? 0) + (result.ingredientDrawGreatSuccessCount ?? 0);
+    const simpleCookingCount = result.ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
+
+    if (displayMode === 'simple') {
+        return (
+            <StyledCell
+                $isSleeping={isSleeping}
+                $hasSwap={hasSwap}
+                $showSwapButton={showSwapButton}
+                $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
+                $compact={isCompactLayout}
+                $simple={true}
+                $fitToViewport={fitToViewport}
+                $swapDragState={swapDragState}
+                data-compact-layout={isCompactLayout ? 'true' : 'false'}
+                data-swap-slot-id={swapSlotId}
+                data-swap-team-index={teamIndex}
+                data-swap-day-index={dayIndex}
+                data-swap-drop-enabled={!disableSwapUi && swapSlotId !== undefined && dayIndex !== undefined ? 'true' : 'false'}
+                data-display-mode="simple"
+            >
+                <SimpleLayout>
+                    {renderPokemonIcon()}
+                    <SimpleRightArea>
+                        <SimpleEnergyBarTrack>
+                            <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                        </SimpleEnergyBarTrack>
+                        <SimpleMetricsLine>
+                            <SimpleMetricBadge data-testid="timeline-cell-simple-berry">
+                                <TeamTimelineIcon name="berry" />
+                                {result.berryCount}
+                            </SimpleMetricBadge>
+                            <SimpleMetricBadge data-testid="timeline-cell-simple-cooking">
+                                <TeamTimelineIcon name="cooking" />
+                                {simpleCookingCount}
+                            </SimpleMetricBadge>
+                            {(result.skillTriggerCount > 0 || result.skillOverflowCount > 0) && (
+                                <SimpleSkillIconStack>
+                                    {result.skillTriggerCount > 0 && (
+                                        <SimpleSkillIconItem data-testid="timeline-cell-simple-skill">
+                                            <TeamTimelineIcon name="skill" data-simple-skill-icon="true" />
+                                        </SimpleSkillIconItem>
+                                    )}
+                                    {result.skillOverflowCount > 0 && (
+                                        <SimpleSkillIconItem data-testid="timeline-cell-simple-skill-none">
+                                            <TeamTimelineIcon name="skill_none" data-simple-skill-icon="true" />
+                                        </SimpleSkillIconItem>
+                                    )}
+                                </SimpleSkillIconStack>
+                            )}
+                        </SimpleMetricsLine>
+                    </SimpleRightArea>
+                </SimpleLayout>
+                {renderSwapInfo()}
+                {renderSwapControl()}
+            </StyledCell>
+        );
+    }
 
     const aggregateDetailParts: string[] = [];
     if (result.selfSkillRecovery > 0) {
@@ -202,9 +542,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         aggregateDetailParts.push(`🖤-12×${result.badDreamsHitCount}`);
     }
     if (isHelperBoostOnlySupportEvents && result.supportSkillBerryEP > 0) {
-        aggregateDetailParts.push(`+${Math.round(result.supportSkillBerryEP).toLocaleString()}EP`);
+        aggregateDetailParts.push(`+${Math.round(result.supportSkillBerryEP).toLocaleString()} EP`);
     } else if (result.directSkillEP > 0 && result.supportHelpEvents.length === 0) {
-        aggregateDetailParts.push(`+${result.directSkillEP.toLocaleString()}EP`);
+        aggregateDetailParts.push(`+${result.directSkillEP.toLocaleString()} EP`);
     }
     if (totalGreatSuccessCount > 0) {
         aggregateDetailParts.push(`大成功x${totalGreatSuccessCount}`);
@@ -228,14 +568,16 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             result.energizingCheerEvents.forEach((event, index) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`cheer-${index}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}❇️+{Math.round(event.recovery)}
+                        <SkillPrefixIcons />
+                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `cheer-${index}`)}
                     </SkillDetailLine>
                 );
             });
             moonlightEvents.forEach((event, index) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`moonlight-${index}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}❇️+{Math.round(event.recovery)}
+                        <SkillPrefixIcons />
+                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `moonlight-${index}`)}
                     </SkillDetailLine>
                 );
             });
@@ -243,10 +585,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 const ingredients = sortIngredientsByCountDesc(event.ingredients.filter(ingredient => ingredient.count > 0));
                 skillDetailLines.push(
                     <SkillDetailLine key={`support-${eventIndex}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}{' '}
+                        <SkillPrefixIcons />
+                        →{event.targetPokemonName}{' '}
                         <SupportBerryEPBadge>
-                            <LocalFireDepartmentIcon sx={{ width: 14, height: 14, color: '#ff944b' }} />
-                            {Math.round(event.berryEP).toLocaleString()}EP
+                            <TeamTimelineIcon name="berry" />
+                            <EpValue value={Math.round(event.berryEP).toLocaleString()} />
                         </SupportBerryEPBadge>
                         {ingredients.map((ingredient, ingredientIndex) => (
                             <React.Fragment key={`support-ing-${eventIndex}-${ingredientIndex}-${ingredient.name}`}>
@@ -263,7 +606,8 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             cookingMinusEvents.forEach((event, index) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`cooking-minus-${index}-${event.targetPokemonId}`}>
-                        ❗→{event.targetPokemonName}❇️+{Math.round(event.recovery)}
+                        <SkillPrefixIcons />
+                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `cooking-minus-${index}`)}
                     </SkillDetailLine>
                 );
             });
@@ -278,8 +622,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             const detailParts = buildProxyDetailParts(event);
             skillDetailLines.push(
                 <SkillDetailLine key={`proxy-${index}-${event.source}-${event.triggeredSkillName}`}>
-                    ❗{displaySkillLabel}
-                    {detailParts.length > 0 && `${displaySkillLabel ? ' ' : ''}${detailParts.join(' ')}`}
+                    <SkillPrefixIcons />
+                    {displaySkillLabel}
+                    {detailParts.length > 0 &&
+                        renderTextWithHealIcon(
+                            `${displaySkillLabel ? ' ' : ''}${detailParts.join(' ')}`,
+                            `proxy-detail-${index}`
+                        )}
                     {sortIngredientsByCountDesc((event.skillIngredients ?? []).filter(ingredient => ingredient.count > 0)).map((ingredient, ingredientIndex) => (
                         <React.Fragment key={`proxy-ing-${index}-${ingredientIndex}-${ingredient.name}`}>
                             {' '}
@@ -295,7 +644,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         if (skillIngredients.length > 0 && !hasProxyEventStyle && result.supportHelpEvents.length === 0) {
             skillDetailLines.push(
                 <SkillDetailLine key="skill-ingredients">
-                    ❗
+                    <SkillPrefixIcons />
                     {skillIngredients.map((ingredient, ingredientIndex) => (
                         <React.Fragment key={`skill-ing-${ingredientIndex}-${ingredient.name}`}>
                             {ingredientIndex > 0 && ' '}
@@ -311,17 +660,19 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         if (aggregateDetailParts.length > 0 && !hasProxyEventStyle) {
             skillDetailLines.push(
                 <SkillDetailLine key="aggregate-extra">
-                    ❗{aggregateDetailParts.join(' ')}
+                    <SkillPrefixIcons />
+                    {renderTextWithHealIcon(aggregateDetailParts.join(' '), 'aggregate-extra')}
                 </SkillDetailLine>
             );
         }
     } else if (result.skillTriggerCount > 0 || aggregateDetailParts.length > 0) {
         if (isHelperBoostOnlySupportEvents) {
-            const triggerPrefix = result.skillTriggerCount > 0 ? '❗'.repeat(result.skillTriggerCount) : '❗';
+            const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
             skillDetailLines.push(
                 <SkillDetailLine key="helper-boost-aggregate">
-                    {triggerPrefix}
-                    {aggregateDetailParts.length > 0 && ` ${aggregateDetailParts.join(' ')}`}
+                    <SkillPrefixIcons count={triggerCount} testId="timeline-cell-skill-prefix-helper-boost" />
+                    {aggregateDetailParts.length > 0 &&
+                        renderTextWithHealIcon(` ${aggregateDetailParts.join(' ')}`, 'helper-boost-aggregate')}
                     {skillIngredients.map((ingredient, ingredientIndex) => (
                         <React.Fragment key={`helper-boost-ing-${ingredientIndex}-${ingredient.name}`}>
                             {' '}
@@ -335,10 +686,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             );
         } else {
             if (skillIngredients.length > 0) {
-                const triggerPrefix = result.skillTriggerCount > 0 ? '❗'.repeat(result.skillTriggerCount) : '❗';
+                const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
                 skillDetailLines.push(
                     <SkillDetailLine key="skill-ingredients-aggregate">
-                        {triggerPrefix}
+                        <SkillPrefixIcons count={triggerCount} testId="timeline-cell-skill-prefix-ingredients" />
                         {skillIngredients.map((ingredient, ingredientIndex) => (
                             <React.Fragment key={`skill-ing-aggregate-${ingredientIndex}-${ingredient.name}`}>
                                 {ingredientIndex > 0 && ' '}
@@ -352,13 +703,16 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 );
             }
             if (aggregateDetailParts.length > 0) {
-                const triggerPrefix = result.skillTriggerCount > 0 ? '❗'.repeat(result.skillTriggerCount) : '❗';
+                const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
                 skillDetailLines.push(
-                    <SkillDetailLine key="aggregate">
-                        {triggerPrefix}{aggregateDetailParts.length > 0 ? ` ${aggregateDetailParts.join(' ')}` : ''}
-                    </SkillDetailLine>
-                );
-            }
+                <SkillDetailLine key="aggregate">
+                    <SkillPrefixIcons count={triggerCount} testId="timeline-cell-skill-prefix-aggregate" />
+                    {aggregateDetailParts.length > 0
+                        ? renderTextWithHealIcon(` ${aggregateDetailParts.join(' ')}`, 'aggregate')
+                        : ''}
+                </SkillDetailLine>
+            );
+        }
         }
     }
 
@@ -367,41 +721,70 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             $isSleeping={isSleeping}
             $hasSwap={hasSwap}
             $showSwapButton={showSwapButton}
-            $alwaysShowSwapButton={alwaysShowSwapButton}
+            $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
             $compact={isCompactLayout}
+            $simple={false}
+            $fitToViewport={fitToViewport}
+            $swapDragState={swapDragState}
             data-compact-layout={isCompactLayout ? 'true' : 'false'}
+            data-swap-slot-id={swapSlotId}
+            data-swap-team-index={teamIndex}
+            data-swap-day-index={dayIndex}
+            data-swap-drop-enabled={!disableSwapUi && swapSlotId !== undefined && dayIndex !== undefined ? 'true' : 'false'}
         >
-            {/* Line 1: Energy Value */}
-            <EnergyLine>
-                げんき{Math.round(result.energyEnd)}
-            </EnergyLine>
-            <EnergyBarTrack>
-                <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
-            </EnergyBarTrack>
-
+            <TopEnergyArea>
+                {renderPokemonIcon()}
+                <EnergySummary>
+                    {/* Line 1: Energy Value */}
+                    <EnergyLine>
+                        げんき{Math.round(result.energyEnd)}
+                    </EnergyLine>
+                    <EnergyBarTrack>
+                        <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                    </EnergyBarTrack>
+                </EnergySummary>
+            </TopEnergyArea>
             {/* Line 2: Energy Details */}
             {(result.energyDecay > 0 || result.wakeRecovery > 0 || result.mealRecovery > 0 || totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && (
                 <RecoveryInfoLine>
-                    ({result.energyDecay > 0 && `⌛-${Math.round(result.energyDecay)}`}
+                    {result.energyDecay > 0 && `⌛-${Math.round(result.energyDecay)}`}
                     {result.energyDecay > 0 && (result.wakeRecovery > 0 || result.mealRecovery > 0 || totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && ' '}
-                    {result.wakeRecovery > 0 && `💤+${result.wakeRecovery}`}
+                    {result.wakeRecovery > 0 && (
+                        <>
+                            <TeamTimelineIcon name="sleep" data-testid="timeline-cell-recovery-icon-sleep" />
+                            +{result.wakeRecovery}
+                        </>
+                    )}
                     {result.wakeRecovery > 0 && (result.mealRecovery > 0 || totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && ' '}
-                    {result.mealRecovery > 0 && `🍴+${result.mealRecovery}`}
+                    {result.mealRecovery > 0 && (
+                        <>
+                            <TeamTimelineIcon name="cooking" data-testid="timeline-cell-recovery-icon-cooking" />
+                            +{result.mealRecovery}
+                        </>
+                    )}
                     {result.mealRecovery > 0 && (totalSkillRecoveryInEnergyLine > 0 || result.badDreamsDamageTaken > 0) && ' '}
-                    {totalSkillRecoveryInEnergyLine > 0 && `❇️+${totalSkillRecoveryInEnergyLine}`}
+                    {totalSkillRecoveryInEnergyLine > 0 && (
+                        <>
+                            <TeamTimelineIcon name="heal" data-testid="timeline-cell-recovery-icon-heal" data-heal-icon="true" />
+                            +{totalSkillRecoveryInEnergyLine}
+                        </>
+                    )}
                     {totalSkillRecoveryInEnergyLine > 0 && result.badDreamsDamageTaken > 0 && ' '}
-                    {result.badDreamsDamageTaken > 0 && `🖤-${Math.round(result.badDreamsDamageTaken)}`})
+                    {result.badDreamsDamageTaken > 0 && `🖤-${Math.round(result.badDreamsDamageTaken)}`}
                 </RecoveryInfoLine>
             )}
 
             {/* Line 3: Help count & Berries */}
             <ResourceLine>
                 {!(isFirstSlot && result.helpCount === 0) && (
-                    <HelpLine>🔍{result.helpCount}</HelpLine>
+                    <HelpLine>
+                        <TeamTimelineIcon name="work" data-testid="timeline-cell-help-icon-work" />
+                        {result.helpCount}
+                    </HelpLine>
                 )}
                 {result.berryCount > 0 && (
                     <BerryBadge>
-                        <LocalFireDepartmentIcon sx={{ width: 14, height: 14, color: '#ff944b' }} />
+                        <TeamTimelineIcon name="berry" />
                         {result.berryCount}
                     </BerryBadge>
                 )}
@@ -433,7 +816,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             {(skillDetailLines.length > 0 || result.skillOverflowCount > 0) && (
                 <SkillLine>
                     {skillDetailLines}
-                    {result.skillOverflowCount > 0 && <SkillOverflowLine>❕</SkillOverflowLine>}
+                    {result.skillOverflowCount > 0 && (
+                        <SkillOverflowLine>
+                            <TeamTimelineIcon name="skill_none" data-testid="timeline-cell-skill-overflow-icon" />
+                        </SkillOverflowLine>
+                    )}
                 </SkillLine>
             )}
 
@@ -449,19 +836,31 @@ const StyledCell = styled('div')<{
     $showSwapButton: boolean;
     $alwaysShowSwapButton: boolean;
     $compact: boolean;
+    $simple: boolean;
+    $fitToViewport: boolean;
+    $swapDragState: SwapDragState;
 }>(
-    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact }) => ({
+    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact, $simple, $fitToViewport, $swapDragState }) => ({
     position: 'relative',
-    width: '100px',
-    minWidth: '100px',
+    width: $fitToViewport
+        ? 'calc((100% - var(--timeline-time-cell-width, 40px)) / var(--timeline-team-size, 5))'
+        : '100px',
+    minWidth: $fitToViewport ? '0' : '100px',
+    flexBasis: $fitToViewport
+        ? 'calc((100% - var(--timeline-time-cell-width, 40px)) / var(--timeline-team-size, 5))'
+        : 'auto',
     flexShrink: 0,
     boxSizing: 'border-box',
-    minHeight: $compact ? '34px' : '109px',
-    padding: $compact
-        ? `2px 2px ${$showSwapButton ? '22px' : '2px'}`
-        : `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
+    minHeight: ($simple || $compact) ? '34px' : '109px',
+    padding: $simple
+        ? '2px'
+        : $compact
+            ? `2px 2px ${$showSwapButton ? '22px' : '2px'}`
+            : `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
     borderLeft: '0.5px solid #e2e2e2',
-    backgroundColor: $isSleeping ? '#f5f6fb' : '#fff',
+    backgroundColor: $swapDragState === 'target'
+        ? '#fff4de'
+        : ($isSleeping ? '#f5f6fb' : '#fff'),
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -491,13 +890,111 @@ const EmptyContent = styled('div')({
     display: 'flex',
     flex: 1,
     minHeight: 0,
+    alignItems: 'flex-start',
+});
+
+const TopEnergyArea = styled('div')({
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '3px',
+});
+
+const PokemonIconAnchor = styled('span')({
+    width: '14px',
+    height: '14px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+});
+
+const EnergySummary = styled('div')({
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+});
+
+const SimpleLayout = styled('div')({
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '3px',
+    minHeight: '14px',
+});
+
+const SimpleRightArea = styled('div')({
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+});
+
+const SimpleEnergyBarTrack = styled('div')({
+    width: '100%',
+    height: '2px',
+    borderRadius: '999px',
+    backgroundColor: '#d5ead0',
+    overflow: 'hidden',
+});
+
+const SimpleMetricsLine = styled('div')({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    minHeight: '10px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+});
+
+const SimpleMetricBadge = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '1px',
+    fontSize: '8px',
+    lineHeight: '10px',
+    letterSpacing: '-0.4px',
+    color: '#111',
+    '& svg': {
+        width: '9px',
+        height: '9px',
+    },
+});
+
+const SimpleSkillIconStack = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+});
+
+const SimpleSkillIconItem = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '8px',
+    height: '8px',
+    marginRight: '-2px',
+    '&:last-of-type': {
+        marginRight: '0',
+    },
+    '& svg': {
+        width: '8px',
+        height: '8px',
+    },
 });
 
 const HelpLine = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '1px',
     fontWeight: 600,
     fontSize: '12px',
     lineHeight: '15px',
     letterSpacing: '-0.48px',
+    '& svg': {
+        width: '12px',
+        height: '12px',
+    },
 });
 
 const ResourceLine = styled('div')({
@@ -521,6 +1018,10 @@ const BerryBadge = styled('span')({
     fontSize: '12px',
     lineHeight: '15px',
     letterSpacing: '-0.48px',
+    '& svg': {
+        width: '12px',
+        height: '12px',
+    },
 });
 
 const IngredientBadge = styled('span')({
@@ -565,12 +1066,35 @@ const SkillDetailLine = styled('div')({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: '2px',
+    '& .skill-prefix-icons': {
+        display: 'inline-flex',
+        alignItems: 'center',
+        flexShrink: 0,
+    },
+    '& .skill-prefix-icon': {
+        width: '10px',
+        height: '10px',
+    },
+    '& .skill-prefix-icon + .skill-prefix-icon': {
+        marginLeft: '-3px',
+    },
+    '& .heal-inline-icon': {
+        width: '10px',
+        height: '10px',
+        marginInline: '1px',
+    },
 });
 
 const SkillOverflowLine = styled('div')({
+    display: 'inline-flex',
+    alignItems: 'center',
     fontSize: '10px',
     color: '#9e9e9e',
     fontWeight: 600,
+    '& svg': {
+        width: '10px',
+        height: '10px',
+    },
 });
 
 const SupportBerryEPBadge = styled('span')({
@@ -581,9 +1105,8 @@ const SupportBerryEPBadge = styled('span')({
     lineHeight: '13px',
     letterSpacing: '-0.5px',
     '& svg': {
-        width: '14px',
-        height: '14px',
-        color: '#ff944b',
+        width: '12px',
+        height: '12px',
     },
 });
 
@@ -603,14 +1126,25 @@ const EnergyLine = styled('div')({
     lineHeight: '13px',
     letterSpacing: '-0.5px',
     minHeight: '13px',
+    marginTop: '-1px',
 });
 
 const RecoveryInfoLine = styled('div')({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: '100%',
+    gap: '1px',
     fontSize: '7px',
     color: '#000',
     lineHeight: '13px',
     letterSpacing: '-0.35px',
     whiteSpace: 'nowrap',
+    marginTop: '-1px',
+    '& svg': {
+        width: '7px',
+        height: '7px',
+    },
 });
 
 const SwapIconButton = styled(IconButton)({
@@ -634,7 +1168,7 @@ const SwapIconButton = styled(IconButton)({
     },
 });
 
-const SwapInfoBox = styled('button')({
+const SwapInfoContainer = styled('div')<{ $dragState: SwapDragState }>(({ $dragState }) => ({
     border: '1px solid #62d540',
     marginTop: '2px',
     marginLeft: '0',
@@ -642,9 +1176,30 @@ const SwapInfoBox = styled('button')({
     width: '100%',
     boxSizing: 'border-box',
     minHeight: '18px',
-    padding: '1px 4px',
     borderRadius: '6px',
     backgroundColor: '#f6ffef',
+    display: 'flex',
+    alignItems: 'center',
+    overflow: 'hidden',
+    ...($dragState === 'source' ? {
+        borderColor: '#1e64d6',
+        backgroundColor: '#edf4ff',
+    } : {}),
+    ...($dragState === 'target' ? {
+        borderColor: '#f59e0b',
+        backgroundColor: '#fff4de',
+    } : {}),
+}));
+
+const SwapInfoMainButton = styled('button')<{
+    $compactSwapLabel: boolean;
+}>(({ $compactSwapLabel }) => ({
+    border: 'none',
+    padding: $compactSwapLabel ? '1px 0 1px 2px' : '1px 0 1px 4px',
+    margin: 0,
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'transparent',
     color: '#000',
     display: 'flex',
     alignItems: 'center',
@@ -655,6 +1210,10 @@ const SwapInfoBox = styled('button')({
     fontFamily: '"M PLUS 1p", sans-serif',
     textAlign: 'left',
     cursor: 'pointer',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    WebkitTouchCallout: 'none',
+    touchAction: 'none',
     '&:hover': {
         backgroundColor: '#edffe0',
     },
@@ -668,12 +1227,37 @@ const SwapInfoBox = styled('button')({
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
         display: 'block',
+        fontSize: $compactSwapLabel ? '9px' : '10px',
+        lineHeight: $compactSwapLabel ? '11px' : '13px',
+    },
+}));
+
+const SwapRemoveButton = styled('button')({
+    border: 'none',
+    width: '18px',
+    height: '18px',
+    padding: 0,
+    margin: '0 2px 0 0',
+    borderRadius: '999px',
+    backgroundColor: 'transparent',
+    color: '#62d540',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    flexShrink: 0,
+    '&:hover': {
+        backgroundColor: '#e5f9d9',
+    },
+    '& .swap-remove-icon': {
+        color: '#62d540',
     },
 });
 
 const EnergyBarTrack = styled('div')({
-    width: '94px',
+    width: '100%',
     height: '3px',
+    marginTop: '-1px',
     borderRadius: '999px',
     backgroundColor: '#d5ead0',
     overflow: 'hidden',

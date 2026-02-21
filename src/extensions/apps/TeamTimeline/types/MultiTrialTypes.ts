@@ -1,4 +1,5 @@
 import { DailySummary, TeamSummary } from './TimeSlotTypes';
+import { AverageCookingSummary } from './CookingTypes';
 
 /**
  * MultiTrialTypes.ts
@@ -23,6 +24,8 @@ export interface MultiTrialResult {
     readonly averageDailySummaries: DailySummary[];
     /** Average team summary across all trials */
     readonly averageTeamSummary: TeamSummary;
+    /** Average cooking summary across all trials (when cooking simulation is enabled) */
+    readonly averageCookingSummary: AverageCookingSummary | null;
 }
 
 /** Available trial count options */

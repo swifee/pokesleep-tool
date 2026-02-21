@@ -2,11 +2,16 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { TeamSummary } from '../types/TimeSlotTypes';
+import type { AverageCookingSummary, CookingSimulationResult } from '../types/CookingTypes';
 import TeamSummaryRow from './TeamSummaryRow';
 
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
-        t: (_key: string, defaultValue?: string) => defaultValue ?? _key,
+        t: (key: string, defaultValue?: string) => (
+            key.startsWith('TeamTimeline.recipe ')
+                ? `translated:${key}`
+                : (defaultValue ?? key)
+        ),
     }),
 }));
 
@@ -36,6 +41,82 @@ const TEAM_SUMMARY_WITH_INGREDIENTS: TeamSummary = {
     ],
 };
 
+const TEAM_SUMMARY_WITH_COOKING: TeamSummary = {
+    ...TEAM_SUMMARY,
+    totalCookingEP: 2400,
+    grandTotalEP: 6400,
+};
+
+const COOKING_RESULT: CookingSimulationResult = {
+    events: [],
+    dailySummaries: [
+        {
+            events: [
+                {
+                    mealSlotId: 'breakfast',
+                    mealType: 'breakfast',
+                    recipeName: 'specialAppleCurry',
+                    isGreatSuccess: false,
+                    cookingEP: 1000,
+                    eBase: 0,
+                    eDisplay: 0,
+                    eFinal: 0,
+                    ingredientsUsed: [],
+                    remainingPotCapacity: 0,
+                    effectivePotCapacity: 15,
+                    tastyChancePercent: 10,
+                    cookingPowerUpBonusUsed: 0,
+                },
+            ],
+            totalCookingEP: 1000,
+            greatSuccessCount: 0,
+        },
+    ],
+    pokemonAttributions: [],
+    leftoverIngredients: {
+        byPokemon: new Map(),
+        initialRemaining: {},
+        total: {},
+    },
+    totalCookingEP: 1000,
+    totalInitialIngredientEP: 321,
+};
+
+const AVERAGE_COOKING_SUMMARY: AverageCookingSummary = {
+    recipes: [
+        {
+            recipeName: 'lowBaseVisibleRecipe',
+            eBase: 1200,
+            averageCount: 1.5,
+            averageCookingEP: 4200,
+        },
+        {
+            recipeName: 'highBaseVisibleRecipe',
+            eBase: 3000,
+            averageCount: 2,
+            averageCookingEP: 9800,
+        },
+        {
+            recipeName: 'groupedRecipe',
+            eBase: 2500,
+            averageCount: 0.055,
+            averageCookingEP: 550,
+        },
+        {
+            recipeName: 'excludedRecipe',
+            eBase: 500,
+            averageCount: 0.009,
+            averageCookingEP: 90,
+        },
+    ],
+    leftoverIngredients: [
+        { name: 'apple', count: 4.5 },
+        { name: 'milk', count: 0 },
+        { name: 'honey', count: 2 },
+    ],
+    averageInitialIngredientEP: 789,
+};
+
 describe('TeamSummaryRow', () => {
     it('shows label in details mode', () => {
         render(<TeamSummaryRow teamSummary={TEAM_SUMMARY} layoutMode="details" />);
@@ -45,7 +126,7 @@ describe('TeamSummaryRow', () => {
     it('hides label in average mode', () => {
         render(<TeamSummaryRow teamSummary={TEAM_SUMMARY} layoutMode="average" />);
         expect(screen.queryByText('合計')).toBeNull();
-        expect(screen.getByText('total 6,000EP')).toBeDefined();
+        expect(document.body.textContent ?? '').toContain('total 6,000 EP');
     });
 
     it('sorts ingredients by count descending and shows ingredient totals in details mode', () => {
@@ -75,7 +156,37 @@ describe('TeamSummaryRow', () => {
         );
 
         const content = container.textContent ?? '';
-        expect(content.indexOf('total 6,000EP')).toBeLessThan(content.indexOf('食材合計: 22'));
+        expect(content.indexOf('total 6,000 EP')).toBeLessThan(content.indexOf('食材合計: 22'));
+    });
+
+    it('shows EP in berry -> skill -> ingredient order when cooking simulation is off', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+            />
+        );
+
+        const berryItem = screen.getByTestId('team-summary-ep-item-berry');
+        const skillItem = screen.getByTestId('team-summary-ep-item-skill');
+        const ingredientItem = screen.getByTestId('team-summary-ep-item-ingredient');
+        expect(berryItem.compareDocumentPosition(skillItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(skillItem.compareDocumentPosition(ingredientItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    });
+
+    it('shows EP in berry -> skill -> cooking order when cooking simulation is on', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY_WITH_COOKING}
+                layoutMode="details"
+            />
+        );
+
+        const berryItem = screen.getByTestId('team-summary-ep-item-berry');
+        const skillItem = screen.getByTestId('team-summary-ep-item-skill');
+        const cookingItem = screen.getByTestId('team-summary-ep-item-cooking');
+        expect(berryItem.compareDocumentPosition(skillItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(skillItem.compareDocumentPosition(cookingItem) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
     it('always keeps top 3 ingredients visible and groups only low ingredients after 4th item', () => {
@@ -131,11 +242,74 @@ describe('TeamSummaryRow', () => {
             />
         );
 
-        const text = document.body.textContent ?? '';
-        expect(text).toContain('きのみ : 1,000EP');
-        expect(text).toContain('食材 : 667EP');
-        expect(text).toContain('スキル : 334EP');
-        expect(text).toContain('total 2,001EP');
-        expect(text).toContain('食材合計: 3');
+        expect(screen.getByTestId('team-summary-ep-item-berry').textContent).toContain('1,000 EP');
+        expect(screen.getByTestId('team-summary-ep-item-ingredient').textContent).toContain('667 EP');
+        expect(screen.getByTestId('team-summary-ep-item-skill').textContent).toContain('334 EP');
+        expect((document.body.textContent ?? '')).toContain('total 2,001 EP');
+        expect((document.body.textContent ?? '')).toContain('食材合計: 3');
+    });
+
+    it('renders translated recipe names in cooking result', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={COOKING_RESULT}
+            />
+        );
+
+        expect(screen.getByText('translated:TeamTimeline.recipe specialAppleCurry')).toBeDefined();
+    });
+
+    it('shows initial ingredient EP total in cooking result details', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={COOKING_RESULT}
+            />
+        );
+
+        expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 321 EP');
+    });
+
+    it('renders average cooking summary in requested format and groups recipes below 1.0 count', () => {
+        const { container } = render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY_WITH_COOKING}
+                layoutMode="average"
+                averageCookingSummary={AVERAGE_COOKING_SUMMARY}
+            />
+        );
+
+        const content = container.textContent ?? '';
+        expect(content).toContain('あまり食材平均');
+        expect(content).toContain('milk0');
+        expect(content).toContain('translated:TeamTimeline.recipe highBaseVisibleRecipe : 平均9,800 EP × 2回');
+        expect(content).toContain('translated:TeamTimeline.recipe lowBaseVisibleRecipe : 平均4,200 EP × 1.5回');
+        expect(content.indexOf('translated:TeamTimeline.recipe highBaseVisibleRecipe'))
+            .toBeLessThan(content.indexOf('translated:TeamTimeline.recipe lowBaseVisibleRecipe'));
+
+        const groupedButton = screen.getByRole('button', { name: '他 0.06回' });
+        expect(groupedButton).toBeDefined();
+
+        fireEvent.click(groupedButton);
+        const popoverText = document.body.textContent ?? '';
+        expect(popoverText).toContain('translated:TeamTimeline.recipe groupedRecipe : 平均550 EP × 0.06回');
+        expect(popoverText).not.toContain('translated:TeamTimeline.recipe excludedRecipe');
+    });
+
+    it('shows initial ingredient EP total in average mode and converts by dailyAverage', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY_WITH_COOKING}
+                layoutMode="average"
+                simulationDays={3}
+                valueMode="dailyAverage"
+                averageCookingSummary={AVERAGE_COOKING_SUMMARY}
+            />
+        );
+
+        expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 263 EP');
     });
 });

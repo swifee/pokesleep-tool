@@ -9,6 +9,8 @@ import {
     Slider,
     Box,
     Typography,
+    FormControlLabel,
+    Checkbox,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
@@ -18,7 +20,8 @@ interface SwapEnergyDialogProps {
     pokemonName: string;
     pokemonIdForm?: number;
     defaultEnergy?: number;
-    onConfirm: (energy: number) => void;
+    disableEnergySetting?: boolean;
+    onConfirm: (energy: number, repeat?: boolean) => void;
     onCancel: () => void;
 }
 
@@ -27,15 +30,18 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
     pokemonName,
     pokemonIdForm,
     defaultEnergy = 100,
+    disableEnergySetting = false,
     onConfirm,
     onCancel,
 }) => {
     const { t } = useTranslation();
     const [energy, setEnergy] = useState(defaultEnergy);
+    const [repeat, setRepeat] = useState(false);
 
     useEffect(() => {
         if (open) {
             setEnergy(defaultEnergy);
+            setRepeat(false);
         }
     }, [open, defaultEnergy]);
 
@@ -51,12 +57,12 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
     };
 
     const handleConfirm = () => {
-        onConfirm(energy);
+        onConfirm(energy, repeat || undefined);
     };
 
     return (
         <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
-            <DialogTitle>{t('TeamTimeline.set initial energy')}</DialogTitle>
+            <DialogTitle>{t('TeamTimeline.swap settings', '入れ替え設定')}</DialogTitle>
             <DialogContent>
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pt: 1 }}>
                     {pokemonIdForm !== undefined && (
@@ -71,6 +77,7 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
                             onChange={handleInputChange}
                             type="number"
                             size="small"
+                            disabled={disableEnergySetting}
                             inputProps={{ min: 0, max: 150, style: { width: 60 } }}
                         />
                     </Box>
@@ -78,6 +85,7 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
                     <Slider
                         value={energy}
                         onChange={handleSliderChange}
+                        disabled={disableEnergySetting}
                         min={0}
                         max={150}
                         marks={[
@@ -87,6 +95,19 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
                         ]}
                         sx={{ width: '90%' }}
                     />
+
+                    <Box sx={{ width: '100%' }}>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={repeat}
+                                    onChange={(e) => setRepeat(e.target.checked)}
+                                    size="small"
+                                />
+                            }
+                            label={t('TeamTimeline.swap repeat')}
+                        />
+                    </Box>
                 </Box>
             </DialogContent>
             <DialogActions>

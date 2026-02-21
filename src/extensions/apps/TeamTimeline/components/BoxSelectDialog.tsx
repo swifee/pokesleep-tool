@@ -116,8 +116,6 @@ interface BoxSelectDialogProps {
     onSelect: (item: PokemonBoxItem) => void;
     /** ダイアログを閉じる時のコールバック */
     onClose: () => void;
-    /** 「入れ替えしない」選択時のコールバック（入れ替え用ダイアログのみ） */
-    onRemoveSwap?: () => void;
     /** 「なし」選択時のコールバック（入れ替え用ダイアログのみ） */
     onSelectNone?: () => void;
 }
@@ -130,7 +128,6 @@ const BoxSelectDialog = React.memo(({
     box,
     onSelect,
     onClose,
-    onRemoveSwap,
     onSelectNone,
 }: BoxSelectDialogProps) => {
     const { t } = useTranslation();
@@ -226,18 +223,11 @@ const BoxSelectDialog = React.memo(({
             </DialogTitle>
             <DialogContent dividers data-testid="team-timeline-box-select-content">
                 {/* Special options for swap dialog */}
-                {(onRemoveSwap || onSelectNone) && (
+                {onSelectNone && (
                     <SpecialOptionsContainer>
-                        {onRemoveSwap && (
-                            <SpecialOptionButton onClick={onRemoveSwap}>
-                                {t('TeamTimeline.swap no change')}
-                            </SpecialOptionButton>
-                        )}
-                        {onSelectNone && (
-                            <SpecialOptionButton onClick={onSelectNone}>
-                                {t('TeamTimeline.swap none')}
-                            </SpecialOptionButton>
-                        )}
+                        <SpecialOptionButton onClick={onSelectNone}>
+                            {t('TeamTimeline.swap none')}
+                        </SpecialOptionButton>
                     </SpecialOptionsContainer>
                 )}
                 {displayedItems.length === 0 ? (

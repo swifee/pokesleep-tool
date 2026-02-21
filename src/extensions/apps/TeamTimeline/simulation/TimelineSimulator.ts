@@ -5,8 +5,9 @@
 
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import i18next from 'i18next';
-import { PokemonSpecialty } from '../../../../data/pokemons';
+import { IngredientName, PokemonSpecialty } from '../../../../data/pokemons';
 import { isExpertField } from '../../../../data/fields';
+import { ingredientStrength } from '../../../../util/PokemonRp';
 import PokemonStrength, { StrengthParameter } from '../../../../util/PokemonStrength';
 import {
     TimeSlot,
@@ -17,6 +18,7 @@ import {
     PokemonSwap,
     DailySummary,
     getDisplayLabel,
+    getMealType,
     SWAP_NONE_POKEMON_ID,
 } from '../types/TimeSlotTypes';
 import { calculateDuration, isSleepingSlot } from '../utils/TimeSlotUtils';
@@ -39,6 +41,27 @@ import {
 } from './SkillEffectProcessor';
 import { TimelineBonusSettings } from '../types/TimelineBonusSettingsTypes';
 import { buildStrengthParameterFromTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
+import { CookingCategory, CookingSimulationSettings, CookingSimulationResult, CookingEventResult } from '../types/CookingTypes';
+import {
+    createIngredientBag,
+    addIngredientsToBag,
+    deductIngredientCountsFromBag,
+    executeMealCooking,
+    computeLeftoverIngredients,
+    computePokemonCookingAttributions,
+    computeInitialIngredientAttributedEP,
+    getAvailableIngredientCount,
+    planExtraIngredientsByEvent,
+} from './CookingSimulator';
+
+const INACTIVE_WAKE_RECOVERY_DIVISOR = 20;
+const BAG_COUNT_EPSILON = 1e-9;
+
+const MIXED_RECIPE_NAME_BY_CATEGORY: Record<CookingCategory, string> = {
+    curry: 'mixedCurry',
+    salad: 'mixedSalad',
+    dessert: 'mixedJuice',
+};
 
 export interface SimulationAnalysisOptions {
     disabledPokemonIds?: readonly number[];
@@ -64,6 +87,8 @@ export interface SimulationInput {
     box?: PokemonBox;
     /** 追加分析用オプション */
     analysisOptions?: SimulationAnalysisOptions;
+    /** 料理シミュレーション設定（オプショナル） */
+    cookingSettings?: CookingSimulationSettings;
 }
 
 /** ポケモンの状態（シミュレーション中の内部管理用） */
@@ -201,6 +226,271 @@ function buildPokemonBonusContext(
             recipeLevel: bonusSettings.recipeLevel,
             dishBonus: bonus.dish,
         },
+    };
+}
+
+function getBaselineUsageCounts(event: CookingEventResult): { name: IngredientName; count: number }[] {
+    return event.ingredientsUsed.map((usage) => ({
+        name: usage.name,
+        count: usage.count,
+    }));
+}
+
+function applyExtraIngredientsToBaselineEvents(
+    expandedSlots: { slot: TimeSlot; dayIndex: number }[],
+    slotResults: Map<string, TimeSlotResult[]>,
+    baselineEvents: readonly CookingEventResult[],
+    cookingSettings: CookingSimulationSettings,
+    bonusSettings: TimelineBonusSettings,
+    eventBonus: number,
+): CookingEventResult[] {
+    const bag = createIngredientBag(cookingSettings.initialIngredients);
+    const excludedExtraIngredientSet = new Set<IngredientName>(
+        Object.entries(cookingSettings.disabledExtraIngredients)
+            .filter(([, disabled]) => disabled === true)
+            .map(([ingredientName]) => ingredientName as IngredientName),
+    );
+    const planByEvent = planExtraIngredientsByEvent(baselineEvents, {
+        excludedIngredientNames: excludedExtraIngredientSet,
+    });
+    const bonusMultiplier = (1 + bonusSettings.fieldBonus / 100) * (1 + eventBonus / 100);
+    const updatedEvents: CookingEventResult[] = [];
+
+    let mealIndex = 0;
+    for (const expandedSlot of expandedSlots) {
+        const slot = expandedSlot.slot;
+        const results = slotResults.get(slot.id);
+
+        if (results) {
+            for (const result of results) {
+                if (result.ingredients.length > 0) {
+                    addIngredientsToBag(bag, result.pokemonId, result.ingredients);
+                }
+                if (result.skillIngredients && result.skillIngredients.length > 0) {
+                    addIngredientsToBag(bag, result.pokemonId, result.skillIngredients);
+                }
+            }
+        }
+
+        const isMealSlot = slot.hasMeal !== undefined
+            ? slot.hasMeal
+            : false;
+        if (!isMealSlot) {
+            continue;
+        }
+
+        const baselineEvent = baselineEvents[mealIndex];
+        if (!baselineEvent) {
+            mealIndex += 1;
+            continue;
+        }
+
+        const replayedIngredientsUsed = deductIngredientCountsFromBag(
+            bag,
+            getBaselineUsageCounts(baselineEvent),
+        );
+
+        const plannedExtras = planByEvent[mealIndex] ?? [];
+        let remainingPotCapacity = baselineEvent.remainingPotCapacity;
+        const appliedExtraCounts: { name: IngredientName; count: number }[] = [];
+
+        for (const planned of plannedExtras) {
+            if (remainingPotCapacity <= BAG_COUNT_EPSILON) {
+                break;
+            }
+            const availableCount = getAvailableIngredientCount(bag, planned.name);
+            const appliedCount = Math.min(planned.count, availableCount, remainingPotCapacity);
+            if (appliedCount <= BAG_COUNT_EPSILON) {
+                continue;
+            }
+            appliedExtraCounts.push({
+                name: planned.name,
+                count: appliedCount,
+            });
+            remainingPotCapacity -= appliedCount;
+        }
+
+        const replayedExtraIngredientsUsed = deductIngredientCountsFromBag(bag, appliedExtraCounts);
+        const extraIngredientCount = replayedExtraIngredientsUsed.reduce(
+            (sum, usage) => sum + usage.count,
+            0,
+        );
+        const extraRawStrength = replayedExtraIngredientsUsed.reduce(
+            (sum, usage) => sum + (ingredientStrength[usage.name] * usage.count),
+            0,
+        );
+        const extraFinalStrength = Math.round(extraRawStrength * bonusMultiplier);
+
+        let recipeName = baselineEvent.recipeName;
+        let eBase = baselineEvent.eBase;
+        let eDisplay = baselineEvent.eDisplay;
+        let eFinal = baselineEvent.eFinal;
+        let cookingEP = baselineEvent.cookingEP;
+
+        if (baselineEvent.recipeName == null) {
+            if (extraRawStrength > BAG_COUNT_EPSILON) {
+                const mixedRecipeName = MIXED_RECIPE_NAME_BY_CATEGORY[cookingSettings.category];
+                const mixedBase = Math.round(extraRawStrength);
+                const mixedFinal = Math.round(mixedBase * bonusMultiplier);
+                recipeName = mixedRecipeName;
+                eBase = mixedBase;
+                eDisplay = mixedBase;
+                eFinal = mixedFinal;
+                cookingEP = baselineEvent.isGreatSuccess ? mixedFinal * 2 : mixedFinal;
+            } else {
+                recipeName = null;
+                eBase = 0;
+                eDisplay = 0;
+                eFinal = 0;
+                cookingEP = 0;
+            }
+        } else if (extraRawStrength > BAG_COUNT_EPSILON) {
+            eFinal = baselineEvent.eFinal + extraFinalStrength;
+            cookingEP = baselineEvent.isGreatSuccess ? eFinal * 2 : eFinal;
+        }
+
+        updatedEvents.push({
+            ...baselineEvent,
+            recipeName,
+            eBase,
+            eDisplay,
+            eFinal,
+            cookingEP,
+            ingredientsUsed: replayedIngredientsUsed,
+            extraIngredientsUsed: replayedExtraIngredientsUsed,
+            remainingPotCapacity: Math.max(0, baselineEvent.remainingPotCapacity - extraIngredientCount),
+        });
+
+        mealIndex += 1;
+    }
+
+    return updatedEvents;
+}
+
+/**
+ * 料理シミュレーションのポスト処理を実行する
+ *
+ * スロット結果を時系列で走査し、食材をバッグに蓄積しながら
+ * 各食事タイミングで最適な料理を選択・作成する。
+ */
+function runCookingPostProcess(
+    expandedSlots: { slot: TimeSlot; dayIndex: number }[],
+    slotResults: Map<string, TimeSlotResult[]>,
+    cookingSettings: CookingSimulationSettings,
+    bonusSettings: TimelineBonusSettings,
+    baseSeed: number,
+): CookingSimulationResult {
+    const bag = createIngredientBag(cookingSettings.initialIngredients);
+    const cookingRandom = new SeededRandom(baseSeed + 9999);
+    const cookingEventBonus = 0; // TODO: extract event bonus from bonusSettings
+    const disabledRecipeSet = new Set<string>(
+        Object.entries(cookingSettings.disabledRecipes)
+            .filter(([, disabled]) => disabled === true)
+            .map(([recipeName]) => recipeName),
+    );
+
+    let cookingPowerUpBonus = 0;
+    let tastyChanceAccumulated = 0;
+
+    const baselineEvents: CookingEventResult[] = [];
+    const mealDayIndices: number[] = [];
+
+    for (const expandedSlot of expandedSlots) {
+        const slot = expandedSlot.slot;
+        const results = slotResults.get(slot.id);
+
+        if (results) {
+            // Collect ingredients from this slot's results into the bag
+            for (const result of results) {
+                // Add regular ingredients
+                if (result.ingredients.length > 0) {
+                    addIngredientsToBag(bag, result.pokemonId, result.ingredients);
+                }
+                // Add skill ingredients
+                if (result.skillIngredients && result.skillIngredients.length > 0) {
+                    addIngredientsToBag(bag, result.pokemonId, result.skillIngredients);
+                }
+                // Accumulate cooking power up
+                cookingPowerUpBonus += result.cookingPotCapacityIncrease ?? 0;
+                // Accumulate tasty chance
+                tastyChanceAccumulated += result.tastyChanceIncreasePercent ?? 0;
+            }
+        }
+
+        // Check if this is a meal slot
+        const isMealSlot = slot.hasMeal !== undefined
+            ? slot.hasMeal
+            : false;
+
+        if (isMealSlot) {
+            const mealType = getMealType(slot.time);
+            const { result, newTastyChanceAccumulated } = executeMealCooking({
+                bag,
+                category: cookingSettings.category,
+                recipeLevels: cookingSettings.recipeLevels as Record<string, number>,
+                basePotCapacity: cookingSettings.basePotCapacity,
+                isGoodCampTicket: bonusSettings.isGoodCampTicketSet,
+                cookingPowerUpBonus,
+                tastyChanceAccumulated,
+                fieldBonus: bonusSettings.fieldBonus,
+                eventBonus: cookingEventBonus,
+                disabledRecipes: disabledRecipeSet,
+                random: cookingRandom,
+                mealSlotId: slot.id,
+                mealType,
+            });
+
+            baselineEvents.push(result);
+            mealDayIndices.push(expandedSlot.dayIndex);
+
+            // Reset cooking power up bonus after cooking
+            cookingPowerUpBonus = 0;
+            // Update tasty chance (resets only on great success)
+            tastyChanceAccumulated = newTastyChanceAccumulated;
+        }
+    }
+
+    // 1回目計算時点のあまり食材を固定表示用として保持
+    const leftoverIngredients = computeLeftoverIngredients(bag);
+
+    // 2回目: あまり食材を各料理へ後配分
+    const allEvents = applyExtraIngredientsToBaselineEvents(
+        expandedSlots,
+        slotResults,
+        baselineEvents,
+        cookingSettings,
+        bonusSettings,
+        cookingEventBonus,
+    );
+
+    // Build daily cooking summaries from replayed events
+    const dayEventsMap = new Map<number, CookingEventResult[]>();
+    for (let i = 0; i < allEvents.length; i++) {
+        const event = allEvents[i];
+        const dayIndex = mealDayIndices[i] ?? 0;
+        const events = dayEventsMap.get(dayIndex) ?? [];
+        events.push(event);
+        dayEventsMap.set(dayIndex, events);
+    }
+    const dailySummaries = [...dayEventsMap.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, events]) => ({
+            events,
+            totalCookingEP: events.reduce((sum, e) => sum + e.cookingEP, 0),
+            greatSuccessCount: events.filter(e => e.isGreatSuccess).length,
+        }));
+
+    const pokemonAttributions = computePokemonCookingAttributions(allEvents);
+    const totalCookingEP = allEvents.reduce((sum, e) => sum + e.cookingEP, 0);
+    const totalInitialIngredientEP = computeInitialIngredientAttributedEP(allEvents);
+
+    return {
+        events: allEvents,
+        dailySummaries,
+        pokemonAttributions,
+        leftoverIngredients,
+        totalCookingEP,
+        totalInitialIngredientEP,
     };
 }
 
@@ -353,13 +643,50 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 
         // 睡眠開始を追跡
         if (getDisplayLabel(slot) === 'sleep') {
+            // 非編成ポケモンの起床回復計算にも使うため、既知の全ポケモンで睡眠開始時刻を更新
+            pokemonStates.forEach(state => {
+                state.sleepStartTime = slot.time;
+            });
             for (const pokemon of currentActiveTeam) {
                 const state = pokemonStates.get(pokemon.id);
                 if (state) {
-                    state.sleepStartTime = slot.time;
                     state.berryBurstDisguiseLocked = false;
                 }
             }
+        }
+
+        // 非編成ポケモンは、起床ごとに通常起床回復量の 1/20 だけ自然回復させる
+        if (getDisplayLabel(slot) === 'wake') {
+            const currentAssignedTeamMemberIds = new Set<number>(
+                currentTargetableTeamBase.map(pokemon => pokemon.id)
+            );
+
+            pokemonStates.forEach(state => {
+                if (currentAssignedTeamMemberIds.has(state.pokemon.id)) {
+                    return;
+                }
+                if (!state.sleepStartTime) {
+                    return;
+                }
+
+                const sleepMinutes = calculateDuration(state.sleepStartTime, slot.time);
+                const passiveWakeInput: WakeRecoveryInput = {
+                    sleepMinutes,
+                    recoveryFactor: state.pokemon.iv.nature.energyRecoveryFactor,
+                    hasEnergyRecoveryBonus: hasEnergyRecoveryBonus(state.pokemon, energyRecoveryOptions),
+                    teamErbCount: 0,
+                    usedSleepScore: state.usedSleepScore,
+                };
+                const passiveWakeOutput = calculateWakeRecovery(passiveWakeInput);
+                state.usedSleepScore += passiveWakeOutput.sleepScoreUsed;
+                state.sleepStartTime = null;
+
+                if (state.currentEnergy < ENERGY_MAX_NORMAL) {
+                    const passiveRecovery = passiveWakeOutput.recoveredEnergy / INACTIVE_WAKE_RECOVERY_DIVISOR;
+                    state.currentEnergy = Math.min(state.currentEnergy + passiveRecovery, ENERGY_MAX_NORMAL);
+                    pokemonLastEnergy.set(state.pokemon.id, state.currentEnergy);
+                }
+            });
         }
 
         // Phase 1: 各ポケモンのおてつだい計算
@@ -781,6 +1108,18 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         slotResults.set(slot.id, slotResultsForThisSlot);
     }
 
+    // 8.5. 料理シミュレーション（有効な場合）
+    let cookingResult: CookingSimulationResult | undefined;
+    if (input.cookingSettings?.enabled) {
+        cookingResult = runCookingPostProcess(
+            expandedSlots,
+            slotResults,
+            input.cookingSettings,
+            bonusSettings,
+            config.seed,
+        );
+    }
+
     // 9. 一日合計を計算（結果が存在するポケモンのみ）
     const dailySummaries: DailySummary[] = [];
     pokemonResults.forEach((results, pokemonId) => {
@@ -797,12 +1136,32 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         }
     });
 
+    // 9.5. 料理EPをDailySummaryに反映
+    if (cookingResult) {
+        for (const attribution of cookingResult.pokemonAttributions) {
+            const summary = dailySummaries.find(s => s.pokemonId === attribution.pokemonId);
+            if (summary) {
+                summary.cookingEP = Math.round(attribution.attributedCookingEP);
+                // 料理シミュON時: totalEPにcookingEPを加算し、ingredientEPの代わりにする
+                summary.totalEP = summary.berryEP + summary.cookingEP + summary.skillEP;
+            }
+        }
+    }
+
     // 10. チーム合計を計算
     const teamSummary = calculateTeamSummary(dailySummaries);
+
+    // 10.5. 料理EPをTeamSummaryに反映
+    if (cookingResult) {
+        teamSummary.totalCookingEP = cookingResult.totalCookingEP;
+        // 料理シミュON時: grandTotalEPを再計算
+        teamSummary.grandTotalEP = teamSummary.totalBerryEP + cookingResult.totalCookingEP + teamSummary.totalSkillEP;
+    }
 
     return {
         slotResults,
         dailySummaries,
         teamSummary,
+        cookingResult,
     };
 }

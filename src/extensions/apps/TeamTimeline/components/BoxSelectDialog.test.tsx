@@ -135,4 +135,23 @@ describe('BoxSelectDialog', () => {
         const footer = screen.getByTestId('team-timeline-box-select-footer');
         expect(content.contains(footer)).toBe(false);
     });
+
+    it('shows only "swap none" special option in swap dialog', () => {
+        const box = new PokemonBox([
+            createPokemon('Pikachu', 10, 'Bravo'),
+        ]);
+
+        render(
+            <BoxSelectDialog
+                open
+                box={box}
+                onSelect={vi.fn()}
+                onClose={vi.fn()}
+                onSelectNone={vi.fn()}
+            />
+        );
+
+        expect(screen.getByRole('button', { name: 'TeamTimeline.swap none' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'TeamTimeline.swap no change' })).toBeNull();
+    });
 });

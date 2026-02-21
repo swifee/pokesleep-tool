@@ -1,5 +1,16 @@
 import React, { useReducer, useEffect, useCallback, useState, useRef, useMemo } from 'react';
-import { Tabs, Tab, Box, Typography, Slider, Fade, useMediaQuery, useTheme } from '@mui/material';
+import {
+    Tabs,
+    Tab,
+    Box,
+    Typography,
+    Slider,
+    Fade,
+    useMediaQuery,
+    useTheme,
+    FormControlLabel,
+    Switch,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PokemonBox, { PokemonBoxItem } from '../../../util/PokemonBox';
 import {
@@ -31,6 +42,7 @@ import TeamSummaryRow from './components/TeamSummaryRow';
 import SwapSupplementBar from './components/SwapSupplementBar';
 import TrialResultSelector from './components/TrialResultSelector';
 import { SwapEnergyDialog } from './components/SwapEnergyDialog';
+import SwapRemoveConfirmDialog from './components/SwapRemoveConfirmDialog';
 import {
     TimeSlot,
     SimulationConfig,
@@ -44,7 +56,10 @@ import {
     runMultiTrialSimulationWithProgress,
 } from './simulation/MultiTrialSimulator';
 import TimelineBonusSettingsPanel from './components/TimelineBonusSettingsPanel';
+import CookingSettingsPanel from './components/CookingSettingsPanel';
 import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
+import { CookingSimulationSettings } from './types/CookingTypes';
+import { saveCookingSettingsToStorage, loadCookingSettingsFromStorage } from './utils/CookingSettingsStorage';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
 import SummaryValueModeToggle from './components/SummaryValueModeToggle';
 import ResimulationNoticeBar from './components/ResimulationNoticeBar';
@@ -58,6 +73,7 @@ import {
     EnergySkillTeamContributionResult,
     EnergySkillContributionTarget,
 } from './types/AdditionalAnalysisTypes';
+import type { TimelineDisplayMode } from './components/TimelineCell';
 import {
     calculateDeltaPercent,
     buildEnergySkillContributionTargets,
@@ -76,6 +92,12 @@ import {
     shouldSkipTeamResultEntryAnimation,
 } from './utils/TeamTimelineDisplayUtils';
 import {
+    hydrateSwapsWithSerializedPokemon,
+    normalizeLoadedSwapsWithBox,
+} from './utils/SwapPersistenceUtils';
+import { isSwapReassignment } from './utils/SwapReassignmentUtils';
+import { buildSwapSupplementSequences } from './utils/SwapSupplementUtils';
+import {
     loadTimelineBonusSettingsFromIvStorage,
     saveTimelineBonusSettingsToIvStorage,
     IV_PARAMETER_STORAGE_KEY,
@@ -92,6 +114,14 @@ interface AnalysisAverageMetrics {
     averageEPByPokemonId: Map<number, number>;
     averageHelpByPokemonId: Map<number, number>;
     trialCount: number;
+}
+
+interface PendingSwapRemoval {
+    slotId: string;
+    teamIndex: number;
+    dayIndex: number;
+    pokemonId: number;
+    hasFutureRepeat: boolean;
 }
 
 const ANALYSIS_PROGRESS_UPDATE_INTERVAL_MS = 200;
@@ -177,12 +207,20 @@ function migrateSwap(rawSwap: unknown): PokemonSwap | null {
     const dayIndex = typeof candidate.dayIndex === 'number'
         ? Math.max(0, Math.floor(candidate.dayIndex))
         : 0;
+    const isRepeatGenerated = candidate.isRepeatGenerated === true
+        ? true
+        : undefined;
+    const newPokemonSerialized = typeof candidate.newPokemonSerialized === 'string'
+        ? candidate.newPokemonSerialized
+        : undefined;
     return {
         dayIndex,
         slotId: candidate.slotId,
         teamSlotIndex: candidate.teamSlotIndex,
         newPokemonId: candidate.newPokemonId,
+        newPokemonSerialized,
         initialEnergy: candidate.initialEnergy,
+        isRepeatGenerated,
     };
 }
 
@@ -216,31 +254,17 @@ function normalizeTeamWithBoxItems(
     return { normalizedTeam, idRemap };
 }
 
-function normalizeLoadedSwaps(
-    swaps: PokemonSwap[],
-    box: PokemonBox,
-    teamIdRemap: ReadonlyMap<number, number>,
-): PokemonSwap[] {
-    return swaps.map((swap) => {
-        if (swap.newPokemonId === SWAP_NONE_POKEMON_ID) {
-            return swap;
-        }
-        if (box.getById(swap.newPokemonId)) {
-            return swap;
-        }
-        const remappedId = teamIdRemap.get(swap.newPokemonId);
-        if (remappedId === undefined) {
-            return swap;
-        }
-        return { ...swap, newPokemonId: remappedId };
-    });
-}
-
 function createSwapSignature(swaps: readonly PokemonSwap[]): string {
     return swaps
         .map(
             swap => `${swap.dayIndex}:${swap.slotId}:${swap.teamSlotIndex}:${swap.newPokemonId}:${swap.initialEnergy}`
         )
+        .join('|');
+}
+
+function createTeamSignature(team: readonly (PokemonBoxItem | null)[]): string {
+    return team
+        .map((member, index) => `${index}:${member?.id ?? 'null'}`)
         .join('|');
 }
 
@@ -259,7 +283,10 @@ export default function TeamTimelineApp() {
     const [summaryValueMode, setSummaryValueMode] = useState<SummaryValueMode>('periodTotal');
     const [simulationProgress, setSimulationProgress] = useState(0);
     const [showResimulationNotice, setShowResimulationNotice] = useState(false);
+    const [pendingSwapRemoval, setPendingSwapRemoval] = useState<PendingSwapRemoval | null>(null);
+    const [removeFutureRepeatChecked, setRemoveFutureRepeatChecked] = useState(false);
     const [analysisQuickModeEnabled, setAnalysisQuickModeEnabled] = useState(true);
+    const [timelineDisplayMode, setTimelineDisplayMode] = useState<TimelineDisplayMode>('detailed');
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [baseAverageMetricsCache, setBaseAverageMetricsCache]
         = useState<AnalysisBaseMetricsCache<AnalysisAverageMetrics> | null>(null);
@@ -376,6 +403,9 @@ export default function TeamTimelineApp() {
             });
         }
 
+        const cookingSettings = loadCookingSettingsFromStorage();
+        dispatch({ type: 'loadCookingSettings', settings: cookingSettings });
+
         const savedSwaps = localStorage.getItem('PstTeamTimelineSwaps');
         if (savedSwaps) {
             try {
@@ -384,7 +414,7 @@ export default function TeamTimelineApp() {
                     const migratedSwaps = swaps
                         .map(migrateSwap)
                         .filter((swap): swap is PokemonSwap => swap !== null);
-                    const normalizedSwaps = normalizeLoadedSwaps(migratedSwaps, loadedBox, idRemap);
+                    const normalizedSwaps = normalizeLoadedSwapsWithBox(migratedSwaps, loadedBox, idRemap);
                     dispatch({ type: 'loadSwaps', swaps: normalizedSwaps });
                 }
             } catch (e) {
@@ -420,6 +450,12 @@ export default function TeamTimelineApp() {
         saveBonusSettingsToStorage(state.bonusSettings);
     }, [state.bonusSettings, isInitialized]);
 
+    // 料理設定の永続化（初期化完了後のみ）
+    useEffect(() => {
+        if (!isInitialized) return;
+        saveCookingSettingsToStorage(state.cookingSettings);
+    }, [state.cookingSettings, isInitialized]);
+
     // 個体値計算機連動フラグの永続化（初期化完了後のみ）
     useEffect(() => {
         if (!isInitialized) return;
@@ -429,7 +465,8 @@ export default function TeamTimelineApp() {
     // ポケモン入れ替え情報の永続化（初期化完了後のみ）
     useEffect(() => {
         if (!isInitialized) return;
-        localStorage.setItem('PstTeamTimelineSwaps', JSON.stringify(state.swaps));
+        const swapsToPersist = hydrateSwapsWithSerializedPokemon(state.swaps, boxRef.current ?? undefined);
+        localStorage.setItem('PstTeamTimelineSwaps', JSON.stringify(swapsToPersist));
     }, [state.swaps, isInitialized]);
 
     const previousSwapSignatureRef = useRef<string | null>(null);
@@ -450,6 +487,25 @@ export default function TeamTimelineApp() {
         }
         setShowResimulationNotice(true);
     }, [state.swaps, state.simulationResult, isInitialized]);
+
+    const previousTeamSignatureRef = useRef<string | null>(null);
+    useEffect(() => {
+        const signature = createTeamSignature(state.team);
+        if (!isInitialized) {
+            previousTeamSignatureRef.current = signature;
+            return;
+        }
+
+        const previousSignature = previousTeamSignatureRef.current;
+        previousTeamSignatureRef.current = signature;
+        if (previousSignature === null || previousSignature === signature) {
+            return;
+        }
+        if (state.simulationResult === null) {
+            return;
+        }
+        setShowResimulationNotice(true);
+    }, [state.team, state.simulationResult, isInitialized]);
 
     useEffect(() => {
         if (state.simulationConfig.simulationDays < 2) {
@@ -536,6 +592,7 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
             box: boxRef.current || undefined,
+            cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result });
         dispatch({ type: 'updateSimulationConfig', config: { seed } });
@@ -546,6 +603,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.cookingSettings,
     ]);
 
     const runMultiTrialWithSeed = useCallback(async (
@@ -562,6 +620,7 @@ export default function TeamTimelineApp() {
                 simulationDays: state.simulationConfig.simulationDays,
             },
             bonusSettings: state.bonusSettings,
+            cookingSettings: state.cookingSettings,
             swaps: state.swaps,
             box: boxRef.current || undefined,
             trialCount: state.multiTrialCount,
@@ -601,6 +660,7 @@ export default function TeamTimelineApp() {
             medianIndex: selectedIndex,
             averageDailySummaries: multiResult.averageDailySummaries,
             averageTeamSummary: multiResult.averageTeamSummary,
+            averageCookingSummary: multiResult.averageCookingSummary,
         });
 
         const selectedSeed = multiResult.trials[selectedIndex].seed;
@@ -615,6 +675,7 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
             box: boxRef.current || undefined,
+            cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result: fullResult });
         dispatch({ type: 'updateSimulationConfig', config: { seed: selectedSeed } });
@@ -626,6 +687,7 @@ export default function TeamTimelineApp() {
         state.bonusSettings,
         state.swaps,
         state.multiTrialCount,
+        state.cookingSettings,
     ]);
 
     const executeSimulation = useCallback(async (options?: {
@@ -717,6 +779,7 @@ export default function TeamTimelineApp() {
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
                 box: boxRef.current || undefined,
+                cookingSettings: state.cookingSettings,
             });
             dispatch({ type: 'setSimulationResult', result });
             dispatch({ type: 'updateSimulationConfig', config: { seed: trial.seed } });
@@ -731,6 +794,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.cookingSettings,
     ]);
 
     // シードモード変更ハンドラー
@@ -754,9 +818,15 @@ export default function TeamTimelineApp() {
     const handleSummaryValueModeChange = useCallback((mode: SummaryValueMode) => {
         setSummaryValueMode(mode);
     }, []);
+    const handleTimelineDisplayModeChange = useCallback(
+        (event: React.ChangeEvent<HTMLInputElement>) => {
+            setTimelineDisplayMode(event.target.checked ? 'simple' : 'detailed');
+        },
+        []
+    );
 
     // タブ切り替えハンドラー
-    const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings') => {
+    const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings' | 'cooking') => {
         dispatch({ type: 'selectTab', tab: newValue });
     }, []);
 
@@ -796,6 +866,10 @@ export default function TeamTimelineApp() {
         }
     }, [state.syncWithIvParameter]);
 
+    const handleCookingSettingsChange = useCallback((settings: CookingSimulationSettings) => {
+        dispatch({ type: 'setCookingSettings', settings });
+    }, []);
+
     const handleSyncWithIvParameterChange = useCallback((enabled: boolean) => {
         dispatch({ type: 'setSyncWithIvParameter', enabled });
         if (enabled) {
@@ -811,34 +885,76 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'openSwapDialog', slotId, teamIndex, dayIndex });
     }, []);
 
+    const handleSwapSeriesMove = useCallback((
+        fromSlotId: string,
+        fromTeamIndex: number,
+        fromDayIndex: number,
+        toSlotId: string,
+        toTeamIndex: number,
+        toDayIndex: number
+    ) => {
+        dispatch({
+            type: 'moveSwapSeries',
+            fromSlotId,
+            fromTeamIndex,
+            fromDayIndex,
+            toSlotId,
+            toTeamIndex,
+            toDayIndex,
+        });
+    }, []);
+
+    const handleSwapRemoveRequest = useCallback((slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => {
+        const hasFutureRepeat = state.swaps.some(
+            swap =>
+                swap.slotId === slotId &&
+                swap.teamSlotIndex === teamIndex &&
+                swap.newPokemonId === pokemonId &&
+                swap.dayIndex === dayIndex + 1
+        );
+        setPendingSwapRemoval({
+            slotId,
+            teamIndex,
+            dayIndex,
+            pokemonId,
+            hasFutureRepeat,
+        });
+        setRemoveFutureRepeatChecked(hasFutureRepeat);
+    }, [state.swaps]);
+
+    const handleSwapRemoveCancel = useCallback(() => {
+        setPendingSwapRemoval(null);
+        setRemoveFutureRepeatChecked(false);
+    }, []);
+
+    const handleSwapRemoveConfirm = useCallback(() => {
+        if (!pendingSwapRemoval) {
+            return;
+        }
+
+        dispatch({
+            type: 'removeSwap',
+            slotId: pendingSwapRemoval.slotId,
+            teamIndex: pendingSwapRemoval.teamIndex,
+            dayIndex: pendingSwapRemoval.dayIndex,
+            removeFutureRepeats: pendingSwapRemoval.hasFutureRepeat && removeFutureRepeatChecked,
+            pokemonId: pendingSwapRemoval.pokemonId,
+        });
+        setPendingSwapRemoval(null);
+        setRemoveFutureRepeatChecked(false);
+    }, [pendingSwapRemoval, removeFutureRepeatChecked]);
+
     const handleSwapPokemonSelect = useCallback((item: PokemonBoxItem) => {
         dispatch({ type: 'setPendingSwap', pokemonId: item.id });
     }, []);
 
-    const handleEnergyConfirm = useCallback((energy: number) => {
-        dispatch({ type: 'confirmSwap', initialEnergy: energy });
+    const handleEnergyConfirm = useCallback((energy: number, repeat?: boolean) => {
+        dispatch({ type: 'confirmSwap', initialEnergy: energy, repeat });
     }, []);
 
     const handleEnergyCancel = useCallback(() => {
         dispatch({ type: 'closeSwapDialog' });
     }, []);
-
-    // 「入れ替えしない」: 既存swapを削除してダイアログを閉じる
-    const handleRemoveSwap = useCallback(() => {
-        if (
-            state.swapTargetSlotId !== null &&
-            state.swapTargetTeamIndex !== null &&
-            state.swapTargetDayIndex !== null
-        ) {
-            dispatch({
-                type: 'removeSwap',
-                slotId: state.swapTargetSlotId,
-                teamIndex: state.swapTargetTeamIndex,
-                dayIndex: state.swapTargetDayIndex,
-            });
-        }
-        dispatch({ type: 'closeSwapDialog' });
-    }, [state.swapTargetDayIndex, state.swapTargetSlotId, state.swapTargetTeamIndex]);
 
     // 「なし」: ポケモンなしのswapを直接確定（エネルギーダイアログなし）
     const handleSwapSelectNone = useCallback(() => {
@@ -864,23 +980,26 @@ export default function TeamTimelineApp() {
         return pokemon.iv.idForm;
     }, [state.pendingSwapPokemonId]);
 
-    const swappedPokemonIdForms = useMemo(() => {
-        if (!boxRef.current) {
-            return [];
-        }
-        const uniqueIdForms = new Set<number>();
-        state.swaps.forEach((swap) => {
-            if (swap.newPokemonId === SWAP_NONE_POKEMON_ID) {
-                return;
-            }
-            const pokemon = boxRef.current!.items.find((item) => item.id === swap.newPokemonId);
-            if (!pokemon) {
-                return;
-            }
-            uniqueIdForms.add(pokemon.iv.idForm);
-        });
-        return [...uniqueIdForms];
-    }, [state.swaps]);
+    const disableSwapEnergySetting = useMemo(() => (
+        isSwapReassignment({
+            team: state.team,
+            timeSlots: state.timeSlots,
+            simulationDays: state.simulationConfig.simulationDays,
+            swaps: state.swaps,
+            pendingPokemonId: state.pendingSwapPokemonId,
+            targetSlotId: state.swapTargetSlotId,
+            targetDayIndex: state.swapTargetDayIndex,
+        })
+    ), [
+        state.team,
+        state.timeSlots,
+        state.simulationConfig.simulationDays,
+        state.swaps,
+        state.pendingSwapPokemonId,
+        state.swapTargetSlotId,
+        state.swapTargetDayIndex,
+    ]);
+
     const hasConfiguredSwap = state.swaps.length > 0;
 
     const appearingTimelineMembers = useMemo(() => {
@@ -905,6 +1024,20 @@ export default function TeamTimelineApp() {
             state.swaps,
         ]
     );
+    const swapSupplementSequences = useMemo(() => (
+        buildSwapSupplementSequences({
+            team: state.team,
+            swaps: state.swaps,
+            timeSlots: state.timeSlots,
+            durationSummary: timelineDurationSummary,
+            box: boxRef.current ?? undefined,
+        })
+    ), [
+        state.team,
+        state.swaps,
+        state.timeSlots,
+        timelineDurationSummary,
+    ]);
 
     const baseSortedSeeds = useMemo(() => {
         if (state.multiTrialResults && state.multiTrialResults.length > 0) {
@@ -1103,6 +1236,7 @@ export default function TeamTimelineApp() {
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
                 box: boxRef.current || undefined,
+                cookingSettings: state.cookingSettings,
                 analysisOptions: {
                     disabledPokemonIds: options.disabledPokemonIds,
                     keepDisabledPokemonTargetable: true,
@@ -2021,6 +2155,7 @@ export default function TeamTimelineApp() {
                 <Tabs value={state.activeTab} onChange={handleTabChange}>
                     <Tab label={t('TeamTimeline.tab team', 'チーム')} value="team" />
                     <Tab label={t('TeamTimeline.tab settings', '設定')} value="settings" />
+                    <Tab label={t('TeamTimeline.tab cooking', '料理')} value="cooking" />
                 </Tabs>
             </Box>
 
@@ -2046,7 +2181,7 @@ export default function TeamTimelineApp() {
 
                     <SwapSupplementBar
                         swapCount={state.swaps.length}
-                        swappedPokemonIdForms={swappedPokemonIdForms}
+                        swapSequences={swapSupplementSequences}
                         onClear={handleClearSwaps}
                     />
 
@@ -2118,6 +2253,7 @@ export default function TeamTimelineApp() {
                                         layoutMode="average"
                                         simulationDays={state.simulationConfig.simulationDays}
                                         valueMode={summaryValueMode}
+                                        averageCookingSummary={state.multiTrialAverageCookingSummary}
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.multiTrialAverageDailySummaries!}
@@ -2140,6 +2276,7 @@ export default function TeamTimelineApp() {
                                     valueMode={summaryValueMode}
                                     contributionMembers={appearingTimelineMembers}
                                     contributionResults={contributionResults}
+                                    contributionActiveMinutesByPokemonId={timelineDurationSummary.activeMinutesByPokemonId}
                                     contributionLoadingIds={contributionLoadingIds}
                                     contributionBatchLoading={contributionBatchLoading}
                                     contributionBatchProgress={contributionBatchProgress}
@@ -2195,7 +2332,10 @@ export default function TeamTimelineApp() {
                                     result={EMPTY_SIMULATION_RESULT}
                                     swaps={state.swaps}
                                     box={boxRef.current!}
+                                    bonusSettings={state.bonusSettings}
                                     onSwapClick={handleSwapClick}
+                                    onSwapSeriesMove={handleSwapSeriesMove}
+                                    onSwapRemoveClick={handleSwapRemoveRequest}
                                     onHeaderSlotClick={handleSlotClick}
                                     onOpenTimeSlotSettings={handleOpenTimeSlotSettings}
                                     showSummaryRows={false}
@@ -2234,6 +2374,28 @@ export default function TeamTimelineApp() {
                                             onSelect={handleSliderChange}
                                         />
                                     )}
+                                    <FormControlLabel
+                                        sx={{ m: 0, mb: '4px' }}
+                                        control={(
+                                            <Switch
+                                                checked={timelineDisplayMode === 'simple'}
+                                                onChange={handleTimelineDisplayModeChange}
+                                                size="small"
+                                                sx={{ mr: '4px' }}
+                                            />
+                                        )}
+                                        label={(
+                                            <Typography
+                                                sx={{
+                                                    fontSize: '11px',
+                                                    lineHeight: '13px',
+                                                    letterSpacing: '-0.4px',
+                                                }}
+                                            >
+                                                {t('TeamTimeline.timeline simple view', 'シンプル表示')}
+                                            </Typography>
+                                        )}
+                                    />
                                     <Box
                                         sx={{
                                             width: '100%',
@@ -2250,9 +2412,14 @@ export default function TeamTimelineApp() {
                                             result={state.simulationResult!}
                                             swaps={state.swaps}
                                             box={boxRef.current!}
+                                            bonusSettings={state.bonusSettings}
                                             onSwapClick={handleSwapClick}
+                                            onSwapSeriesMove={handleSwapSeriesMove}
+                                            onSwapRemoveClick={handleSwapRemoveRequest}
+                                            onHeaderSlotClick={handleSlotClick}
                                             onOpenTimeSlotSettings={handleOpenTimeSlotSettings}
                                             showSummaryRows={false}
+                                            displayMode={timelineDisplayMode}
                                         />
                                     </Box>
                                     <TeamSummaryRow
@@ -2262,6 +2429,7 @@ export default function TeamTimelineApp() {
                                         valueMode={summaryValueMode}
                                         showValueModeToggle={showSummaryValueToggle}
                                         onValueModeChange={handleSummaryValueModeChange}
+                                        cookingResult={state.simulationResult!.cookingResult}
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.simulationResult!.dailySummaries}
@@ -2294,6 +2462,7 @@ export default function TeamTimelineApp() {
                         syncWithIvParameter={state.syncWithIvParameter}
                         onSyncChange={handleSyncWithIvParameterChange}
                         onSettingsChange={handleBonusSettingsChange}
+                        cookingSimEnabled={state.cookingSettings.enabled}
                     />
                     {/* 就寝時げんき設定 */}
                     <Box sx={{ mb: 3, p: 2 }}>
@@ -2320,6 +2489,21 @@ export default function TeamTimelineApp() {
                 </Box>
             )}
 
+            {/* 料理タブ */}
+            {state.activeTab === 'cooking' && (
+                <Box
+                    sx={{
+                        width: '100%',
+                        maxWidth: isDesktop ? '960px' : '100%',
+                    }}
+                >
+                    <CookingSettingsPanel
+                        settings={state.cookingSettings}
+                        onChange={handleCookingSettingsChange}
+                    />
+                </Box>
+            )}
+
             {/* 既存: ボックス選択ダイアログ（チーム編成用） */}
             <BoxSelectDialog
                 open={state.boxSelectDialogOpen}
@@ -2335,7 +2519,6 @@ export default function TeamTimelineApp() {
                     box={boxRef.current}
                     onSelect={handleSwapPokemonSelect}
                     onClose={() => dispatch({ type: 'closeSwapDialog' })}
-                    onRemoveSwap={handleRemoveSwap}
                     onSelectNone={handleSwapSelectNone}
                 />
             )}
@@ -2346,8 +2529,17 @@ export default function TeamTimelineApp() {
                 pokemonName={getPendingPokemonName()}
                 pokemonIdForm={getPendingPokemonIdForm()}
                 defaultEnergy={100}
+                disableEnergySetting={disableSwapEnergySetting}
                 onConfirm={handleEnergyConfirm}
                 onCancel={handleEnergyCancel}
+            />
+            <SwapRemoveConfirmDialog
+                open={pendingSwapRemoval !== null}
+                showRepeatOption={pendingSwapRemoval?.hasFutureRepeat ?? false}
+                repeatChecked={removeFutureRepeatChecked}
+                onRepeatCheckedChange={setRemoveFutureRepeatChecked}
+                onCancel={handleSwapRemoveCancel}
+                onConfirm={handleSwapRemoveConfirm}
             />
             <ResimulationNoticeBar
                 open={showResimulationNotice}
