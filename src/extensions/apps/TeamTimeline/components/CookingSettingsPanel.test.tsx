@@ -361,6 +361,24 @@ describe('CookingSettingsPanel', () => {
         expect(within(ingredientArea).queryByText('とくせんリンゴ')).toBeNull();
     });
 
+    it('shows lock icon description notes under recipe list and initial ingredient total', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const recipeList = screen.getByTestId('recipe-level-list');
+        const recipeLockNote = screen.getByTestId('cooking-recipe-lock-note');
+        const recipeLockNoteIcon = screen.getByTestId('cooking-recipe-lock-note-icon');
+        const initialIngredientTotal = screen.getByTestId('cooking-initial-ingredients-total');
+        const extraIngredientLockNote = screen.getByTestId('cooking-extra-ingredient-lock-note');
+        const extraIngredientLockNoteIcon = screen.getByTestId('cooking-extra-ingredient-lock-note-icon');
+
+        expect(recipeLockNote.textContent).toContain('：その料理を作成しないようにする');
+        expect(extraIngredientLockNote.textContent).toContain('：追加食材として使用しないようにする');
+        expect(recipeLockNoteIcon.tagName.toLowerCase()).toBe('svg');
+        expect(extraIngredientLockNoteIcon.tagName.toLowerCase()).toBe('svg');
+        expect(recipeList.compareDocumentPosition(recipeLockNote) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(initialIngredientTotal.compareDocumentPosition(extraIngredientLockNote) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    });
+
     it('uses timeline-equivalent icon size in recipe ingredient summary', () => {
         render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
 

@@ -509,6 +509,17 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                             );
                         })}
                     </Box>
+                    <Typography
+                        variant="caption"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.2, color: '#666' }}
+                        data-testid="cooking-recipe-lock-note"
+                    >
+                        <LockOutlinedIcon
+                            sx={{ fontSize: '1.1rem', color: LOCK_ICON_OFF_COLOR }}
+                            data-testid="cooking-recipe-lock-note-icon"
+                        />
+                        ：その料理を作成しないようにする
+                    </Typography>
 
                     <Divider sx={{ my: 1.5 }} />
 
@@ -608,6 +619,17 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                         data-testid="cooking-initial-ingredients-total"
                     >
                         入力値合計: {initialIngredientTotal.toLocaleString()}
+                    </Typography>
+                    <Typography
+                        variant="caption"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.2, color: '#666' }}
+                        data-testid="cooking-extra-ingredient-lock-note"
+                    >
+                        <LockOutlinedIcon
+                            sx={{ fontSize: '1.1rem', color: LOCK_ICON_OFF_COLOR }}
+                            data-testid="cooking-extra-ingredient-lock-note-icon"
+                        />
+                        ：追加食材として使用しないようにする
                     </Typography>
                 </Box>
             )}
