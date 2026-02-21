@@ -43,6 +43,14 @@ describe('CookingResultRow', () => {
         expect(screen.getByText('translated:TeamTimeline.recipe specialAppleCurry')).toBeDefined();
     });
 
+    it('removes top dashed line and uses rounded corners on cooking row', () => {
+        render(<CookingResultRow event={EVENT} teamSize={5} />);
+
+        const row = screen.getByTestId('cooking-result-row-breakfast-1');
+        expect(row.getAttribute('data-top-divider')).toBe('off');
+        expect(row.getAttribute('data-corner-radius')).toBe('6');
+    });
+
     it('opens bag ingredient popover when clicking left cooking icon', () => {
         const event: CookingEventResult = {
             ...EVENT,

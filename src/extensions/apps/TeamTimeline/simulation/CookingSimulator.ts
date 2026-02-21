@@ -42,6 +42,7 @@ interface ExecuteMealCookingParams {
     tastyChanceAccumulated: number;
     fieldBonus: number;
     eventBonus: number;
+    disabledRecipes?: ReadonlySet<string>;
     random: SeededRandom;
     mealSlotId: string;
     mealType: MealType;
@@ -195,6 +196,9 @@ function usagesToCountMap(
  */
 export function planExtraIngredientsByEvent(
     events: readonly CookingEventResult[],
+    options?: {
+        excludedIngredientNames?: ReadonlySet<IngredientName>;
+    },
 ): readonly PlannedExtraIngredient[][] {
     if (events.length === 0) {
         return [];
@@ -245,6 +249,7 @@ export function planExtraIngredientsByEvent(
 
     const consumedPrefix: IngredientCountMap = new Map();
     const plan: PlannedExtraIngredient[][] = [];
+    const excludedIngredientNames = options?.excludedIngredientNames;
 
     for (let i = 0; i < events.length; i++) {
         const event = events[i];
@@ -262,6 +267,9 @@ export function planExtraIngredientsByEvent(
         for (const ingredientName of EXTRA_INGREDIENT_PRIORITY) {
             if (remainingPotCapacity <= BAG_COUNT_EPSILON) {
                 break;
+            }
+            if (excludedIngredientNames?.has(ingredientName)) {
+                continue;
             }
 
             const alreadyConsumed = consumedPrefix.get(ingredientName) ?? 0;
@@ -335,11 +343,16 @@ export function selectBestRecipe(
     recipeLevels: Record<string, number>,
     fieldBonus: number,
     eventBonus: number,
+    disabledRecipes?: ReadonlySet<string>,
 ): SelectedRecipe | null {
     const recipes = getRecipesByCategory(category);
     let bestResult: SelectedRecipe | null = null;
 
     for (const recipe of recipes) {
+        if (disabledRecipes?.has(recipe.name)) {
+            continue;
+        }
+
         // 食材総数が鍋容量以下であることを確認
         const totalIngredientCount = recipe.ingredients.reduce(
             (sum, ing) => sum + ing.count, 0,
@@ -486,6 +499,7 @@ export function executeMealCooking(params: ExecuteMealCookingParams): ExecuteMea
         tastyChanceAccumulated,
         fieldBonus,
         eventBonus,
+        disabledRecipes,
         random,
         mealSlotId,
         mealType,
@@ -497,7 +511,7 @@ export function executeMealCooking(params: ExecuteMealCookingParams): ExecuteMea
     const bagIngredientsBeforeCooking = createBagIngredientSnapshot(bag);
 
     const selected = selectBestRecipe(
-        category, bag, effectivePotCapacity, recipeLevels, fieldBonus, eventBonus,
+        category, bag, effectivePotCapacity, recipeLevels, fieldBonus, eventBonus, disabledRecipes,
     );
 
     // 作れるレシピがない場合はスキップ結果を返す

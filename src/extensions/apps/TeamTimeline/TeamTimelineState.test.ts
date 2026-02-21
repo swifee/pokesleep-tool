@@ -65,6 +65,8 @@ describe('teamTimelineReducer', () => {
         expect(state.syncWithIvParameter).toBe(true);
         expect(state.cookingSettings.basePotCapacity).toBe(81);
         expect(state.cookingSettings.recipeLevels).toEqual({});
+        expect(state.cookingSettings.disabledRecipes).toEqual({});
+        expect(state.cookingSettings.disabledExtraIngredients).toEqual({});
         expect(state.timeSlots).toEqual([
             { id: 'slot-1', time: '07:00', sleepState: 'wake', hasMeal: true },
             { id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: true },

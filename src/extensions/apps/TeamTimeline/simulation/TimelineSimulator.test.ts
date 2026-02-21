@@ -709,6 +709,8 @@ describe('TimelineSimulator', () => {
                     apple: 2,
                     milk: 2,
                 },
+                disabledRecipes: {},
+                disabledExtraIngredients: {},
             },
         });
 

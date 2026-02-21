@@ -8,17 +8,22 @@ import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
+import PokemonStrength from '../../../../util/PokemonStrength';
 import { TimeSlot, SimulationResult, PokemonSwap } from '../types/TimeSlotTypes';
+import { TimelineBonusSettings } from '../types/TimelineBonusSettingsTypes';
 import TimelineRow from './TimelineRow';
 import type {
   SwapCellCoordinate,
   SwapLongPressStartDetail,
   TimelineDisplayMode,
 } from './TimelineCell';
+import EpValue from './EpValue';
 import CookingResultRow from './CookingResultRow';
 import DailySummaryRow from './DailySummaryRow';
 import TeamSummaryRow from './TeamSummaryRow';
 import { buildExpandedTimeline } from '../utils/TimelineDayExpansion';
+import { buildStrengthParameterFromTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
+import { calculateBerryEP, calculateIngredientEP, DailySummaryBonusContext } from '../simulation/EnergyPointCalculator';
 
 interface TimelineTableProps {
   team: (PokemonBoxItem | null)[];
@@ -27,6 +32,7 @@ interface TimelineTableProps {
   result: SimulationResult;
   swaps: PokemonSwap[];
   box: PokemonBox;
+  bonusSettings?: TimelineBonusSettings;
   onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
   onSwapSeriesMove?: (
     fromSlotId: string,
@@ -62,6 +68,7 @@ const TimelineTable = React.memo(({
   result,
   swaps,
   box,
+  bonusSettings,
   onSwapClick,
   onSwapSeriesMove,
   onSwapRemoveClick,
@@ -107,6 +114,99 @@ const TimelineTable = React.memo(({
     return new Map<string, number>(entries);
   }, [expandedTimeline.dayBands]);
   const shouldShowFirstDayBand = simulationDays >= 2 && expandedTimeline.expandedSlots.length > 0;
+  const shouldShowDayEndEp = result.slotResults.size > 0;
+  const pokemonById = useMemo(() => {
+    const entries = new Map<number, PokemonBoxItem>();
+    for (const member of box.items) {
+      entries.set(member.id, member);
+    }
+    for (const member of team) {
+      if (member) {
+        entries.set(member.id, member);
+      }
+    }
+    return entries;
+  }, [box.items, team]);
+  const dailySummaryBonusByPokemonId = useMemo(() => {
+    if (!bonusSettings) {
+      return new Map<number, DailySummaryBonusContext>();
+    }
+    const strengthParameter = buildStrengthParameterFromTimelineBonusSettings(bonusSettings);
+    const entries: Array<readonly [number, DailySummaryBonusContext]> = [];
+    pokemonById.forEach((pokemon, pokemonId) => {
+      const strength = new PokemonStrength(pokemon.iv, strengthParameter);
+      entries.push([pokemonId, {
+        fieldBonus: bonusSettings.fieldBonus,
+        berryStrengthBonus: strength.berryStrengthBonus,
+        recipeBonus: bonusSettings.recipeBonus,
+        recipeLevel: bonusSettings.recipeLevel,
+        dishBonus: strength.bonusEffects.dish,
+      }]);
+    });
+    return new Map<number, DailySummaryBonusContext>(entries);
+  }, [bonusSettings, pokemonById]);
+  const dayEndEpByDayBandNumber = useMemo(() => {
+    const dayBandEp = new Map<number, number>();
+    if (expandedTimeline.expandedSlots.length === 0) {
+      return dayBandEp;
+    }
+
+    const cookingEpBySlotId = new Map<string, number>();
+    if (result.cookingResult) {
+      for (const event of result.cookingResult.events) {
+        cookingEpBySlotId.set(
+          event.mealSlotId,
+          (cookingEpBySlotId.get(event.mealSlotId) ?? 0) + event.cookingEP
+        );
+      }
+    }
+
+    let cumulativeEp = 0;
+    const shouldUseCookingTotals = result.cookingResult !== undefined;
+    for (const expandedSlot of expandedTimeline.expandedSlots) {
+      const slotResults = result.slotResults.get(expandedSlot.slot.id)
+        || result.slotResults.get(expandedSlot.originalSlotId)
+        || [];
+      for (const slotResult of slotResults) {
+        const pokemon = pokemonById.get(slotResult.pokemonId);
+        if (!pokemon) {
+          continue;
+        }
+        const bonusContext = bonusSettings
+          ? dailySummaryBonusByPokemonId.get(slotResult.pokemonId)
+          : undefined;
+        cumulativeEp += calculateBerryEP(pokemon, slotResult.berryCount, bonusContext);
+        if (!shouldUseCookingTotals) {
+          const allIngredients = slotResult.skillIngredients && slotResult.skillIngredients.length > 0
+            ? [...slotResult.ingredients, ...slotResult.skillIngredients]
+            : slotResult.ingredients;
+          cumulativeEp += calculateIngredientEP(allIngredients, bonusContext);
+        }
+        cumulativeEp += slotResult.directSkillEP;
+      }
+
+      if (shouldUseCookingTotals) {
+        cumulativeEp += cookingEpBySlotId.get(expandedSlot.slot.id)
+          ?? cookingEpBySlotId.get(expandedSlot.originalSlotId)
+          ?? 0;
+      }
+
+      const dayBandNumber = dayBandBySlotId.get(expandedSlot.slot.id);
+      if (dayBandNumber !== undefined) {
+        dayBandEp.set(dayBandNumber, Math.round(cumulativeEp));
+      }
+    }
+
+    return dayBandEp;
+  }, [
+    bonusSettings,
+    dailySummaryBonusByPokemonId,
+    dayBandBySlotId,
+    expandedTimeline.expandedSlots,
+    pokemonById,
+    result.cookingResult,
+    result.slotResults,
+  ]);
 
   const isSameSwapCell = useCallback((
     left: SwapCellCoordinate | null,
@@ -388,6 +488,36 @@ const TimelineTable = React.memo(({
     );
   };
 
+  const renderDayBandLabel = (dayNumber: number): React.ReactNode => {
+    const dayLabel = t('TeamTimeline.day label', '{{day}}日目', { day: dayNumber });
+    const daySuffix = t('TeamTimeline.day label suffix', '日目');
+    if (daySuffix.length > 0 && dayLabel.endsWith(daySuffix)) {
+      return (
+        <>
+          <span>{dayLabel.slice(0, dayLabel.length - daySuffix.length)}</span>
+          <span className="day-suffix">{daySuffix}</span>
+        </>
+      );
+    }
+    return dayLabel;
+  };
+
+  const renderDayBandRow = (dayNumber: number): React.ReactNode => (
+    <DayBandRow data-testid={`timeline-day-band-${dayNumber}`} $fitToViewport={fitToViewport}>
+      <DayBandLabelCell $fitToViewport={fitToViewport}>
+        {renderDayBandLabel(dayNumber)}
+      </DayBandLabelCell>
+      <DayBandSummaryCell>
+        {dayNumber > 1 && shouldShowDayEndEp && (
+          <>
+            {t('TeamTimeline.day end ep prefix', '{{day}}日目終了時: ', { day: dayNumber - 1 })}
+            <EpValue value={(dayEndEpByDayBandNumber.get(dayNumber) ?? 0).toLocaleString()} />
+          </>
+        )}
+      </DayBandSummaryCell>
+    </DayBandRow>
+  );
+
   return (
     <TableContainer
       $fitToViewport={fitToViewport}
@@ -429,9 +559,7 @@ const TimelineTable = React.memo(({
 
       <DataSection>
         {shouldShowFirstDayBand && (
-          <DayBandRow>
-            {t('TeamTimeline.day label', '{{day}}日目', { day: 1 })}
-          </DayBandRow>
+          renderDayBandRow(1)
         )}
         {expandedTimeline.expandedSlots.map((expandedSlot) => {
           const isFirstTimelineSlot = expandedSlot.dayIndex === 0 && expandedSlot.slotIndexInDay === 0;
@@ -479,9 +607,7 @@ const TimelineTable = React.memo(({
                   );
               })()}
               {dayBandNumber !== undefined && (
-                <DayBandRow>
-                  {t('TeamTimeline.day label', '{{day}}日目', { day: dayBandNumber })}
-                </DayBandRow>
+                renderDayBandRow(dayBandNumber)
               )}
             </React.Fragment>
           );
@@ -695,18 +821,51 @@ const DataSection = styled('div')({
   marginBottom: '5px',
 });
 
-const DayBandRow = styled('div')({
+const DayBandRow = styled('div')<{ $fitToViewport: boolean }>(({ $fitToViewport }) => ({
   margin: '0 0 1px',
-  padding: '2px 8px',
-  border: '1px solid #bbdefb',
+  width: $fitToViewport ? '100%' : 'max-content',
+  minWidth: $fitToViewport ? '0' : '540px',
+  boxShadow: 'inset 0 0 0 1px #bbdefb',
   borderRadius: '6px',
   backgroundColor: '#e3f2fd',
+  display: 'flex',
+  overflow: 'hidden',
+}));
+
+const DayBandLabelCell = styled('div')<{ $fitToViewport: boolean }>(({ $fitToViewport }) => ({
+  width: $fitToViewport ? 'var(--timeline-time-cell-width, 40px)' : '40px',
+  minWidth: $fitToViewport ? 'var(--timeline-time-cell-width, 40px)' : '40px',
+  flexShrink: 0,
+  boxSizing: 'border-box',
+  padding: '3px',
+  fontFamily: '"M PLUS 1p", sans-serif',
   color: '#0d47a1',
   fontSize: '10px',
   fontWeight: 700,
   textAlign: 'center',
   lineHeight: '13px',
   letterSpacing: '-0.5px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  '& .day-suffix': {
+    fontSize: '8px',
+    marginLeft: '1px',
+  },
+}));
+
+const DayBandSummaryCell = styled('div')({
+  minWidth: 0,
+  flex: 1,
+  borderLeft: '0.5px solid #e2e2e2',
+  padding: '2px 8px',
+  color: '#0d47a1',
+  fontSize: '10px',
+  fontWeight: 700,
+  lineHeight: '13px',
+  letterSpacing: '-0.5px',
+  display: 'flex',
+  alignItems: 'center',
 });
 
 const SwapDragGhost = styled('div')({

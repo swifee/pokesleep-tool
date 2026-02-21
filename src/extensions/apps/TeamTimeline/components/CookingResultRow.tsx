@@ -74,7 +74,11 @@ const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed'
     };
 
     return (
-        <RowContainer>
+        <RowContainer
+            data-testid={`cooking-result-row-${event.mealSlotId}`}
+            data-top-divider="off"
+            data-corner-radius="6"
+        >
             <LabelCell>
                 <LabelTriggerButton
                     type="button"
@@ -198,9 +202,10 @@ const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed'
 const RowContainer = styled('div')({
     display: 'flex',
     width: '100%',
-    borderTop: '0.5px dashed #e2e2e2',
     backgroundColor: '#fffef5',
     minHeight: '24px',
+    borderRadius: '6px',
+    overflow: 'hidden',
 });
 
 const LabelCell = styled('div')({

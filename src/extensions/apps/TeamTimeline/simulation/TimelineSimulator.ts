@@ -245,7 +245,14 @@ function applyExtraIngredientsToBaselineEvents(
     eventBonus: number,
 ): CookingEventResult[] {
     const bag = createIngredientBag(cookingSettings.initialIngredients);
-    const planByEvent = planExtraIngredientsByEvent(baselineEvents);
+    const excludedExtraIngredientSet = new Set<IngredientName>(
+        Object.entries(cookingSettings.disabledExtraIngredients)
+            .filter(([, disabled]) => disabled === true)
+            .map(([ingredientName]) => ingredientName as IngredientName),
+    );
+    const planByEvent = planExtraIngredientsByEvent(baselineEvents, {
+        excludedIngredientNames: excludedExtraIngredientSet,
+    });
     const bonusMultiplier = (1 + bonusSettings.fieldBonus / 100) * (1 + eventBonus / 100);
     const updatedEvents: CookingEventResult[] = [];
 
@@ -376,6 +383,11 @@ function runCookingPostProcess(
     const bag = createIngredientBag(cookingSettings.initialIngredients);
     const cookingRandom = new SeededRandom(baseSeed + 9999);
     const cookingEventBonus = 0; // TODO: extract event bonus from bonusSettings
+    const disabledRecipeSet = new Set<string>(
+        Object.entries(cookingSettings.disabledRecipes)
+            .filter(([, disabled]) => disabled === true)
+            .map(([recipeName]) => recipeName),
+    );
 
     let cookingPowerUpBonus = 0;
     let tastyChanceAccumulated = 0;
@@ -422,6 +434,7 @@ function runCookingPostProcess(
                 tastyChanceAccumulated,
                 fieldBonus: bonusSettings.fieldBonus,
                 eventBonus: cookingEventBonus,
+                disabledRecipes: disabledRecipeSet,
                 random: cookingRandom,
                 mealSlotId: slot.id,
                 mealType,

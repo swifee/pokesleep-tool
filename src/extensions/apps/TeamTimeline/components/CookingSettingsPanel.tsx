@@ -13,6 +13,7 @@ import {
     Button,
     Divider,
 } from '@mui/material';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import {
     CookingSimulationSettings,
     CookingCategory,
@@ -88,6 +89,23 @@ const STEP_BUTTON_SYMBOL_SX = {
     display: 'block',
     lineHeight: 1,
     transform: 'translate(0.4px, -0.6px)',
+};
+const LOCK_ICON_ON_COLOR = '#e89a00';
+const LOCK_ICON_OFF_COLOR = '#c8c8c8';
+const LOCK_TOGGLE_BUTTON_SX = {
+    minWidth: '1.5rem',
+    width: '1.5rem',
+    height: '1.5rem',
+    p: 0,
+    border: 'none',
+    boxShadow: 'none',
+    backgroundColor: 'transparent',
+    lineHeight: 1,
+    '&:hover': {
+        border: 'none',
+        boxShadow: 'none',
+        backgroundColor: 'transparent',
+    },
 };
 
 const POT_CAPACITY_OPTIONS = Array.from(
@@ -206,6 +224,28 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
         const current = settings.initialIngredients[ingredientName] ?? 0;
         handleIngredientChange(ingredientName, current + delta);
     }, [handleIngredientChange, settings.initialIngredients]);
+
+    const handleRecipeDisabledToggle = useCallback((recipeName: string) => {
+        const nextDisabledRecipes = {
+            ...settings.disabledRecipes,
+            [recipeName]: !(settings.disabledRecipes[recipeName] === true),
+        };
+        onChange({
+            ...settings,
+            disabledRecipes: nextDisabledRecipes,
+        });
+    }, [settings, onChange]);
+
+    const handleExtraIngredientDisabledToggle = useCallback((ingredientName: IngredientName) => {
+        const nextDisabledExtraIngredients = {
+            ...settings.disabledExtraIngredients,
+            [ingredientName]: !(settings.disabledExtraIngredients[ingredientName] === true),
+        };
+        onChange({
+            ...settings,
+            disabledExtraIngredients: nextDisabledExtraIngredients,
+        });
+    }, [settings, onChange]);
 
     const recipes = getRecipesByCategory(settings.category);
     const initialIngredientTotal = IngredientNames.reduce((sum, ingredientName) => {
@@ -330,7 +370,9 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                         }}
                         data-testid="recipe-level-list"
                     >
-                        {recipes.map((recipe) => (
+                        {recipes.map((recipe) => {
+                            const isRecipeDisabled = settings.disabledRecipes[recipe.name] === true;
+                            return (
                             <Box
                                 key={recipe.name}
                                 sx={{
@@ -404,12 +446,27 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                 <Box
                                     sx={{
                                         display: 'grid',
-                                        gridTemplateColumns: 'auto auto auto',
+                                        gridTemplateColumns: 'auto auto auto auto',
                                         alignItems: 'center',
                                         columnGap: 0.35,
                                     }}
                                     data-testid={`recipe-level-controls-${recipe.name}`}
                                 >
+                                    <Button
+                                        variant="text"
+                                        size="small"
+                                        disableElevation
+                                        sx={{
+                                            ...LOCK_TOGGLE_BUTTON_SX,
+                                            color: isRecipeDisabled ? LOCK_ICON_ON_COLOR : LOCK_ICON_OFF_COLOR,
+                                        }}
+                                        onClick={() => handleRecipeDisabledToggle(recipe.name)}
+                                        data-testid={`recipe-lock-toggle-${recipe.name}`}
+                                        title={t('TeamTimeline.cooking recipe lock', 'この料理を作成しない')}
+                                        aria-label={t('TeamTimeline.cooking recipe lock', 'この料理を作成しない')}
+                                    >
+                                        <LockOutlinedIcon sx={{ fontSize: '1.1rem' }} />
+                                    </Button>
                                     <Button
                                         variant="contained"
                                         size="small"
@@ -449,7 +506,8 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                     </Button>
                                 </Box>
                             </Box>
-                        ))}
+                            );
+                        })}
                     </Box>
 
                     <Divider sx={{ my: 1.5 }} />
@@ -467,7 +525,9 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                         }}
                         data-testid="cooking-initial-ingredients"
                     >
-                        {IngredientNames.map((ingredientName) => (
+                        {IngredientNames.map((ingredientName) => {
+                            const isExtraIngredientDisabled = settings.disabledExtraIngredients[ingredientName] === true;
+                            return (
                             <Box
                                 key={ingredientName}
                                 sx={{
@@ -476,6 +536,22 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                     fontSize: '0.85rem',
                                 }}
                             >
+                                <Button
+                                    variant="text"
+                                    size="small"
+                                    disableElevation
+                                    sx={{
+                                        ...LOCK_TOGGLE_BUTTON_SX,
+                                        color: isExtraIngredientDisabled ? LOCK_ICON_ON_COLOR : LOCK_ICON_OFF_COLOR,
+                                        mr: 0.3,
+                                    }}
+                                    onClick={() => handleExtraIngredientDisabledToggle(ingredientName)}
+                                    data-testid={`ingredient-extra-lock-toggle-${ingredientName}`}
+                                    title={t('TeamTimeline.cooking ingredient extra lock', '追加食材として使わない')}
+                                    aria-label={t('TeamTimeline.cooking ingredient extra lock', '追加食材として使わない')}
+                                >
+                                    <LockOutlinedIcon sx={{ fontSize: '1.1rem' }} />
+                                </Button>
                                 <Box
                                     sx={{ display: 'inline-flex', alignItems: 'center' }}
                                     data-testid={`ingredient-icon-${ingredientName}`}
@@ -523,7 +599,8 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                                     </Box>
                                 </Button>
                             </Box>
-                        ))}
+                            );
+                        })}
                     </Box>
                     <Typography
                         variant="caption"

@@ -157,13 +157,13 @@ describe('TeamTimelineApp timeline display mode', () => {
         const table = screen.getByTestId('timeline-table');
         expect(table.getAttribute('data-display-mode')).toBe('detailed');
 
-        fireEvent.click(screen.getByRole('checkbox', { name: 'シンプル表示' }));
+        fireEvent.click(screen.getByRole('switch', { name: 'シンプル表示' }));
         expect(table.getAttribute('data-display-mode')).toBe('simple');
     });
 
     it('does not persist display mode after remount', () => {
         const firstRender = render(<TeamTimelineApp />);
-        fireEvent.click(screen.getByRole('checkbox', { name: 'シンプル表示' }));
+        fireEvent.click(screen.getByRole('switch', { name: 'シンプル表示' }));
         expect(screen.getByTestId('timeline-table').getAttribute('data-display-mode')).toBe('simple');
 
         firstRender.unmount();
@@ -186,13 +186,13 @@ describe('TeamTimelineApp timeline display mode', () => {
         render(<TeamTimelineApp />);
 
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('false');
-        expect(screen.getByRole('checkbox', { name: 'シンプル表示' })).toBeDefined();
+        expect(screen.getByRole('switch', { name: 'シンプル表示' })).toBeDefined();
 
         fireEvent.click(screen.getByTestId('timeline-header-slot-click'));
         fireEvent.click(screen.getByTestId('team-box-select-first'));
 
         expect(screen.getByTestId('team-box-dialog').getAttribute('data-open')).toBe('false');
-        expect(screen.getByRole('checkbox', { name: 'シンプル表示' })).toBeDefined();
+        expect(screen.getByRole('switch', { name: 'シンプル表示' })).toBeDefined();
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
     });
 });

@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import PokemonBox, { type PokemonBoxItem } from '../../../../util/PokemonBox';
-import { SimulationResult, TimeSlot } from '../types/TimeSlotTypes';
+import { SimulationResult, TimeSlot, TimeSlotResult } from '../types/TimeSlotTypes';
 import TimelineTable from './TimelineTable';
 
 vi.mock('react-i18next', () => ({
@@ -13,7 +13,8 @@ vi.mock('react-i18next', () => ({
             }
             return defaultValue
                 .replace('{{day}}', String(options?.day ?? ''))
-                .replace('{{count}}', String(options?.count ?? ''));
+                .replace('{{count}}', String(options?.count ?? ''))
+                .replace('{{ep}}', String(options?.ep ?? ''));
         },
     }),
 }));
@@ -137,6 +138,50 @@ const HEADER_TEST_POKEMON: PokemonBoxItem = {
     filledNickname: () => 'ツボツボ',
 } as unknown as PokemonBoxItem;
 
+function createTimeSlotResult(base: Partial<TimeSlotResult>): TimeSlotResult {
+    return {
+        slotId: 'slot-1',
+        pokemonId: 1,
+        teamIndex: 0,
+        durationMinutes: 60,
+        isSleeping: false,
+        helpCount: 0,
+        skillTriggerCount: 0,
+        berryCount: 0,
+        ingredients: [],
+        skillIngredients: [],
+        energyStart: 50,
+        energyEnd: 50,
+        mealRecovery: 0,
+        skillRecovery: 0,
+        wakeRecovery: 0,
+        energyDecay: 0,
+        skillOverflowCount: 0,
+        overflowIngredients: [],
+        selfSkillRecovery: 0,
+        directSkillEP: 0,
+        moonlightGivenRecovery: 0,
+        moonlightReceivedRecovery: 0,
+        energizingCheerGivenRecovery: 0,
+        energizingCheerReceivedRecovery: 0,
+        energizingCheerEvents: [],
+        nuzzleTriggeredSkillEvents: [],
+        proxySkillEvents: [],
+        presentCandyCount: 0,
+        berryJuiceCount: 0,
+        supportSkillBerryCount: 0,
+        supportSkillBerryEP: 0,
+        supportHelpEvents: [],
+        stockpileStoreCount: 0,
+        stockpileCountAtStore: 0,
+        stockpileSpitCount: 0,
+        badDreamsHitCount: 0,
+        badDreamsTotalDamageGiven: 0,
+        badDreamsDamageTaken: 0,
+        ...base,
+    };
+}
+
 describe('TimelineTable', () => {
     it('hides text in the top-left corner cell only', () => {
         render(
@@ -186,9 +231,48 @@ describe('TimelineTable', () => {
             />
         );
 
-        expect(screen.getByText('1日目')).toBeDefined();
-        expect(screen.getByText('2日目')).toBeDefined();
-        expect(screen.getByText('3日目')).toBeDefined();
+        expect(screen.getByTestId('timeline-day-band-1').textContent).toBe('1日目');
+        expect(screen.getByTestId('timeline-day-band-2').textContent).toContain('2日目');
+        expect(screen.getByTestId('timeline-day-band-2').textContent).not.toContain('終了時');
+        expect(screen.getByTestId('timeline-day-band-3').textContent).toContain('3日目');
+        expect(screen.getByTestId('timeline-day-band-3').textContent).not.toContain('終了時');
+    });
+
+    it('computes actual cumulative EP for day-end bands', () => {
+        const testPokemon: PokemonBoxItem = {
+            id: 1,
+            iv: {
+                idForm: 25,
+                level: 1,
+                pokemon: { type: 'normal' },
+            },
+            filledNickname: () => 'テスト',
+        } as unknown as PokemonBoxItem;
+        const slotResults = new Map<string, TimeSlotResult[]>();
+        slotResults.set('wake__day0', [createTimeSlotResult({
+            slotId: 'wake__day0',
+            pokemonId: 1,
+            teamIndex: 0,
+            berryCount: 3,
+            directSkillEP: 16,
+        })]);
+        const result: SimulationResult = {
+            ...EMPTY_RESULT,
+            slotResults,
+        };
+
+        render(
+            <TimelineTable
+                team={[testPokemon, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={2}
+                result={result}
+                swaps={[]}
+                box={new PokemonBox([testPokemon])}
+            />
+        );
+
+        expect(screen.getByTestId('timeline-day-band-2').textContent).toContain('1日目終了時: 100 EP');
     });
 
     it('does not show day 1 band when simulation days is 1', () => {

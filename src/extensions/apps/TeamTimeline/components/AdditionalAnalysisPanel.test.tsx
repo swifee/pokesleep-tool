@@ -258,50 +258,29 @@ describe('AdditionalAnalysisPanel', () => {
         expect(props.onQuickModeChange).toHaveBeenCalledWith(false);
     });
 
-    it('runs each callback from buttons', () => {
+    it('runs section-level callbacks from buttons', () => {
         const { props } = renderPanel();
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
         fireEvent.click(screen.getAllByRole('button', { name: '一括計算' })[0]);
-        const contributionMemberButton = screen.getAllByRole('button').find((button) => {
-            const dataSx = button.getAttribute('data-sx') ?? '';
-            return dataSx.includes('"borderColor":"#7cb2f8"') && !dataSx.includes('"width":"110px"');
-        });
-        if (!contributionMemberButton) {
-            throw new Error('Contribution member button not found');
-        }
-        fireEvent.click(contributionMemberButton);
         fireEvent.click(screen.getAllByRole('button', { name: '一括計算' })[1]);
-        fireEvent.click(screen.getByRole('button', { name: 'チーム全体' }));
         const runButtons = screen.getAllByRole('button', { name: '計算' });
         fireEvent.click(runButtons[0]);
         fireEvent.click(runButtons[1]);
 
         expect(props.onRunContributionAll).toHaveBeenCalledTimes(1);
-        expect(props.onRunContribution).toHaveBeenCalledTimes(1);
         expect(props.onRunEnergySkillAll).toHaveBeenCalledTimes(1);
-        expect(props.onRunEnergySkillTeam).toHaveBeenCalledTimes(1);
         expect(props.onRunHelpingBonus).toHaveBeenCalledTimes(1);
         expect(props.onRunEnergyRecoveryBonus).toHaveBeenCalledTimes(1);
     });
 
-    it('shows team overall button only when two or more energy skill targets exist', () => {
-        const member = createPokemonBySkill('Charge Energy S');
-        renderPanel({
-            energySkillTargets: [
-                {
-                    pokemonId: member.id,
-                    pokemonName: member.iv.pokemonName,
-                    skillName: member.iv.pokemon.skill,
-                    category: 'self',
-                },
-            ],
-        });
+    it('does not show energy skill team overall button', () => {
+        renderPanel();
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
         expect(screen.queryByRole('button', { name: 'チーム全体' })).toBeNull();
     });
 
-    it('shows team overall metric when result exists', () => {
+    it('does not show energy skill team overall metric row even when result exists', () => {
         renderPanel({
             energySkillTeamResult: {
                 baseTeamEP: 2000,
@@ -311,7 +290,7 @@ describe('AdditionalAnalysisPanel', () => {
             },
         });
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
-        expect(document.body.textContent ?? '').toContain('チーム: 500 EP (25%)');
+        expect(document.body.textContent ?? '').not.toContain('チーム: 500 EP (25%)');
     });
 
     it('shows help tooltip on hover for each section title', () => {
@@ -342,26 +321,25 @@ describe('AdditionalAnalysisPanel', () => {
         expect(runAllButtons[1].getAttribute('data-sx')).toContain('"width":"110px"');
     });
 
-    it('uses fixed width for each energy skill member button', () => {
+    it('renders energy skill rows as text', () => {
         const { member1 } = renderPanel();
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
-        const memberButton = screen.getByRole('button', { name: member1.iv.pokemonName });
-        expect(memberButton.getAttribute('data-sx')).toContain('"width":"110px"');
+        expect(screen.queryByRole('button', { name: member1.iv.pokemonName })).toBeNull();
+        const content = document.body.textContent ?? '';
+        expect(content).toContain(member1.iv.pokemonName);
+        expect(content).toContain(member1.iv.pokemon.skill);
     });
 
-    it('keeps contribution member button white while idle', () => {
+    it('renders contribution rows as text', () => {
         renderPanel();
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
-        const memberButton = screen.getAllByRole('button').find((button) => (
-            button.getAttribute('data-sx')?.includes('"borderColor":"#7cb2f8"')
-        ));
-        expect(memberButton).toBeDefined();
-        expect(memberButton?.getAttribute('data-sx')).toContain('"background":"#fff"');
+        expect(document.body.textContent ?? '').toContain('pokemons.Rattata');
+        expect(screen.queryByRole('button', { name: 'pokemons.Rattata' })).toBeNull();
     });
 
-    it('uses simulation-style track color for contribution member button while loading', () => {
+    it('keeps contribution run-all button enabled while loading', () => {
         const member1 = createPokemonBySkill('Charge Energy S');
         renderPanel({
             contributionMembers: [member1],
@@ -371,11 +349,8 @@ describe('AdditionalAnalysisPanel', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
-        const memberButton = screen.getAllByRole('button').find((button) => (
-            button.getAttribute('data-sx')?.includes('"borderColor":"#7cb2f8"')
-        ));
-        expect(memberButton).toBeDefined();
-        expect(memberButton?.getAttribute('data-sx')).toContain('"background":"#94bffc"');
+        const runAllButtons = screen.getAllByRole('button', { name: '一括計算' });
+        expect((runAllButtons[0] as HTMLButtonElement).disabled).toBe(false);
     });
 
     it('keeps buttons enabled while loading so users can cancel', () => {
@@ -462,12 +437,14 @@ describe('AdditionalAnalysisPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
         const content = document.body.textContent ?? '';
-        expect(content).toMatch(/100 EP \(20%\)\s+24h換算:400 EP/);
+        expect(content).toContain('6H');
+        expect(content).toContain('100EP (20%)');
+        expect(content).toContain('24H換算 400EP');
         expect(content).toContain('自身: 50 EP (25%)');
         expect(content).toContain('チーム: 100 EP (20%)');
     });
 
-    it('shows 24h converted percent after all contribution results are available', () => {
+    it('shows 24H converted EP without percent', () => {
         const member1 = createPokemonBySkill('Charge Energy S');
         const member2 = createPokemonBySkill('Energy for Everyone S');
         renderPanel({
@@ -498,8 +475,13 @@ describe('AdditionalAnalysisPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
         const content = document.body.textContent ?? '';
-        expect(content).toMatch(/300 EP \(6%\)\s+24h換算:1,200 EP\(85.7%\)/);
-        expect(content).toMatch(/100 EP \(2%\)\s+24h換算:200 EP\(14.3%\)/);
+        expect(content).toContain('6H');
+        expect(content).toContain('300EP (6%)');
+        expect(content).toContain('24H換算 1,200EP');
+        expect(content).not.toContain(', 24H換算');
+        expect(content).toContain('12H');
+        expect(content).toContain('100EP (2%)');
+        expect(content).toContain('24H換算 200EP');
     });
 
     it('hides 24h conversion block when active minutes are zero', () => {
@@ -524,8 +506,10 @@ describe('AdditionalAnalysisPanel', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
-        expect(document.body.textContent ?? '').toContain('400 EP (10%)');
-        expect((document.body.textContent ?? '')).not.toContain('24h換算:');
+        const content = document.body.textContent ?? '';
+        expect(content).toContain('0H');
+        expect(content).toContain('400EP (10%)');
+        expect(content).not.toContain('24H換算');
     });
 
     it('renders energy skill label without derived/base suffix parentheses', () => {
@@ -563,7 +547,7 @@ describe('AdditionalAnalysisPanel', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: '追加分析' }));
 
-        expect(screen.getByText('Energy for Everyone S')).toBeDefined();
+        expect(document.body.textContent ?? '').toContain('Energy for Everyone S');
         expect(screen.queryByText('Energy for Everyone S (Berry Juice)')).toBeNull();
     });
 

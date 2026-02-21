@@ -4,6 +4,7 @@ import {
     computeInitialIngredientAttributedEP,
     executeMealCooking,
     planExtraIngredientsByEvent,
+    selectBestRecipe,
 } from './CookingSimulator';
 import SeededRandom from './SeededRandom';
 
@@ -111,6 +112,32 @@ describe('CookingSimulator', () => {
         expect(newTastyChanceAccumulated).toBe(0);
     });
 
+    it('does not cook recipes that are marked disabled', () => {
+        const bag = createIngredientBag({ apple: 7 });
+        const random = new SeededRandom(13579);
+
+        const selectedWithoutLock = selectBestRecipe('curry', bag, 7, {}, 0, 0);
+        expect(selectedWithoutLock?.recipe.name).toBe('specialAppleCurry');
+
+        const { result } = executeMealCooking({
+            bag: createIngredientBag({ apple: 7 }),
+            category: 'curry',
+            recipeLevels: {},
+            basePotCapacity: 7,
+            isGoodCampTicket: false,
+            cookingPowerUpBonus: 0,
+            tastyChanceAccumulated: 0,
+            fieldBonus: 0,
+            eventBonus: 0,
+            disabledRecipes: new Set(['specialAppleCurry']),
+            random,
+            mealSlotId: 'meal-disabled-recipe',
+            mealType: 'breakfast',
+        });
+
+        expect(result.recipeName).toBeNull();
+    });
+
     it('plans extra ingredients with future-time constraints', () => {
         const plan = planExtraIngredientsByEvent([
             {
@@ -193,6 +220,38 @@ describe('CookingSimulator', () => {
         ]);
 
         expect(plan[0]?.[0]?.name).toBe('mushroom');
+        expect(plan[0]?.[0]?.count).toBe(3);
+    });
+
+    it('excludes locked ingredients from extra allocation', () => {
+        const plan = planExtraIngredientsByEvent(
+            [
+                {
+                    mealSlotId: 'slot-1',
+                    mealType: 'breakfast',
+                    recipeName: 'recipeA',
+                    isGreatSuccess: false,
+                    cookingEP: 100,
+                    eBase: 100,
+                    eDisplay: 100,
+                    eFinal: 100,
+                    ingredientsUsed: [],
+                    remainingPotCapacity: 3,
+                    effectivePotCapacity: 20,
+                    tastyChancePercent: 10,
+                    cookingPowerUpBonusUsed: 0,
+                    bagIngredientsBeforeCooking: [
+                        { name: 'apple', count: 5 },
+                        { name: 'mushroom', count: 5 },
+                    ],
+                },
+            ],
+            {
+                excludedIngredientNames: new Set(['mushroom' as const]),
+            },
+        );
+
+        expect(plan[0]?.[0]?.name).toBe('apple');
         expect(plan[0]?.[0]?.count).toBe(3);
     });
 

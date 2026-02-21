@@ -91,11 +91,42 @@ function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
         }
     }
 
+    // Validate disabledRecipes is object with boolean values
+    const disabledRecipes: Record<string, boolean> = {};
+    if (typeof obj.disabledRecipes === 'object' && obj.disabledRecipes !== null && !Array.isArray(obj.disabledRecipes)) {
+        const recipes = obj.disabledRecipes as Record<string, unknown>;
+        for (const [key, value] of Object.entries(recipes)) {
+            if (typeof value === 'boolean') {
+                disabledRecipes[key] = value;
+            }
+        }
+    }
+
+    // Validate disabledExtraIngredients is object with ingredientName->boolean values
+    const disabledExtraIngredients: Partial<Record<IngredientName, boolean>> = {};
+    if (
+        typeof obj.disabledExtraIngredients === 'object'
+        && obj.disabledExtraIngredients !== null
+        && !Array.isArray(obj.disabledExtraIngredients)
+    ) {
+        const ingredientLocks = obj.disabledExtraIngredients as Record<string, unknown>;
+        for (const [key, value] of Object.entries(ingredientLocks)) {
+            if (
+                IngredientNames.includes(key as IngredientName)
+                && typeof value === 'boolean'
+            ) {
+                disabledExtraIngredients[key as IngredientName] = value;
+            }
+        }
+    }
+
     return {
         enabled,
         category,
         recipeLevels,
         basePotCapacity,
         initialIngredients,
+        disabledRecipes,
+        disabledExtraIngredients,
     };
 }

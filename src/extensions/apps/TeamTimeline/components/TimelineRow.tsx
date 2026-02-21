@@ -165,7 +165,7 @@ const TimelineRow = React.memo(({
 
     return (
         <StyledRow $fitToViewport={fitToViewport}>
-            <TimeInfoCell $fitToViewport={fitToViewport}>
+            <TimeInfoCell $fitToViewport={fitToViewport} data-right-divider="off">
                 <div className="time">{slot.time}</div>
                 {displayMode !== 'simple' && durationMinutes > 0 && (
                     <div className="duration">{formatDuration(durationMinutes)}</div>
@@ -256,7 +256,6 @@ const TimeInfoCell = styled('div')<{
     boxSizing: 'border-box',
     padding: '3px',
     fontFamily: '"M PLUS 1p", sans-serif',
-    borderRight: '0.5px solid #e2e2e2',
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',

@@ -103,6 +103,15 @@ function formatContributionMetric(
     return `${formatContributionNumber(modeAdjustedDeltaEP)} EP (${formatContributionPercent(reversedDeltaPercent)})`;
 }
 
+function formatContributionMetricCompact(
+    deltaEP: number,
+    deltaPercent: number | null,
+    valueMode: SummaryValueMode,
+    simulationDays: number,
+): string {
+    return formatContributionMetric(deltaEP, deltaPercent, valueMode, simulationDays).replace(' EP (', 'EP (');
+}
+
 function getModeAdjustedContributionEP(
     deltaEP: number,
     valueMode: SummaryValueMode,
@@ -128,6 +137,16 @@ function convertTo24hContributionEP(
         return null;
     }
     return modeAdjustedContributionEP * (1440 / activeMinutes);
+}
+
+function formatContributionActiveHours(activeMinutes: number): string {
+    if (!Number.isFinite(activeMinutes) || activeMinutes <= 0) {
+        return '0H';
+    }
+    const hours = activeMinutes / 60;
+    const rounded = Math.round(hours * 10) / 10;
+    const formatted = Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
+    return `${formatted}H`;
 }
 
 function formatEnergySkillDisplayName(skillLabel: string): string {
@@ -307,24 +326,14 @@ const AdditionalAnalysisPanel = React.memo(({
     contributionMembers,
     contributionResults,
     contributionActiveMinutesByPokemonId,
-    contributionLoadingIds,
     contributionBatchLoading,
     contributionBatchProgress,
-    contributionProgressById,
-    onRunContribution,
     onRunContributionAll,
     energySkillTargets,
     energySkillResults,
-    energySkillLoadingIds,
     energySkillBatchLoading,
     energySkillBatchProgress,
-    energySkillProgressById,
-    energySkillTeamResult,
-    energySkillTeamLoading,
-    energySkillTeamProgress,
-    onRunEnergySkill,
     onRunEnergySkillAll,
-    onRunEnergySkillTeam,
     hasHelpingBonusMember,
     helpingBonusResult,
     helpingBonusLoading,
@@ -388,15 +397,6 @@ const AdditionalAnalysisPanel = React.memo(({
             };
         })
     ), [energySkillTargets, energySkillResults, t, resolvedValueMode, simulationDays]);
-    const showEnergySkillTeamRow = energySkillTargets.length >= 2;
-    const energySkillTeamMetric = energySkillTeamResult
-        ? `${t('TeamTimeline.analysis team label', 'チーム')}: ${formatContributionMetric(
-            energySkillTeamResult.teamDeltaEP,
-            energySkillTeamResult.teamDeltaPercent,
-            resolvedValueMode,
-            simulationDays
-        )}`
-        : '';
     const contribution24hEpByPokemonId = React.useMemo(() => {
         const map = new Map<number, number>();
         contributionMembers.forEach((member) => {
@@ -432,19 +432,6 @@ const AdditionalAnalysisPanel = React.memo(({
         resolvedValueMode,
         simulationDays,
     ]);
-    const areAllContributionMembersResolved = React.useMemo(
-        () => contributionMembers.every(member => contributionResults.has(member.id)),
-        [contributionMembers, contributionResults]
-    );
-    const totalContribution24hEP = React.useMemo(
-        () => Array.from(contribution24hEpByPokemonId.values()).reduce((sum, value) => sum + value, 0),
-        [contribution24hEpByPokemonId]
-    );
-    const shouldShowContribution24hPercent = (
-        areAllContributionMembersResolved
-        && Number.isFinite(totalContribution24hEP)
-        && totalContribution24hEP !== 0
-    );
 
     return (
         <Box sx={{ mt: '18px' }} data-testid="additional-analysis-panel">
@@ -521,67 +508,68 @@ const AdditionalAnalysisPanel = React.memo(({
                                 </Button>
                                 <ResultCell />
                             </Box>
-                            {contributionMembers.map((member) => {
-                                const result = contributionResults.get(member.id);
-                                const progress = contributionProgressById.get(member.id) ?? 0;
-                                const isBatchItemLoading = contributionBatchLoading && progress > 0 && progress < 100;
-                                const keepFilledWhenCompleted = contributionBatchLoading && progress >= 100;
-                                const isLoading = contributionLoadingIds.has(member.id) || isBatchItemLoading;
-                                const converted24hEP = contribution24hEpByPokemonId.get(member.id) ?? null;
-                                const contribution24hLabel = t('TeamTimeline.analysis contribution 24h label', '24h換算');
-                                const converted24hPercent = (
-                                    converted24hEP === null || !shouldShowContribution24hPercent
-                                )
-                                    ? null
-                                    : (converted24hEP / totalContribution24hEP) * 100;
-                                const contribution24hMetric = converted24hEP === null
-                                    ? ''
-                                    : `${contribution24hLabel}:${formatContributionNumber(converted24hEP)} EP${
-                                        converted24hPercent === null
-                                            ? ''
-                                            : `(${formatContributionPercent(converted24hPercent)})`
-                                    }`;
-                                return (
-                                    <Box
-                                        key={`contribution-row-${member.id}`}
-                                        sx={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'auto 1fr',
-                                            columnGap: '8px',
-                                            alignItems: 'center',
-                                        }}
-                                    >
-                                        <Button
-                                            variant="outlined"
-                                            size="small"
-                                            onClick={() => onRunContribution(member)}
-                                            aria-valuemin={0}
-                                            aria-valuemax={100}
-                                            aria-valuenow={isLoading ? progress : undefined}
-                                            sx={actionButtonSx(isLoading, true, progress, keepFilledWhenCompleted)}
-                                        >
-                                            <span className="button-label">
+                            <Box
+                                sx={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'max-content max-content max-content max-content',
+                                    columnGap: '6px',
+                                    rowGap: '4px',
+                                    alignItems: 'start',
+                                    px: '8px',
+                                    width: '100%',
+                                    overflowX: 'auto',
+                                }}
+                            >
+                                {contributionMembers.map((member) => {
+                                    const result = contributionResults.get(member.id);
+                                    const activeMinutes = contributionActiveMinutesByPokemonId.get(member.id) ?? 0;
+                                    const modeAdjustedActiveMinutes = getModeAdjustedActiveMinutes(
+                                        activeMinutes,
+                                        resolvedValueMode,
+                                        simulationDays
+                                    );
+                                    const activeHoursLabel = formatContributionActiveHours(modeAdjustedActiveMinutes);
+                                    const converted24hEP = contribution24hEpByPokemonId.get(member.id) ?? null;
+                                    const contribution24hLabel = t('TeamTimeline.analysis contribution 24h uppercase label', '24H換算');
+                                    const contribution24hMetric = converted24hEP === null
+                                        ? ''
+                                        : `${contribution24hLabel} ${formatContributionNumber(converted24hEP)}EP`;
+                                    const contributionMetric = result
+                                        ? `${formatContributionMetricCompact(
+                                            result.deltaEP,
+                                            result.deltaPercent,
+                                            resolvedValueMode,
+                                            simulationDays
+                                        )}`
+                                        : '';
+                                    return (
+                                        <React.Fragment key={`contribution-row-${member.id}`}>
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
                                                 {member.filledNickname(t)}
-                                            </span>
-                                        </Button>
-                                        <ResultCell>
-                                            {result && (
-                                                <Typography sx={{ fontSize: '12px' }}>
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
+                                                {result ? activeHoursLabel : ''}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
+                                                {result && (
                                                     <EpText
-                                                        text={`${formatContributionMetric(
-                                                            result.deltaEP,
-                                                            result.deltaPercent,
-                                                            resolvedValueMode,
-                                                            simulationDays
-                                                        )}${contribution24hMetric ? `  ${contribution24hMetric}` : ''}`}
+                                                        text={contributionMetric}
                                                         keyPrefix={`contribution-metric-${member.id}`}
                                                     />
-                                                </Typography>
-                                            )}
-                                        </ResultCell>
-                                    </Box>
-                                );
-                            })}
+                                                )}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
+                                                {result && contribution24hMetric && (
+                                                    <EpText
+                                                        text={contribution24hMetric}
+                                                        keyPrefix={`contribution-24h-${member.id}`}
+                                                    />
+                                                )}
+                                            </Typography>
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </Box>
                         </Box>
                         </Box>
 
@@ -605,132 +593,69 @@ const AdditionalAnalysisPanel = React.memo(({
                                 onClose={() => closeHelp('energySkill')}
                                 onToggle={() => toggleHelp('energySkill')}
                             />
-                        <Box
-                            sx={{
-                                display: 'grid',
-                                gridTemplateColumns: {
-                                    xs: '110px minmax(0, 1fr)',
-                                    md: 'max-content max-content max-content max-content',
-                                },
-                                columnGap: '8px',
-                                rowGap: '4px',
-                                alignItems: 'center',
-                            }}
-                        >
-                            <Button
-                                variant="contained"
-                                size="small"
-                                disabled={energySkillTargets.length === 0}
-                                onClick={onRunEnergySkillAll}
-                                aria-valuemin={0}
-                                aria-valuemax={100}
-                                aria-valuenow={energySkillBatchLoading ? energySkillBatchProgress : undefined}
-                                sx={fixedActionButtonSx(energySkillBatchLoading, false, energySkillBatchProgress)}
-                            >
-                                <span className="button-label">
-                                    {t('TeamTimeline.analysis run all', '一括計算')}
-                                </span>
-                            </Button>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: '8px', alignItems: 'center' }}>
+                                <Button
+                                    variant="contained"
+                                    size="small"
+                                    disabled={energySkillTargets.length === 0}
+                                    onClick={onRunEnergySkillAll}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={energySkillBatchLoading ? energySkillBatchProgress : undefined}
+                                    sx={fixedActionButtonSx(energySkillBatchLoading, false, energySkillBatchProgress)}
+                                >
+                                    <span className="button-label">
+                                        {t('TeamTimeline.analysis run all', '一括計算')}
+                                    </span>
+                                </Button>
+                                <ResultCell>
+                                    {energySkillTargets.length === 0 && (
+                                        <Typography sx={{ fontSize: '12px', color: 'text.secondary' }}>
+                                            {t(
+                                                'TeamTimeline.analysis no energy skill target',
+                                                'げんき変動スキルを持つメンバーがいません'
+                                            )}
+                                        </Typography>
+                                    )}
+                                </ResultCell>
+                            </Box>
                             <Box
                                 sx={{
-                                    minHeight: '28px',
-                                    display: 'flex',
-                                    alignItems: 'center',
+                                    display: 'grid',
+                                    gridTemplateColumns: 'max-content max-content max-content max-content',
+                                    columnGap: '6px',
+                                    rowGap: '4px',
+                                    alignItems: 'start',
                                     px: '8px',
                                     width: '100%',
-                                    gridColumn: { xs: '2', md: '2 / span 3' },
+                                    overflowX: 'auto',
                                 }}
                             >
-                                {energySkillTargets.length === 0 && (
-                                    <Typography sx={{ fontSize: '12px', color: 'text.secondary' }}>
-                                        {t(
-                                            'TeamTimeline.analysis no energy skill target',
-                                            'げんき変動スキルを持つメンバーがいません'
-                                        )}
-                                    </Typography>
-                                )}
-                            </Box>
-                            {energySkillDisplayRows.map((row) => {
-                                const { target, result, skillLabel, selfMetric, teamMetric } = row;
-                                const progress = energySkillProgressById.get(target.pokemonId) ?? 0;
-                                const isBatchItemLoading = energySkillBatchLoading && progress > 0 && progress < 100;
-                                const keepFilledWhenCompleted = energySkillBatchLoading && progress >= 100;
-                                const isLoading = energySkillLoadingIds.has(target.pokemonId) || isBatchItemLoading;
-                                return (
-                                    <React.Fragment key={`energy-row-${target.pokemonId}`}>
-                                        <Button
-                                            variant="outlined"
-                                            size="small"
-                                            onClick={() => onRunEnergySkill(target)}
-                                            aria-valuemin={0}
-                                            aria-valuemax={100}
-                                            aria-valuenow={isLoading ? progress : undefined}
-                                            sx={fixedActionButtonSx(isLoading, true, progress, keepFilledWhenCompleted)}
-                                        >
-                                            <span className="button-label">
+                                {energySkillDisplayRows.map((row) => {
+                                    const { target, result, skillLabel, selfMetric, teamMetric } = row;
+                                    return (
+                                        <React.Fragment key={`energy-row-${target.pokemonId}`}>
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
                                                 {target.pokemonName}
-                                            </span>
-                                        </Button>
-                                        <Box
-                                            sx={{
-                                                gridColumn: { xs: '2', md: '2 / span 3' },
-                                                minWidth: 0,
-                                                display: result ? 'grid' : 'block',
-                                                gridTemplateColumns: { xs: '1fr', md: 'max-content max-content max-content' },
-                                                columnGap: '8px',
-                                                rowGap: '2px',
-                                                alignItems: 'center',
-                                            }}
-                                        >
-                                            {result && (
-                                                <>
-                                                    <Typography sx={{ fontSize: '11px', lineHeight: '14px', minWidth: 0 }}>
-                                                        {skillLabel}
-                                                    </Typography>
-                                                    <Typography sx={{ fontSize: '12px', minWidth: 0 }}>
-                                                        <EpText text={selfMetric} keyPrefix={`energy-self-${target.pokemonId}`} />
-                                                    </Typography>
-                                                    <Typography sx={{ fontSize: '12px', minWidth: 0 }}>
-                                                        <EpText text={teamMetric} keyPrefix={`energy-team-${target.pokemonId}`} />
-                                                    </Typography>
-                                                </>
-                                            )}
-                                        </Box>
-                                    </React.Fragment>
-                                );
-                            })}
-                            {showEnergySkillTeamRow && (
-                                <React.Fragment key="energy-row-team-overall">
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        onClick={onRunEnergySkillTeam}
-                                        aria-valuemin={0}
-                                        aria-valuemax={100}
-                                        aria-valuenow={energySkillTeamLoading ? energySkillTeamProgress : undefined}
-                                        sx={fixedActionButtonSx(energySkillTeamLoading, true, energySkillTeamProgress)}
-                                    >
-                                        <span className="button-label">
-                                            {t('TeamTimeline.analysis energy skill team overall', 'チーム全体')}
-                                        </span>
-                                    </Button>
-                                    <Box
-                                        sx={{
-                                            gridColumn: { xs: '2', md: '2 / span 3' },
-                                            minWidth: 0,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            minHeight: '28px',
-                                        }}
-                                    >
-                                        {energySkillTeamResult && (
-                                            <Typography sx={{ fontSize: '12px', minWidth: 0 }}>
-                                                <EpText text={energySkillTeamMetric} keyPrefix="energy-team-overall" />
                                             </Typography>
-                                        )}
-                                    </Box>
-                                </React.Fragment>
-                            )}
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
+                                                {skillLabel}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
+                                                {result && selfMetric && (
+                                                    <EpText text={selfMetric} keyPrefix={`energy-self-${target.pokemonId}`} />
+                                                )}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '12px', whiteSpace: 'nowrap', alignSelf: 'start' }}>
+                                                {result && teamMetric && (
+                                                    <EpText text={teamMetric} keyPrefix={`energy-team-${target.pokemonId}`} />
+                                                )}
+                                            </Typography>
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </Box>
                         </Box>
                         </Box>
 

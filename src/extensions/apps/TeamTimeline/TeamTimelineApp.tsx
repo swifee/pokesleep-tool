@@ -9,7 +9,7 @@ import {
     useMediaQuery,
     useTheme,
     FormControlLabel,
-    Checkbox,
+    Switch,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PokemonBox, { PokemonBoxItem } from '../../../util/PokemonBox';
@@ -2332,6 +2332,7 @@ export default function TeamTimelineApp() {
                                     result={EMPTY_SIMULATION_RESULT}
                                     swaps={state.swaps}
                                     box={boxRef.current!}
+                                    bonusSettings={state.bonusSettings}
                                     onSwapClick={handleSwapClick}
                                     onSwapSeriesMove={handleSwapSeriesMove}
                                     onSwapRemoveClick={handleSwapRemoveRequest}
@@ -2376,11 +2377,11 @@ export default function TeamTimelineApp() {
                                     <FormControlLabel
                                         sx={{ m: 0, mb: '4px' }}
                                         control={(
-                                            <Checkbox
+                                            <Switch
                                                 checked={timelineDisplayMode === 'simple'}
                                                 onChange={handleTimelineDisplayModeChange}
                                                 size="small"
-                                                sx={{ p: 0, mr: '4px', color: '#9e9e9e', '&.Mui-checked': { color: '#62d540' } }}
+                                                sx={{ mr: '4px' }}
                                             />
                                         )}
                                         label={(
@@ -2411,6 +2412,7 @@ export default function TeamTimelineApp() {
                                             result={state.simulationResult!}
                                             swaps={state.swaps}
                                             box={boxRef.current!}
+                                            bonusSettings={state.bonusSettings}
                                             onSwapClick={handleSwapClick}
                                             onSwapSeriesMove={handleSwapSeriesMove}
                                             onSwapRemoveClick={handleSwapRemoveRequest}

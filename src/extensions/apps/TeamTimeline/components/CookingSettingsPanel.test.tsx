@@ -189,6 +189,8 @@ function createSettings(overrides?: Partial<CookingSimulationSettings>): Cooking
         recipeLevels: { megaStew: 50, lightSalad: 50, sweetDrink: 50 },
         basePotCapacity: 81,
         initialIngredients: { apple: 30, mushroom: 24, egg: 600 },
+        disabledRecipes: {},
+        disabledExtraIngredients: {},
         ...overrides,
     };
 }
@@ -198,6 +200,8 @@ describe('CookingSettingsPanel', () => {
         const defaults = createDefaultCookingSettings();
         expect(defaults.basePotCapacity).toBe(81);
         expect(defaults.recipeLevels).toEqual({});
+        expect(defaults.disabledRecipes).toEqual({});
+        expect(defaults.disabledExtraIngredients).toEqual({});
     });
 
     it('renders pot capacity as 12-99 / step 3 select and changes category via tabs', () => {
@@ -254,6 +258,16 @@ describe('CookingSettingsPanel', () => {
         }));
     });
 
+    it('toggles recipe lock via lock icon button', () => {
+        const onChange = vi.fn();
+        render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
+
+        fireEvent.click(screen.getByTestId('recipe-lock-toggle-megaStew'));
+        expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+            disabledRecipes: expect.objectContaining({ megaStew: true }),
+        }));
+    });
+
     it('steps initial ingredient count by 5 using minus/plus buttons', () => {
         const onChange = vi.fn();
         render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
@@ -266,6 +280,16 @@ describe('CookingSettingsPanel', () => {
         fireEvent.click(screen.getByTestId('ingredient-increment-apple'));
         expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
             initialIngredients: expect.objectContaining({ apple: 35 }),
+        }));
+    });
+
+    it('toggles extra ingredient lock via lock icon button', () => {
+        const onChange = vi.fn();
+        render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
+
+        fireEvent.click(screen.getByTestId('ingredient-extra-lock-toggle-apple'));
+        expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+            disabledExtraIngredients: expect.objectContaining({ apple: true }),
         }));
     });
 
@@ -290,7 +314,7 @@ describe('CookingSettingsPanel', () => {
         expect(recipeListSx).toContain('"maxWidth":"100%"');
         expect(recipeRowSx).toContain('"display":"grid"');
         expect(recipeRowSx).toContain('"gridTemplateColumns":"minmax(0, 1fr) auto"');
-        expect(recipeControlsSx).toContain('"gridTemplateColumns":"auto auto auto"');
+        expect(recipeControlsSx).toContain('"gridTemplateColumns":"auto auto auto auto"');
     });
 
     it('centers numeric text input values', () => {

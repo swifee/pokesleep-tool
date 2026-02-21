@@ -78,6 +78,19 @@ describe('TimelineRow label rendering', () => {
 
         expect(screen.getByTestId('timeline-row-label-sleep')).toBeDefined();
     });
+
+    it('does not render a right border on the time cell', () => {
+        renderRow({
+            id: 'slot-no-divider',
+            time: '12:00',
+            sleepState: 'none',
+            hasMeal: false,
+        });
+
+        const timeCell = screen.getByText('12:00').closest('[data-right-divider]');
+        expect(timeCell).toBeTruthy();
+        expect((timeCell as HTMLElement).getAttribute('data-right-divider')).toBe('off');
+    });
 });
 
 describe('TimelineRow swap rendering', () => {

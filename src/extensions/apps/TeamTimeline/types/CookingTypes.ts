@@ -28,6 +28,10 @@ export interface CookingSimulationSettings {
     readonly basePotCapacity: number;
     /** ユーザー設定の初期食材: ingredientName -> count */
     readonly initialIngredients: Readonly<Partial<Record<IngredientName, number>>>;
+    /** 作成しないレシピ: recipeName -> disabled */
+    readonly disabledRecipes: Readonly<Record<string, boolean>>;
+    /** 鍋の追加食材として使わない食材: ingredientName -> disabled */
+    readonly disabledExtraIngredients: Readonly<Partial<Record<IngredientName, boolean>>>;
 }
 
 /** バッグ内の食材エントリ(シミュレーション中のランタイム状態) */
@@ -178,5 +182,7 @@ export function createDefaultCookingSettings(): CookingSimulationSettings {
         recipeLevels: {},
         basePotCapacity: DEFAULT_POT_CAPACITY,
         initialIngredients: {},
+        disabledRecipes: {},
+        disabledExtraIngredients: {},
     };
 }
