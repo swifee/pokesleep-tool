@@ -1,7 +1,13 @@
 import React from 'react';
 import { styled } from '@mui/system';
 import { useTranslation } from 'react-i18next';
-import { TimeSlot, TimeSlotResult, PokemonSwap, SWAP_NONE_POKEMON_ID } from '../types/TimeSlotTypes';
+import {
+    TimeSlot,
+    TimeSlotResult,
+    PokemonSwap,
+    SWAP_NONE_POKEMON_ID,
+    NoCollectCellSetting,
+} from '../types/TimeSlotTypes';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineCell from './TimelineCell';
 import type {
@@ -21,8 +27,10 @@ interface TimelineRowProps {
     results: TimeSlotResult[];
     team: (PokemonBoxItem | null)[];
     swaps: PokemonSwap[];
+    noCollectCells?: NoCollectCellSetting[];
     box: PokemonBox;
     onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
+    onNoCollectToggle?: (slotId: string, teamIndex: number, dayIndex: number) => void;
     onSwapRemoveClick?: (slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => void;
     isFirstSlot?: boolean;
     compactEmptyCells?: boolean;
@@ -53,8 +61,10 @@ const TimelineRow = React.memo(({
     results,
     team,
     swaps,
+    noCollectCells = [],
     box,
     onSwapClick,
+    onNoCollectToggle,
     onSwapRemoveClick,
     isFirstSlot,
     compactEmptyCells = false,
@@ -176,6 +186,13 @@ const TimelineRow = React.memo(({
             {team.map((item, index) => {
                 const result = resultMap.get(index) ?? null;
                 const { hasSwap, swappedPokemonName, swappedPokemonId, removable } = getSwapInfo(originalSlotId, index);
+                const hasNoCollectSetting = noCollectCells.some(
+                    (cell) =>
+                        cell.dayIndex === dayIndex &&
+                        cell.slotId === originalSlotId &&
+                        cell.teamSlotIndex === index
+                );
+                const noCollectEnabled = !hasSwap && hasNoCollectSetting;
                 const resultPokemon = result ? box.getById(result.pokemonId) : null;
                 const latestPriorSwap = getLatestPriorSwap(index);
                 const priorSwapPokemonIdForm =
@@ -213,6 +230,8 @@ const TimelineRow = React.memo(({
                         hasSwap={hasSwap}
                         swappedPokemonName={swappedPokemonName}
                         onSwapClick={() => onSwapClick?.(originalSlotId, index, dayIndex)}
+                        noCollectEnabled={noCollectEnabled}
+                        onNoCollectToggle={() => onNoCollectToggle?.(originalSlotId, index, dayIndex)}
                         onRemoveSwapClick={removable && swappedPokemonId !== undefined
                             ? () => onSwapRemoveClick?.(originalSlotId, index, dayIndex, swappedPokemonId)
                             : undefined}

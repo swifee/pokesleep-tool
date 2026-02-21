@@ -130,17 +130,32 @@ vi.mock('./components/TimelineTable', () => ({
     default: ({
         displayMode,
         onHeaderSlotClick,
+        noCollectCells,
+        onNoCollectToggle,
     }: {
         displayMode?: 'detailed' | 'simple';
         onHeaderSlotClick?: (index: number) => void;
+        noCollectCells?: { dayIndex: number; slotId: string; teamSlotIndex: number }[];
+        onNoCollectToggle?: (slotId: string, teamIndex: number, dayIndex: number) => void;
     }) => (
-        <div data-testid="timeline-table" data-display-mode={displayMode ?? 'detailed'}>
+        <div
+            data-testid="timeline-table"
+            data-display-mode={displayMode ?? 'detailed'}
+            data-no-collect-count={String(noCollectCells?.length ?? 0)}
+        >
             <button
                 type="button"
                 data-testid="timeline-header-slot-click"
                 onClick={() => onHeaderSlotClick?.(0)}
             >
                 header
+            </button>
+            <button
+                type="button"
+                data-testid="timeline-no-collect-toggle"
+                onClick={() => onNoCollectToggle?.('wake', 0, 0)}
+            >
+                no-collect
             </button>
         </div>
     ),
@@ -193,6 +208,28 @@ describe('TeamTimelineApp timeline display mode', () => {
 
         expect(screen.getByTestId('team-box-dialog').getAttribute('data-open')).toBe('false');
         expect(screen.getByRole('switch', { name: 'シンプル表示' })).toBeDefined();
+        expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
+    });
+
+    it('persists no-collect cells and restores them after remount', () => {
+        const firstRender = render(<TeamTimelineApp />);
+        expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('0');
+
+        fireEvent.click(screen.getByTestId('timeline-no-collect-toggle'));
+        expect(localStorage.getItem('PstTeamTimelineNoCollectCells')).toContain('"slotId":"wake"');
+        expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('1');
+
+        firstRender.unmount();
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('1');
+    });
+
+    it('shows re-simulation notice when no-collect setting changes', () => {
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('false');
+        fireEvent.click(screen.getByTestId('timeline-no-collect-toggle'));
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
     });
 });

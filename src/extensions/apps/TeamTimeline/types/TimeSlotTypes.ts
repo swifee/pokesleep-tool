@@ -438,3 +438,15 @@ export interface PokemonSwap {
 
 /** Special Pokemon ID representing "none" (remove Pokemon from slot) */
 export const SWAP_NONE_POKEMON_ID = -1;
+
+/**
+ * セル単位の「回収しない」設定
+ */
+export interface NoCollectCellSetting {
+    /** 対象日（0始まり） */
+    dayIndex: number;
+    /** 対象時間帯ID（base slot id） */
+    slotId: string;
+    /** 対象チームスロットインデックス (0-4) */
+    teamSlotIndex: number;
+}

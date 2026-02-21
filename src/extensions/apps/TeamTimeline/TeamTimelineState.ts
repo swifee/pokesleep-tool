@@ -10,6 +10,7 @@ import {
     TimeSlot,
     SimulationConfig,
     PokemonSwap,
+    NoCollectCellSetting,
     DEFAULT_TIME_SLOTS,
     DEFAULT_SIMULATION_CONFIG,
     clampSimulationDays,
@@ -125,6 +126,7 @@ export function createInitialState(): TeamTimelineState {
         timeSlotDialogOpen: false,
         // Phase 4: ポケモン入れ替え
         swaps: [],
+        noCollectCells: [],
         swapTargetSlotId: null,
         swapTargetTeamIndex: null,
         swapTargetDayIndex: null,
@@ -531,6 +533,34 @@ export function teamTimelineReducer(
             return {
                 ...state,
                 swaps: action.swaps,
+            };
+        case 'toggleNoCollectCell': {
+            const nextTarget: NoCollectCellSetting = {
+                dayIndex: action.dayIndex,
+                slotId: action.slotId,
+                teamSlotIndex: action.teamIndex,
+            };
+            const targetIndex = state.noCollectCells.findIndex(
+                (cell) =>
+                    cell.dayIndex === nextTarget.dayIndex &&
+                    cell.slotId === nextTarget.slotId &&
+                    cell.teamSlotIndex === nextTarget.teamSlotIndex
+            );
+            if (targetIndex >= 0) {
+                return {
+                    ...state,
+                    noCollectCells: state.noCollectCells.filter((_, index) => index !== targetIndex),
+                };
+            }
+            return {
+                ...state,
+                noCollectCells: [...state.noCollectCells, nextTarget],
+            };
+        }
+        case 'loadNoCollectCells':
+            return {
+                ...state,
+                noCollectCells: action.noCollectCells,
             };
         case 'setSeedMode':
             return { ...state, seedMode: action.mode };

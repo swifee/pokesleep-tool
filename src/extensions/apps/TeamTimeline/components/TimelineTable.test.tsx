@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import PokemonBox, { type PokemonBoxItem } from '../../../../util/PokemonBox';
-import { SimulationResult, TimeSlot, TimeSlotResult } from '../types/TimeSlotTypes';
+import { NoCollectCellSetting, SimulationResult, TimeSlot, TimeSlotResult } from '../types/TimeSlotTypes';
 import TimelineTable from './TimelineTable';
 
 vi.mock('react-i18next', () => ({
@@ -26,6 +26,8 @@ vi.mock('./TimelineRow', () => ({
         onSwapClick,
         onSwapLongPressStart,
         onSwapRemoveClick,
+        noCollectCells,
+        onNoCollectToggle,
         compactEmptyCells,
         alwaysShowSwapButton,
         displayMode,
@@ -49,6 +51,8 @@ vi.mock('./TimelineRow', () => ({
             pointerOffsetY?: number;
         }) => void;
         onSwapRemoveClick?: (slotId: string, teamIndex: number, dayIndex: number, pokemonId: number) => void;
+        noCollectCells?: NoCollectCellSetting[];
+        onNoCollectToggle?: (slotId: string, teamIndex: number, dayIndex: number) => void;
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
         displayMode?: 'detailed' | 'simple';
@@ -64,6 +68,7 @@ vi.mock('./TimelineRow', () => ({
                 data-display-mode={displayMode ?? 'detailed'}
                 data-first-timeline-slot={isFirstTimelineSlot ? 'true' : 'false'}
                 data-fit-to-viewport={fitToViewport ? 'true' : 'false'}
+                data-no-collect-count={String(noCollectCells?.length ?? 0)}
                 onClick={() => onSwapClick?.(originalSlotId, 0, dayIndex)}
             >
                 row
@@ -93,6 +98,13 @@ vi.mock('./TimelineRow', () => ({
                 onClick={() => onSwapRemoveClick?.(originalSlotId, 0, dayIndex, 25)}
             >
                 remove
+            </button>
+            <button
+                type="button"
+                data-testid={`no-collect-toggle-${dayIndex}-${originalSlotId}`}
+                onClick={() => onNoCollectToggle?.(originalSlotId, 0, dayIndex)}
+            >
+                no-collect
             </button>
         </>
     ),
@@ -404,6 +416,27 @@ describe('TimelineTable', () => {
         const firstRow = screen.getByTestId('swap-0-sleep');
         expect(firstRow.getAttribute('data-compact-empty')).toBe('true');
         expect(firstRow.getAttribute('data-always-show-swap')).toBe('true');
+    });
+
+    it('passes no-collect cells and callback down to TimelineRow', () => {
+        const onNoCollectToggle = vi.fn();
+        render(
+            <TimelineTable
+                team={[null, null, null, null, null]}
+                timeSlots={BASE_TIME_SLOTS}
+                simulationDays={1}
+                result={EMPTY_RESULT}
+                swaps={[]}
+                noCollectCells={[{ dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 }]}
+                box={new PokemonBox([])}
+                onNoCollectToggle={onNoCollectToggle}
+            />
+        );
+
+        expect(screen.getByTestId('swap-0-wake').getAttribute('data-no-collect-count')).toBe('1');
+        fireEvent.click(screen.getByTestId('no-collect-toggle-0-wake'));
+        expect(onNoCollectToggle).toHaveBeenCalledTimes(1);
+        expect(onNoCollectToggle).toHaveBeenCalledWith('wake', 0, 0);
     });
 
     it('fits timeline width to viewport when compact mode is enabled', () => {

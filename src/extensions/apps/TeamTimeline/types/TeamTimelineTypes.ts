@@ -1,5 +1,13 @@
 import { PokemonBoxItem } from '../../../../util/PokemonBox';
-import { TimeSlot, SimulationConfig, SimulationResult, PokemonSwap, DailySummary, TeamSummary } from './TimeSlotTypes';
+import {
+    TimeSlot,
+    SimulationConfig,
+    SimulationResult,
+    PokemonSwap,
+    DailySummary,
+    TeamSummary,
+    NoCollectCellSetting,
+} from './TimeSlotTypes';
 import { TrialSummary } from './MultiTrialTypes';
 import { TimelineBonusSettings } from './TimelineBonusSettingsTypes';
 import { AverageCookingSummary, CookingSimulationSettings } from './CookingTypes';
@@ -33,6 +41,8 @@ export interface TeamTimelineState {
     timeSlotDialogOpen: boolean;
     /** ポケモン入れ替え情報のリスト */
     swaps: PokemonSwap[];
+    /** セル単位の「回収しない」設定 */
+    noCollectCells: NoCollectCellSetting[];
     /** 入れ替えダイアログ用: 対象時間帯ID */
     swapTargetSlotId: string | null;
     /** 入れ替えダイアログ用: 対象チームスロットインデックス */
@@ -120,6 +130,8 @@ export type TeamTimelineAction =
     }
     | { type: 'clearSwaps' }
     | { type: 'loadSwaps'; swaps: PokemonSwap[] }
+    | { type: 'toggleNoCollectCell'; slotId: string; teamIndex: number; dayIndex: number }
+    | { type: 'loadNoCollectCells'; noCollectCells: NoCollectCellSetting[] }
     // Phase 5: Multi-trial simulation
     | { type: 'setSeedMode'; mode: 'random' | 'fixed' }
     | { type: 'setMultiTrialCount'; count: number }

@@ -1,8 +1,8 @@
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import PokemonBox from '../../../../util/PokemonBox';
-import { PokemonSwap, TimeSlot, TimeSlotResult } from '../types/TimeSlotTypes';
+import { NoCollectCellSetting, PokemonSwap, TimeSlot, TimeSlotResult } from '../types/TimeSlotTypes';
 import type { PokemonBoxItem } from '../../../../util/PokemonBox';
 import TimelineRow from './TimelineRow';
 
@@ -17,15 +17,27 @@ vi.mock('./TimelineCell', () => ({
         swappedPokemonName,
         onRemoveSwapClick,
         pokemonIdForm,
+        noCollectEnabled,
+        onNoCollectToggle,
     }: {
         swappedPokemonName?: string;
         onRemoveSwapClick?: () => void;
         pokemonIdForm?: number;
+        noCollectEnabled?: boolean;
+        onNoCollectToggle?: () => void;
     }) => (
         <div data-testid="timeline-cell">
             <span>{swappedPokemonName ?? ''}</span>
             <span data-testid="remove-flag">{onRemoveSwapClick ? '1' : '0'}</span>
             <span data-testid="pokemon-id-form">{pokemonIdForm === undefined ? '' : String(pokemonIdForm)}</span>
+            <span data-testid="no-collect-flag">{noCollectEnabled ? '1' : '0'}</span>
+            <button
+                type="button"
+                data-testid="no-collect-toggle"
+                onClick={onNoCollectToggle}
+            >
+                toggle
+            </button>
         </div>
     ),
 }));
@@ -99,6 +111,11 @@ describe('TimelineRow swap rendering', () => {
         iv: { idForm },
         filledNickname: () => nickname,
     } as unknown as PokemonBoxItem);
+    const noCollectCell: NoCollectCellSetting = {
+        dayIndex: 0,
+        slotId: 'slot-2',
+        teamSlotIndex: 0,
+    };
 
     it('renders direct swap target with remove action', () => {
         const swappedIn = createPokemon(101, 25, 'ピカチュウ');
@@ -232,6 +249,73 @@ describe('TimelineRow swap rendering', () => {
 
         const firstCell = screen.getAllByTestId('timeline-cell')[0];
         expect(within(firstCell).getByTestId('pokemon-id-form').textContent).toBe('260');
+    });
+
+    it('passes no-collect enabled flag to matched non-swap cell', () => {
+        render(
+            <TimelineRow
+                slot={{ id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: false }}
+                originalSlotId="slot-2"
+                dayIndex={0}
+                results={[]}
+                team={[null, null, null, null, null]}
+                swaps={[]}
+                noCollectCells={[noCollectCell]}
+                box={new PokemonBox([])}
+            />
+        );
+
+        const firstCell = screen.getAllByTestId('timeline-cell')[0];
+        expect(within(firstCell).getByTestId('no-collect-flag').textContent).toBe('1');
+    });
+
+    it('forces no-collect off on swap-configured cell', () => {
+        const swappedIn = createPokemon(101, 25, 'ピカチュウ');
+        const swaps: PokemonSwap[] = [
+            {
+                dayIndex: 0,
+                slotId: 'slot-2',
+                teamSlotIndex: 0,
+                newPokemonId: swappedIn.id,
+                initialEnergy: 100,
+            },
+        ];
+
+        render(
+            <TimelineRow
+                slot={{ id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: false }}
+                originalSlotId="slot-2"
+                dayIndex={0}
+                results={[]}
+                team={[null, null, null, null, null]}
+                swaps={swaps}
+                noCollectCells={[noCollectCell]}
+                box={new PokemonBox([swappedIn])}
+            />
+        );
+
+        const firstCell = screen.getAllByTestId('timeline-cell')[0];
+        expect(within(firstCell).getByTestId('no-collect-flag').textContent).toBe('0');
+    });
+
+    it('calls no-collect toggle callback with row coordinate', () => {
+        const onNoCollectToggle = vi.fn();
+        render(
+            <TimelineRow
+                slot={{ id: 'slot-2', time: '12:00', sleepState: 'none', hasMeal: false }}
+                originalSlotId="slot-2"
+                dayIndex={0}
+                results={[]}
+                team={[null, null, null, null, null]}
+                swaps={[]}
+                box={new PokemonBox([])}
+                onNoCollectToggle={onNoCollectToggle}
+            />
+        );
+
+        fireEvent.click(screen.getAllByTestId('no-collect-toggle')[0]);
+        expect(onNoCollectToggle).toHaveBeenCalledTimes(1);
+        expect(onNoCollectToggle).toHaveBeenCalledWith('slot-2', 0, 0);
     });
 });
 

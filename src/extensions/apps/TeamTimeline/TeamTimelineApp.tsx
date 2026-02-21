@@ -49,6 +49,7 @@ import {
     PokemonSwap,
     SWAP_NONE_POKEMON_ID,
     SimulationResult,
+    NoCollectCellSetting,
 } from './types/TimeSlotTypes';
 import { runSimulation } from './simulation/TimelineSimulator';
 import SimulationControls from './components/SimulationControls';
@@ -132,6 +133,7 @@ const TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD = 'cubic-bezier(0.25, 0.46, 0.45, 0.9
 const TIMELINE_DETAILS_FADE_DURATION_MS = 450;
 const TIMELINE_PAGE_BOTTOM_PADDING = '3em';
 const TIME_SLOT_SETTINGS_SECTION_ID = 'team-timeline-time-slot-settings';
+const STORAGE_KEY_NO_COLLECT_CELLS = 'PstTeamTimelineNoCollectCells';
 const EMPTY_SIMULATION_RESULT: SimulationResult = {
     slotResults: new Map(),
     dailySummaries: [],
@@ -260,6 +262,33 @@ function createSwapSignature(swaps: readonly PokemonSwap[]): string {
             swap => `${swap.dayIndex}:${swap.slotId}:${swap.teamSlotIndex}:${swap.newPokemonId}:${swap.initialEnergy}`
         )
         .join('|');
+}
+
+function createNoCollectSignature(noCollectCells: readonly NoCollectCellSetting[]): string {
+    return noCollectCells
+        .map(cell => `${cell.dayIndex}:${cell.slotId}:${cell.teamSlotIndex}`)
+        .join('|');
+}
+
+function migrateNoCollectCell(rawCell: unknown): NoCollectCellSetting | null {
+    if (!rawCell || typeof rawCell !== 'object') {
+        return null;
+    }
+    const candidate = rawCell as Partial<NoCollectCellSetting>;
+    if (
+        typeof candidate.slotId !== 'string' ||
+        typeof candidate.teamSlotIndex !== 'number'
+    ) {
+        return null;
+    }
+    const dayIndex = typeof candidate.dayIndex === 'number'
+        ? Math.max(0, Math.floor(candidate.dayIndex))
+        : 0;
+    return {
+        dayIndex,
+        slotId: candidate.slotId,
+        teamSlotIndex: Math.max(0, Math.floor(candidate.teamSlotIndex)),
+    };
 }
 
 function createTeamSignature(team: readonly (PokemonBoxItem | null)[]): string {
@@ -422,6 +451,21 @@ export default function TeamTimelineApp() {
             }
         }
 
+        const savedNoCollectCells = localStorage.getItem(STORAGE_KEY_NO_COLLECT_CELLS);
+        if (savedNoCollectCells) {
+            try {
+                const parsedCells: unknown = JSON.parse(savedNoCollectCells);
+                if (Array.isArray(parsedCells)) {
+                    const migratedNoCollectCells = parsedCells
+                        .map(migrateNoCollectCell)
+                        .filter((cell): cell is NoCollectCellSetting => cell !== null);
+                    dispatch({ type: 'loadNoCollectCells', noCollectCells: migratedNoCollectCells });
+                }
+            } catch (e) {
+                console.error('Failed to load no collect cells', e);
+            }
+        }
+
         // ロード完了をマーク
         setIsInitialized(true);
     }, []); // 依存配列を空に
@@ -469,6 +513,12 @@ export default function TeamTimelineApp() {
         localStorage.setItem('PstTeamTimelineSwaps', JSON.stringify(swapsToPersist));
     }, [state.swaps, isInitialized]);
 
+    // セル単位の「回収しない」設定の永続化（初期化完了後のみ）
+    useEffect(() => {
+        if (!isInitialized) return;
+        localStorage.setItem(STORAGE_KEY_NO_COLLECT_CELLS, JSON.stringify(state.noCollectCells));
+    }, [state.noCollectCells, isInitialized]);
+
     const previousSwapSignatureRef = useRef<string | null>(null);
     useEffect(() => {
         const signature = createSwapSignature(state.swaps);
@@ -487,6 +537,25 @@ export default function TeamTimelineApp() {
         }
         setShowResimulationNotice(true);
     }, [state.swaps, state.simulationResult, isInitialized]);
+
+    const previousNoCollectSignatureRef = useRef<string | null>(null);
+    useEffect(() => {
+        const signature = createNoCollectSignature(state.noCollectCells);
+        if (!isInitialized) {
+            previousNoCollectSignatureRef.current = signature;
+            return;
+        }
+
+        const previousSignature = previousNoCollectSignatureRef.current;
+        previousNoCollectSignatureRef.current = signature;
+        if (previousSignature === null || previousSignature === signature) {
+            return;
+        }
+        if (state.simulationResult === null) {
+            return;
+        }
+        setShowResimulationNotice(true);
+    }, [state.noCollectCells, state.simulationResult, isInitialized]);
 
     const previousTeamSignatureRef = useRef<string | null>(null);
     useEffect(() => {
@@ -591,6 +660,7 @@ export default function TeamTimelineApp() {
             },
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
+            noCollectCells: state.noCollectCells,
             box: boxRef.current || undefined,
             cookingSettings: state.cookingSettings,
         });
@@ -603,6 +673,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
         state.cookingSettings,
     ]);
 
@@ -622,6 +693,7 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             cookingSettings: state.cookingSettings,
             swaps: state.swaps,
+            noCollectCells: state.noCollectCells,
             box: boxRef.current || undefined,
             trialCount: state.multiTrialCount,
             initialSeed,
@@ -674,6 +746,7 @@ export default function TeamTimelineApp() {
             },
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
+            noCollectCells: state.noCollectCells,
             box: boxRef.current || undefined,
             cookingSettings: state.cookingSettings,
         });
@@ -686,6 +759,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
         state.multiTrialCount,
         state.cookingSettings,
     ]);
@@ -778,6 +852,7 @@ export default function TeamTimelineApp() {
                 },
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
+                noCollectCells: state.noCollectCells,
                 box: boxRef.current || undefined,
                 cookingSettings: state.cookingSettings,
             });
@@ -794,6 +869,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
         state.cookingSettings,
     ]);
 
@@ -883,6 +959,10 @@ export default function TeamTimelineApp() {
     // ポケモン入れ替えハンドラー
     const handleSwapClick = useCallback((slotId: string, teamIndex: number, dayIndex: number) => {
         dispatch({ type: 'openSwapDialog', slotId, teamIndex, dayIndex });
+    }, []);
+
+    const handleNoCollectToggle = useCallback((slotId: string, teamIndex: number, dayIndex: number) => {
+        dispatch({ type: 'toggleNoCollectCell', slotId, teamIndex, dayIndex });
     }, []);
 
     const handleSwapSeriesMove = useCallback((
@@ -1235,6 +1315,7 @@ export default function TeamTimelineApp() {
                 },
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
+                noCollectCells: state.noCollectCells,
                 box: boxRef.current || undefined,
                 cookingSettings: state.cookingSettings,
                 analysisOptions: {
@@ -1294,6 +1375,8 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
+        state.cookingSettings,
     ]);
 
     const resolveBaseAverageMetrics = useCallback(async (
@@ -2331,9 +2414,11 @@ export default function TeamTimelineApp() {
                                     simulationDays={state.simulationConfig.simulationDays}
                                     result={EMPTY_SIMULATION_RESULT}
                                     swaps={state.swaps}
+                                    noCollectCells={state.noCollectCells}
                                     box={boxRef.current!}
                                     bonusSettings={state.bonusSettings}
                                     onSwapClick={handleSwapClick}
+                                    onNoCollectToggle={handleNoCollectToggle}
                                     onSwapSeriesMove={handleSwapSeriesMove}
                                     onSwapRemoveClick={handleSwapRemoveRequest}
                                     onHeaderSlotClick={handleSlotClick}
@@ -2411,9 +2496,11 @@ export default function TeamTimelineApp() {
                                             simulationDays={state.simulationConfig.simulationDays}
                                             result={state.simulationResult!}
                                             swaps={state.swaps}
+                                            noCollectCells={state.noCollectCells}
                                             box={boxRef.current!}
                                             bonusSettings={state.bonusSettings}
                                             onSwapClick={handleSwapClick}
+                                            onNoCollectToggle={handleNoCollectToggle}
                                             onSwapSeriesMove={handleSwapSeriesMove}
                                             onSwapRemoveClick={handleSwapRemoveRequest}
                                             onHeaderSlotClick={handleSlotClick}

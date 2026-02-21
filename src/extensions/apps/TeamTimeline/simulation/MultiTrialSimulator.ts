@@ -8,6 +8,7 @@ import {
     TimeSlot,
     SimulationConfig,
     PokemonSwap,
+    NoCollectCellSetting,
     DailySummary,
     TeamSummary,
     SimulationResult,
@@ -29,6 +30,7 @@ export interface MultiTrialInput {
     readonly config: Omit<SimulationConfig, 'seed'>;
     readonly bonusSettings: TimelineBonusSettings;
     readonly swaps?: PokemonSwap[];
+    readonly noCollectCells?: NoCollectCellSetting[];
     readonly box?: PokemonBox;
     readonly cookingSettings?: CookingSimulationSettings;
     readonly trialCount: number;
@@ -371,7 +373,7 @@ function finalizeMultiTrialResult(
  * plus average DailySummary and TeamSummary across all trials.
  */
 export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResult {
-    const { team, timeSlots, config, bonusSettings, swaps, box, trialCount } = input;
+    const { team, timeSlots, config, bonusSettings, swaps, noCollectCells, box, trialCount } = input;
     if (trialCount <= 0) {
         throw new Error('trialCount must be greater than 0');
     }
@@ -386,6 +388,7 @@ export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResul
             config: { ...config, seed },
             bonusSettings,
             swaps,
+            noCollectCells,
             box,
             cookingSettings: input.cookingSettings,
         });
@@ -426,6 +429,7 @@ export async function runMultiTrialSimulationWithProgress(
         config,
         bonusSettings,
         swaps,
+        noCollectCells,
         box,
         trialCount,
         onProgress,
@@ -474,6 +478,7 @@ export async function runMultiTrialSimulationWithProgress(
             config: { ...config, seed },
             bonusSettings,
             swaps,
+            noCollectCells,
             box,
             cookingSettings: input.cookingSettings,
         });

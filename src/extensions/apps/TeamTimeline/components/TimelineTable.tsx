@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import PokemonIcon from '../../../../ui/IvCalc/PokemonIcon';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import PokemonStrength from '../../../../util/PokemonStrength';
-import { TimeSlot, SimulationResult, PokemonSwap } from '../types/TimeSlotTypes';
+import { TimeSlot, SimulationResult, PokemonSwap, NoCollectCellSetting } from '../types/TimeSlotTypes';
 import { TimelineBonusSettings } from '../types/TimelineBonusSettingsTypes';
 import TimelineRow from './TimelineRow';
 import type {
@@ -31,9 +31,11 @@ interface TimelineTableProps {
   simulationDays: number;
   result: SimulationResult;
   swaps: PokemonSwap[];
+  noCollectCells?: NoCollectCellSetting[];
   box: PokemonBox;
   bonusSettings?: TimelineBonusSettings;
   onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
+  onNoCollectToggle?: (slotId: string, teamIndex: number, dayIndex: number) => void;
   onSwapSeriesMove?: (
     fromSlotId: string,
     fromTeamIndex: number,
@@ -67,9 +69,11 @@ const TimelineTable = React.memo(({
   simulationDays,
   result,
   swaps,
+  noCollectCells = [],
   box,
   bonusSettings,
   onSwapClick,
+  onNoCollectToggle,
   onSwapSeriesMove,
   onSwapRemoveClick,
   onHeaderSlotClick,
@@ -578,8 +582,10 @@ const TimelineTable = React.memo(({
                 results={slotResults}
                 team={team}
                 swaps={swaps}
+                noCollectCells={noCollectCells}
                 box={box}
                 onSwapClick={onSwapClick}
+                onNoCollectToggle={onNoCollectToggle}
                 onSwapRemoveClick={onSwapRemoveClick}
                 isFirstSlot={expandedSlot.slotIndexInDay === 0}
                 compactEmptyCells={compactEmptyCells}

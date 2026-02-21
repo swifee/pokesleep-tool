@@ -62,6 +62,7 @@ describe('teamTimelineReducer', () => {
         expect(state.simulationConfig.seed).toBe(123456);
         expect(state.seedMode).toBe('random');
         expect(state.multiTrialCount).toBe(1000);
+        expect(state.noCollectCells).toEqual([]);
         expect(state.syncWithIvParameter).toBe(true);
         expect(state.cookingSettings.basePotCapacity).toBe(81);
         expect(state.cookingSettings.recipeLevels).toEqual({});
@@ -205,6 +206,50 @@ describe('removeSwap behavior', () => {
         expect(next.swaps).toEqual([
             { dayIndex: 3, slotId: 'slot-2', teamSlotIndex: 0, newPokemonId: 888, initialEnergy: 80 },
             { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 0, newPokemonId: 999, initialEnergy: 80 },
+        ]);
+    });
+});
+
+describe('noCollect cell behavior', () => {
+    it('toggleNoCollectCell adds and removes by same coordinate', () => {
+        const initial = createInitialState();
+        const added = teamTimelineReducer(initial, {
+            type: 'toggleNoCollectCell',
+            slotId: 'slot-2',
+            teamIndex: 1,
+            dayIndex: 0,
+        });
+
+        expect(added.noCollectCells).toEqual([
+            {
+                dayIndex: 0,
+                slotId: 'slot-2',
+                teamSlotIndex: 1,
+            },
+        ]);
+
+        const removed = teamTimelineReducer(added, {
+            type: 'toggleNoCollectCell',
+            slotId: 'slot-2',
+            teamIndex: 1,
+            dayIndex: 0,
+        });
+
+        expect(removed.noCollectCells).toEqual([]);
+    });
+
+    it('loadNoCollectCells replaces state value', () => {
+        const next = teamTimelineReducer(createInitialState(), {
+            type: 'loadNoCollectCells',
+            noCollectCells: [
+                { dayIndex: 0, slotId: 'slot-1', teamSlotIndex: 0 },
+                { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 4 },
+            ],
+        });
+
+        expect(next.noCollectCells).toEqual([
+            { dayIndex: 0, slotId: 'slot-1', teamSlotIndex: 0 },
+            { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 4 },
         ]);
     });
 });

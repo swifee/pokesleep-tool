@@ -68,6 +68,57 @@ describe('TimelineCell swap ui', () => {
         expect(container.querySelector('.swap-info')).toBeNull();
     });
 
+    it('shows no-collect button in off state by default and calls toggle handler', () => {
+        const onNoCollectToggle = vi.fn();
+
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                onNoCollectToggle={onNoCollectToggle}
+            />
+        );
+
+        const button = screen.getByTestId('timeline-cell-no-collect-toggle');
+        expect(button.getAttribute('data-enabled')).toBe('false');
+        fireEvent.click(button);
+        expect(onNoCollectToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows no-collect button in on state when enabled', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                noCollectEnabled
+                onNoCollectToggle={vi.fn()}
+            />
+        );
+
+        expect(screen.getByTestId('timeline-cell-no-collect-toggle').getAttribute('data-enabled')).toBe('true');
+    });
+
+    it('hides no-collect button when swap is configured', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                hasSwap
+                swappedPokemonName="ピカチュウ"
+                onSwapClick={vi.fn()}
+                onNoCollectToggle={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByTestId('timeline-cell-no-collect-toggle')).toBeNull();
+    });
+
     it('renders empty content without placeholder dash in compact empty mode', () => {
         const { container } = render(
             <TimelineCell

@@ -5,7 +5,13 @@ import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import SubSkill from '../../../../util/SubSkill';
 import SubSkillList from '../../../../util/SubSkillList';
 import { loadHelpEventBonus } from '../../../../data/events';
-import { PokemonSwap, SimulationResult, SWAP_NONE_POKEMON_ID, TimeSlot } from '../types/TimeSlotTypes';
+import {
+    NoCollectCellSetting,
+    PokemonSwap,
+    SimulationResult,
+    SWAP_NONE_POKEMON_ID,
+    TimeSlot,
+} from '../types/TimeSlotTypes';
 import { createDefaultTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
 
 const processSkillTriggersMock = vi.fn();
@@ -381,6 +387,107 @@ describe('TimelineSimulator', () => {
         expect(dinnerResult).toBeDefined();
         expect(dinnerResult!.energyStart).toBeCloseTo(wakeResult!.energyEnd, 6);
         expect(dinnerResult!.energyStart).toBeGreaterThan(10);
+    });
+
+    it('noCollect ONでは通常/スキル食材を持ち越し、次のOFFセルで清算する', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            const base = createNeutralSkillEffectResult(energy);
+            return {
+                ...base,
+                skillIngredients: [{ name: 'apple', count: 2 }],
+            };
+        });
+
+        const pokemon = createBerryBurstDisguisePokemon(2);
+        const noCollectCells: NoCollectCellSetting[] = [
+            { dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 },
+        ];
+        const result = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots: [
+                { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+                { id: 'lunch', time: '12:00', sleepState: 'none', hasMeal: false },
+            ],
+            config: { seed: 33445, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            noCollectCells,
+        });
+
+        const wake = result.slotResults.get('wake__day0')?.[0];
+        const lunch = result.slotResults.get('lunch__day0')?.[0];
+        expect(wake).toBeDefined();
+        expect(lunch).toBeDefined();
+        expect(wake!.ingredients).toEqual([]);
+        expect(wake!.skillIngredients ?? []).toEqual([]);
+        const lunchSkillIngredientTotal = (lunch!.skillIngredients ?? [])
+            .reduce((sum, ingredient) => sum + ingredient.count, 0);
+        expect(lunchSkillIngredientTotal).toBeGreaterThanOrEqual(4);
+    });
+
+    it('noCollect ONセルでは超過分きのみのみ清算し、食材は清算しない', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemon = createBerryBurstDisguisePokemon(2);
+        const result = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots: [
+                { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                { id: 'wake', time: '18:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 44001, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            noCollectCells: [{ dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 }],
+        });
+
+        const wake = result.slotResults.get('wake__day0')?.[0];
+        expect(wake).toBeDefined();
+        expect(wake!.helpCount).toBeGreaterThan(0);
+        expect(wake!.ingredients).toEqual([]);
+        expect(wake!.skillIngredients ?? []).toEqual([]);
+    });
+
+    it('swap設定セルはnoCollect指定されていても通常回収として扱う', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            const base = createNeutralSkillEffectResult(energy);
+            return {
+                ...base,
+                skillIngredients: [{ name: 'apple', count: 3 }],
+            };
+        });
+
+        const pokemonA = createBerryBurstDisguisePokemon(2);
+        const pokemonB = createBerryBurstDisguisePokemon(4);
+        const box = new PokemonBox([pokemonA, pokemonB]);
+        const result = runSimulation({
+            team: [pokemonA, null, null, null, null],
+            timeSlots: [
+                { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 44556, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            noCollectCells: [{ dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 }],
+            swaps: [{
+                dayIndex: 0,
+                slotId: 'wake',
+                teamSlotIndex: 0,
+                newPokemonId: pokemonB.id,
+                initialEnergy: 70,
+            }],
+            box,
+        });
+
+        const wake = result.slotResults.get('wake__day0')?.[0];
+        expect(wake).toBeDefined();
+        const wakeSkillIngredientTotal = (wake!.skillIngredients ?? [])
+            .reduce((sum, ingredient) => sum + ingredient.count, 0);
+        expect(wakeSkillIngredientTotal).toBeGreaterThan(0);
     });
 
     it('非編成中に起床が発生した場合は1/20回復して再編成時に反映される', () => {
