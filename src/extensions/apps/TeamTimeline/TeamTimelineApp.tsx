@@ -2556,13 +2556,23 @@ export default function TeamTimelineApp() {
                         <Typography variant="subtitle2" gutterBottom>
                             {t('TeamTimeline.sleep energy', '就寝時げんき')}
                         </Typography>
-                        <Slider
-                            value={state.simulationConfig.initialEnergy}
-                            onChange={(_, value) => handleConfigChange({ initialEnergy: value as number })}
-                            min={0}
-                            max={100}
-                            valueLabelDisplay="auto"
-                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Slider
+                                value={state.simulationConfig.initialEnergy}
+                                onChange={(_, value) => handleConfigChange({ initialEnergy: value as number })}
+                                min={0}
+                                max={100}
+                                valueLabelDisplay="auto"
+                                sx={{ flexGrow: 1 }}
+                            />
+                            <Typography
+                                data-testid="team-timeline-sleep-energy-value"
+                                variant="body2"
+                                sx={{ minWidth: '32px', textAlign: 'right', fontWeight: 700 }}
+                            >
+                                {state.simulationConfig.initialEnergy}
+                            </Typography>
+                        </Box>
                     </Box>
                     <Box id={TIME_SLOT_SETTINGS_SECTION_ID}>
                         <TimeSlotEditor

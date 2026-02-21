@@ -149,4 +149,12 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
 
         expect(screen.getByTestId('time-slot-editor')).toBeDefined();
     });
+
+    it('shows current sleep energy value next to slider in settings tab', () => {
+        render(<TeamTimelineApp />);
+
+        fireEvent.click(screen.getByTestId('timeline-open-time-slot-settings-click'));
+
+        expect(screen.getByTestId('team-timeline-sleep-energy-value').textContent).toBe('50');
+    });
 });
