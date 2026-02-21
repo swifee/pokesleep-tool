@@ -164,6 +164,7 @@ vi.mock('./components/TimelineTable', () => ({
 describe('TeamTimelineApp timeline display mode', () => {
     beforeEach(() => {
         localStorage.clear();
+        localStorage.setItem('PstTeamTimelinePresetAppliedV1', '1');
     });
 
     it('uses detailed mode by default and toggles to simple mode', () => {

@@ -103,6 +103,11 @@ import {
     saveTimelineBonusSettingsToIvStorage,
     IV_PARAMETER_STORAGE_KEY,
 } from './utils/TimelineBonusSettingsBridge';
+import {
+    applyFirstAccessPresetIfNeeded,
+    createTimelineRuntimeBox,
+    TEAM_TIMELINE_SWAPS_STORAGE_KEY,
+} from './utils/FirstAccessPreset';
 
 interface TeamNormalizationResult {
     normalizedTeam: (PokemonBoxItem | null)[];
@@ -394,23 +399,28 @@ export default function TeamTimelineApp() {
     ]);
 
     // ボックスのロード（初回のみ）
-    const boxRef = useRef<PokemonBox | null>(null);
-    if (boxRef.current === null) {
-        boxRef.current = new PokemonBox();
-        boxRef.current.load();
+    const userBoxRef = useRef<PokemonBox | null>(null);
+    const timelineRuntimeBoxRef = useRef<PokemonBox | null>(null);
+    if (userBoxRef.current === null || timelineRuntimeBoxRef.current === null) {
+        const loadedUserBox = new PokemonBox();
+        loadedUserBox.load();
+        userBoxRef.current = loadedUserBox;
+        timelineRuntimeBoxRef.current = createTimelineRuntimeBox(loadedUserBox);
+        applyFirstAccessPresetIfNeeded();
     }
-    const box = boxRef.current;
+    const userBox = userBoxRef.current!;
+    const timelineRuntimeBox = timelineRuntimeBoxRef.current!;
 
     // 初回マウント時にデータをロード
     useEffect(() => {
-        const loadedBox = boxRef.current;
-        if (!loadedBox) {
+        const runtimeBox = timelineRuntimeBoxRef.current;
+        if (!runtimeBox) {
             return;
         }
 
         // ロード処理
-        const loadedTeam = loadTeamFromStorage(loadedBox);
-        const { normalizedTeam, idRemap } = normalizeTeamWithBoxItems(loadedTeam, loadedBox.items);
+        const loadedTeam = loadTeamFromStorage(runtimeBox);
+        const { normalizedTeam, idRemap } = normalizeTeamWithBoxItems(loadedTeam, runtimeBox.items);
         dispatch({ type: 'loadTeam', team: normalizedTeam });
 
         const savedSlots = loadTimeSlotsFromStorage();
@@ -435,7 +445,7 @@ export default function TeamTimelineApp() {
         const cookingSettings = loadCookingSettingsFromStorage();
         dispatch({ type: 'loadCookingSettings', settings: cookingSettings });
 
-        const savedSwaps = localStorage.getItem('PstTeamTimelineSwaps');
+        const savedSwaps = localStorage.getItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY);
         if (savedSwaps) {
             try {
                 const swaps: PokemonSwap[] = JSON.parse(savedSwaps);
@@ -443,7 +453,7 @@ export default function TeamTimelineApp() {
                     const migratedSwaps = swaps
                         .map(migrateSwap)
                         .filter((swap): swap is PokemonSwap => swap !== null);
-                    const normalizedSwaps = normalizeLoadedSwapsWithBox(migratedSwaps, loadedBox, idRemap);
+                    const normalizedSwaps = normalizeLoadedSwapsWithBox(migratedSwaps, runtimeBox, idRemap);
                     dispatch({ type: 'loadSwaps', swaps: normalizedSwaps });
                 }
             } catch (e) {
@@ -509,8 +519,11 @@ export default function TeamTimelineApp() {
     // ポケモン入れ替え情報の永続化（初期化完了後のみ）
     useEffect(() => {
         if (!isInitialized) return;
-        const swapsToPersist = hydrateSwapsWithSerializedPokemon(state.swaps, boxRef.current ?? undefined);
-        localStorage.setItem('PstTeamTimelineSwaps', JSON.stringify(swapsToPersist));
+        const swapsToPersist = hydrateSwapsWithSerializedPokemon(
+            state.swaps,
+            timelineRuntimeBoxRef.current ?? undefined,
+        );
+        localStorage.setItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY, JSON.stringify(swapsToPersist));
     }, [state.swaps, isInitialized]);
 
     // セル単位の「回収しない」設定の永続化（初期化完了後のみ）
@@ -661,7 +674,7 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
             noCollectCells: state.noCollectCells,
-            box: boxRef.current || undefined,
+            box: timelineRuntimeBoxRef.current || undefined,
             cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result });
@@ -694,7 +707,7 @@ export default function TeamTimelineApp() {
             cookingSettings: state.cookingSettings,
             swaps: state.swaps,
             noCollectCells: state.noCollectCells,
-            box: boxRef.current || undefined,
+            box: timelineRuntimeBoxRef.current || undefined,
             trialCount: state.multiTrialCount,
             initialSeed,
             onProgress: (progress) => {
@@ -747,7 +760,7 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
             noCollectCells: state.noCollectCells,
-            box: boxRef.current || undefined,
+            box: timelineRuntimeBoxRef.current || undefined,
             cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result: fullResult });
@@ -853,7 +866,7 @@ export default function TeamTimelineApp() {
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
                 noCollectCells: state.noCollectCells,
-                box: boxRef.current || undefined,
+                box: timelineRuntimeBoxRef.current || undefined,
                 cookingSettings: state.cookingSettings,
             });
             dispatch({ type: 'setSimulationResult', result });
@@ -1047,15 +1060,15 @@ export default function TeamTimelineApp() {
 
     // ヘルパー関数: 入れ替え対象ポケモンの名前を取得
     const getPendingPokemonName = useCallback((): string => {
-        if (!state.pendingSwapPokemonId || !boxRef.current) return '';
-        const pokemon = boxRef.current.items.find(item => item.id === state.pendingSwapPokemonId);
+        if (!state.pendingSwapPokemonId) return '';
+        const pokemon = userBoxRef.current?.items.find(item => item.id === state.pendingSwapPokemonId);
         return pokemon?.filledNickname(t) || '';
     }, [state.pendingSwapPokemonId, t]);
 
     // ヘルパー関数: 入れ替え対象ポケモンのidFormを取得
     const getPendingPokemonIdForm = useCallback((): number | undefined => {
-        if (!state.pendingSwapPokemonId || !boxRef.current) return undefined;
-        const pokemon = boxRef.current.items.find((item: PokemonBoxItem) => item.id === state.pendingSwapPokemonId);
+        if (!state.pendingSwapPokemonId) return undefined;
+        const pokemon = userBoxRef.current?.items.find((item: PokemonBoxItem) => item.id === state.pendingSwapPokemonId);
         if (!pokemon) return undefined;
         return pokemon.iv.idForm;
     }, [state.pendingSwapPokemonId]);
@@ -1083,10 +1096,10 @@ export default function TeamTimelineApp() {
     const hasConfiguredSwap = state.swaps.length > 0;
 
     const appearingTimelineMembers = useMemo(() => {
-        if (!boxRef.current) {
+        if (!timelineRuntimeBoxRef.current) {
             return [];
         }
-        return collectAppearingTimelineMembers(state.team, state.swaps, boxRef.current);
+        return collectAppearingTimelineMembers(state.team, state.swaps, timelineRuntimeBoxRef.current);
     }, [state.team, state.swaps]);
 
     const timelineDurationSummary = useMemo(
@@ -1095,7 +1108,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1110,7 +1123,7 @@ export default function TeamTimelineApp() {
             swaps: state.swaps,
             timeSlots: state.timeSlots,
             durationSummary: timelineDurationSummary,
-            box: boxRef.current ?? undefined,
+            box: timelineRuntimeBoxRef.current ?? undefined,
         })
     ), [
         state.team,
@@ -1148,7 +1161,7 @@ export default function TeamTimelineApp() {
                 timeSlots: state.timeSlots,
                 simulationDays: state.simulationConfig.simulationDays,
                 swaps: state.swaps,
-                box: boxRef.current ?? undefined,
+                box: timelineRuntimeBoxRef.current ?? undefined,
             }
         ).map((target) => ({
             ...target,
@@ -1184,7 +1197,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1200,7 +1213,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1216,7 +1229,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1316,7 +1329,7 @@ export default function TeamTimelineApp() {
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
                 noCollectCells: state.noCollectCells,
-                box: boxRef.current || undefined,
+                box: timelineRuntimeBoxRef.current || undefined,
                 cookingSettings: state.cookingSettings,
                 analysisOptions: {
                     disabledPokemonIds: options.disabledPokemonIds,
@@ -2213,13 +2226,12 @@ export default function TeamTimelineApp() {
         previousActiveTabRef.current,
         state.activeTab
     );
-    const showSimulationDetails = state.simulationResult !== null && boxRef.current !== null;
-    const showPreSimulationTimeline = state.simulationResult === null && boxRef.current !== null;
+    const showSimulationDetails = state.simulationResult !== null;
+    const showPreSimulationTimeline = state.simulationResult === null;
     const showAverageSection = useMemo(
         () => (
             state.multiTrialResults !== null
             && state.multiTrialResults.length > 1
-            && boxRef.current !== null
             && state.multiTrialAverageDailySummaries !== null
             && state.multiTrialAverageTeamSummary !== null
         ),
@@ -2300,7 +2312,7 @@ export default function TeamTimelineApp() {
                         testId="team-timeline-post-simulation-wipe"
                     >
                         <>
-                            {showAverageSection && boxRef.current && (
+                            {showAverageSection && (
                                 <Box sx={{ mt: '18px' }}>
                                     <Box
                                         sx={{
@@ -2340,7 +2352,7 @@ export default function TeamTimelineApp() {
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.multiTrialAverageDailySummaries!}
-                                        box={boxRef.current}
+                                        box={timelineRuntimeBox}
                                         layoutMode="average"
                                         simulationDays={state.simulationConfig.simulationDays}
                                         valueMode={summaryValueMode}
@@ -2415,7 +2427,7 @@ export default function TeamTimelineApp() {
                                     result={EMPTY_SIMULATION_RESULT}
                                     swaps={state.swaps}
                                     noCollectCells={state.noCollectCells}
-                                    box={boxRef.current!}
+                                    box={timelineRuntimeBox}
                                     bonusSettings={state.bonusSettings}
                                     onSwapClick={handleSwapClick}
                                     onNoCollectToggle={handleNoCollectToggle}
@@ -2497,7 +2509,7 @@ export default function TeamTimelineApp() {
                                             result={state.simulationResult!}
                                             swaps={state.swaps}
                                             noCollectCells={state.noCollectCells}
-                                            box={boxRef.current!}
+                                            box={timelineRuntimeBox}
                                             bonusSettings={state.bonusSettings}
                                             onSwapClick={handleSwapClick}
                                             onNoCollectToggle={handleNoCollectToggle}
@@ -2520,7 +2532,7 @@ export default function TeamTimelineApp() {
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.simulationResult!.dailySummaries}
-                                        box={boxRef.current!}
+                                        box={timelineRuntimeBox}
                                         layoutMode="details"
                                         simulationDays={state.simulationConfig.simulationDays}
                                         valueMode={summaryValueMode}
@@ -2604,21 +2616,19 @@ export default function TeamTimelineApp() {
             {/* 既存: ボックス選択ダイアログ（チーム編成用） */}
             <BoxSelectDialog
                 open={state.boxSelectDialogOpen}
-                box={box}
+                box={userBox}
                 onSelect={handlePokemonSelect}
                 onClose={handleDialogClose}
             />
 
             {/* 入れ替え用ポケモン選択ダイアログ */}
-            {boxRef.current && (
-                <BoxSelectDialog
-                    open={state.swapDialogOpen}
-                    box={boxRef.current}
-                    onSelect={handleSwapPokemonSelect}
-                    onClose={() => dispatch({ type: 'closeSwapDialog' })}
-                    onSelectNone={handleSwapSelectNone}
-                />
-            )}
+            <BoxSelectDialog
+                open={state.swapDialogOpen}
+                box={userBox}
+                onSelect={handleSwapPokemonSelect}
+                onClose={() => dispatch({ type: 'closeSwapDialog' })}
+                onSelectNone={handleSwapSelectNone}
+            />
 
             {/* げんき設定ダイアログ */}
             <SwapEnergyDialog

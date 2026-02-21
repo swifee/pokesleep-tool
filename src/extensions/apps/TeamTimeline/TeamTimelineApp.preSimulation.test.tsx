@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type PokemonBox from '../../../util/PokemonBox';
 import TeamTimelineApp from './TeamTimelineApp';
 
 vi.mock('react-i18next', () => ({
@@ -62,14 +63,17 @@ vi.mock('./components/SwapEnergyDialog', () => ({
 vi.mock('./components/BoxSelectDialog', () => ({
     default: ({
         open,
+        box,
         onSelectNone,
     }: {
         open: boolean;
+        box: PokemonBox;
         onSelectNone?: () => void;
     }) => (
         <div
             data-testid={onSelectNone ? 'swap-box-dialog' : 'team-box-dialog'}
             data-open={open ? 'true' : 'false'}
+            data-item-count={String(box.items.length)}
         />
     ),
 }));
@@ -79,12 +83,16 @@ vi.mock('./components/TimelineTable', () => ({
         compactEmptyCells,
         alwaysShowSwapButton,
         displayMode,
+        team,
+        swaps,
         onHeaderSlotClick,
         onOpenTimeSlotSettings,
     }: {
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
         displayMode?: 'detailed' | 'simple';
+        team: Array<{ iv: { pokemonName: string } } | null>;
+        swaps: Array<{ dayIndex: number; slotId: string; teamSlotIndex: number; newPokemonId: number }>;
         onHeaderSlotClick?: (index: number) => void;
         onOpenTimeSlotSettings?: () => void;
     }) => (
@@ -93,6 +101,10 @@ vi.mock('./components/TimelineTable', () => ({
             data-compact-empty={compactEmptyCells ? 'true' : 'false'}
             data-always-show-swap={alwaysShowSwapButton ? 'true' : 'false'}
             data-display-mode={displayMode ?? 'detailed'}
+            data-team={team.map(member => member?.iv.pokemonName ?? 'null').join('|')}
+            data-swaps={swaps
+                .map(swap => `${swap.dayIndex}:${swap.slotId}:${swap.teamSlotIndex}:${swap.newPokemonId}`)
+                .join('|')}
         >
             <button
                 type="button"
@@ -125,6 +137,10 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
         const timeline = screen.getByTestId('timeline-table');
         expect(timeline.getAttribute('data-compact-empty')).toBe('true');
         expect(timeline.getAttribute('data-always-show-swap')).toBe('true');
+        expect(timeline.getAttribute('data-team')).toBe('Pikachu|Dragonite|Slowbro|null|Psyduck');
+        expect(timeline.getAttribute('data-swaps')).toContain('0:slot-1:3:1000005');
+        expect(timeline.getAttribute('data-swaps')).toContain('0:slot-2:3:1000006');
+        expect(localStorage.getItem('PstTeamTimelinePresetAppliedV1')).toBe('1');
 
         expect(screen.queryByTestId('team-summary-row')).toBeNull();
         expect(screen.queryByTestId('daily-summary-row')).toBeNull();
@@ -134,6 +150,8 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
         render(<TeamTimelineApp />);
 
         expect(screen.getByTestId('team-box-dialog').getAttribute('data-open')).toBe('false');
+        expect(screen.getByTestId('team-box-dialog').getAttribute('data-item-count')).toBe('0');
+        expect(screen.getByTestId('swap-box-dialog').getAttribute('data-item-count')).toBe('0');
 
         fireEvent.click(screen.getByTestId('timeline-header-slot-click'));
 
