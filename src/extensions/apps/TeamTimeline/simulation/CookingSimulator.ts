@@ -301,7 +301,7 @@ export function planExtraIngredientsByEvent(
  * @param bag 食材バッグ
  * @returns 食材ごとの総数（0より大きいもののみ）
  */
-function createBagIngredientSnapshot(
+export function createBagIngredientSnapshot(
     bag: IngredientBag,
 ): CookingBagIngredientSnapshotEntry[] {
     const snapshot: CookingBagIngredientSnapshotEntry[] = [];

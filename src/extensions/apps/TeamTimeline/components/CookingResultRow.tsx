@@ -2,6 +2,7 @@ import React from 'react';
 import { styled } from '@mui/system';
 import { Popover } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import type { IngredientName } from '../../../../data/pokemons';
 import { CookingEventResult } from '../types/CookingTypes';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
 import { formatIngredientCount, sortIngredientsByCountDesc } from '../utils/IngredientDisplayUtils';
@@ -36,21 +37,32 @@ const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed'
     const extraIngredients = sortIngredientsByCountDesc(
         (event.extraIngredientsUsed ?? []).map(u => ({ name: u.name, count: u.count }))
     );
-    const extraIngredientUsageMap = (event.extraIngredientsUsed ?? []).reduce(
-        (map, usage) => {
-            map.set(usage.name, (map.get(usage.name) ?? 0) + usage.count);
+    const actualBagCountMap = (event.bagIngredientsBeforeCooking ?? []).reduce(
+        (map, ingredient) => {
+            map.set(ingredient.name, ingredient.count);
             return map;
         },
-        new Map<string, number>()
+        new Map<IngredientName, number>()
     );
+    const withoutExtraBagCountMap = (event.bagIngredientsBeforeCookingWithoutExtra ?? event.bagIngredientsBeforeCooking ?? []).reduce(
+        (map, ingredient) => {
+            map.set(ingredient.name, ingredient.count);
+            return map;
+        },
+        new Map<IngredientName, number>()
+    );
+    const bagIngredientNames = new Set<IngredientName>([
+        ...actualBagCountMap.keys(),
+        ...withoutExtraBagCountMap.keys(),
+    ]);
     const bagIngredientsBeforeCooking = sortIngredientsByCountDesc(
-        (event.bagIngredientsBeforeCooking ?? []).map((ingredient) => {
-            const extraConsumedCount = extraIngredientUsageMap.get(ingredient.name) ?? 0;
-            const adjustedCount = Math.max(0, ingredient.count - extraConsumedCount);
+        [...bagIngredientNames].map((ingredientName) => {
+            const actualCount = actualBagCountMap.get(ingredientName) ?? 0;
+            const withoutExtraCount = withoutExtraBagCountMap.get(ingredientName) ?? actualCount;
             return {
-                ...ingredient,
-                count: adjustedCount,
-                originalCount: ingredient.count,
+                name: ingredientName,
+                count: actualCount,
+                withoutExtraCount,
             };
         })
     );
@@ -142,7 +154,7 @@ const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed'
                             <BagHelpText>
                                 {t(
                                     'TeamTimeline.cooking bag before meal note',
-                                    'カッコ内はここまでスキマ食材を一切入れなかった場合の数'
+                                    'カッコ内はここまで追加食材を一切入れなかった場合の数'
                                 )}
                             </BagHelpText>
                         </Popover>
@@ -151,8 +163,8 @@ const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed'
                                 <BagPopoverItem key={ingredient.name}>
                                     <IngredientIcon name={ingredient.name} />
                                     <span>
-                                        {Math.abs(ingredient.originalCount - ingredient.count) > BAG_COUNT_EPSILON
-                                            ? `${formatIngredientCount(ingredient.count)} (${formatIngredientCount(ingredient.originalCount)})`
+                                        {Math.abs(ingredient.withoutExtraCount - ingredient.count) > BAG_COUNT_EPSILON
+                                            ? `${formatIngredientCount(ingredient.count)} (${formatIngredientCount(ingredient.withoutExtraCount)})`
                                             : formatIngredientCount(ingredient.count)}
                                     </span>
                                 </BagPopoverItem>

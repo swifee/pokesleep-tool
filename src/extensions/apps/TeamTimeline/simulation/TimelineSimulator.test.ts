@@ -831,4 +831,50 @@ describe('TimelineSimulator', () => {
             .reduce((sum, value) => sum + (value ?? 0), 0);
         expect(fixedLeftoverTotal).toBeCloseTo(4, 6);
     });
+
+    it('後配分後の料理直前バッグに実値と「ここまで追加なし」仮想値を保持する', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemon = createBerryBurstDisguisePokemon(1);
+        const result = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots: [
+                { id: 'meal-1', time: '07:00', sleepState: 'wake', hasMeal: true },
+                { id: 'meal-2', time: '07:01', sleepState: 'none', hasMeal: true },
+                { id: 'meal-3', time: '07:02', sleepState: 'none', hasMeal: true },
+            ],
+            config: { seed: 32101, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            cookingSettings: {
+                enabled: true,
+                category: 'curry',
+                recipeLevels: {},
+                basePotCapacity: 3,
+                initialIngredients: {
+                    apple: 5,
+                },
+                disabledRecipes: {},
+                disabledExtraIngredients: {},
+            },
+        });
+
+        const events = result.cookingResult?.events ?? [];
+        expect(events).toHaveLength(3);
+
+        const secondEvent = events[1];
+        const thirdEvent = events[2];
+
+        const secondActualApple = secondEvent?.bagIngredientsBeforeCooking?.find(entry => entry.name === 'apple')?.count ?? 0;
+        const secondWithoutExtraApple = secondEvent?.bagIngredientsBeforeCookingWithoutExtra?.find(entry => entry.name === 'apple')?.count ?? 0;
+        expect(secondActualApple).toBeCloseTo(2, 6);
+        expect(secondWithoutExtraApple).toBeCloseTo(5, 6);
+
+        const thirdActualApple = thirdEvent?.bagIngredientsBeforeCooking?.find(entry => entry.name === 'apple')?.count ?? 0;
+        const thirdWithoutExtraApple = thirdEvent?.bagIngredientsBeforeCookingWithoutExtra?.find(entry => entry.name === 'apple')?.count ?? 0;
+        expect(thirdActualApple).toBeCloseTo(0, 6);
+        expect(thirdWithoutExtraApple).toBeCloseTo(5, 6);
+    });
 });

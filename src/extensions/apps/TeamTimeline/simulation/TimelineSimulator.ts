@@ -45,6 +45,7 @@ import { buildStrengthParameterFromTimelineBonusSettings } from '../utils/Timeli
 import { CookingCategory, CookingSimulationSettings, CookingSimulationResult, CookingEventResult } from '../types/CookingTypes';
 import {
     createIngredientBag,
+    createBagIngredientSnapshot,
     addIngredientsToBag,
     deductIngredientCountsFromBag,
     executeMealCooking,
@@ -315,6 +316,8 @@ function applyExtraIngredientsToBaselineEvents(
             continue;
         }
 
+        const bagIngredientsBeforeCooking = createBagIngredientSnapshot(bag);
+
         const replayedIngredientsUsed = deductIngredientCountsFromBag(
             bag,
             getBaselineUsageCounts(baselineEvent),
@@ -388,6 +391,8 @@ function applyExtraIngredientsToBaselineEvents(
             cookingEP,
             ingredientsUsed: replayedIngredientsUsed,
             extraIngredientsUsed: replayedExtraIngredientsUsed,
+            bagIngredientsBeforeCooking,
+            bagIngredientsBeforeCookingWithoutExtra: baselineEvent.bagIngredientsBeforeCooking,
             remainingPotCapacity: Math.max(0, baselineEvent.remainingPotCapacity - extraIngredientCount),
         });
 
