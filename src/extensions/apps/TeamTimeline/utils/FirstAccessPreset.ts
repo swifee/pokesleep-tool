@@ -1,10 +1,10 @@
 import PokemonIv from '../../../../util/PokemonIv';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
-import { STORAGE_KEY, SerializedTeam } from '../types/TeamTimelineTypes';
+import { SerializedTeam } from '../types/TeamTimelineTypes';
 import { PokemonSwap } from '../types/TimeSlotTypes';
+import { STORAGE_KEY_TEAM_SETS } from '../TeamTimelineState';
 
 export const FIRST_ACCESS_PRESET_MARKER_KEY = 'PstTeamTimelinePresetAppliedV1';
-export const TEAM_TIMELINE_SWAPS_STORAGE_KEY = 'PstTeamTimelineSwaps';
 
 type PresetPokemonKey =
     | 'pikachu'
@@ -121,14 +121,22 @@ export function applyFirstAccessPresetIfNeeded(): void {
     if (localStorage.getItem(FIRST_ACCESS_PRESET_MARKER_KEY) !== null) {
         return;
     }
-    if (localStorage.getItem(STORAGE_KEY) !== null) {
-        return;
-    }
-    if (localStorage.getItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY) !== null) {
+    if (localStorage.getItem(STORAGE_KEY_TEAM_SETS) !== null) {
         return;
     }
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(buildPresetSerializedTeam()));
-    localStorage.setItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY, JSON.stringify(buildPresetSwaps()));
+    localStorage.setItem(STORAGE_KEY_TEAM_SETS, JSON.stringify({
+        activeTeamSetIndex: 0,
+        teamSets: [
+            {
+                id: 'team-set-preset',
+                name: 'チーム1',
+                team: buildPresetSerializedTeam(),
+                swaps: buildPresetSwaps(),
+                noCollectCells: [],
+                lastSimulationSnapshot: null,
+            },
+        ],
+    }));
     localStorage.setItem(FIRST_ACCESS_PRESET_MARKER_KEY, '1');
 }

@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import PokemonIv from '../../../../util/PokemonIv';
 import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
-import { STORAGE_KEY } from '../types/TeamTimelineTypes';
+import { STORAGE_KEY_TEAM_SETS } from '../TeamTimelineState';
 import {
     applyFirstAccessPresetIfNeeded,
     createTimelineRuntimeBox,
     FIRST_ACCESS_PRESET_MARKER_KEY,
-    TEAM_TIMELINE_SWAPS_STORAGE_KEY,
 } from './FirstAccessPreset';
 
 const PIKACHU_SERIALIZED = 'kQEAj0QA43wf';
@@ -24,22 +23,23 @@ describe('FirstAccessPreset', () => {
     it('seeds first access team and swaps when related storages are empty', () => {
         applyFirstAccessPresetIfNeeded();
 
-        const teamRaw = localStorage.getItem(STORAGE_KEY);
-        const swapsRaw = localStorage.getItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY);
+        const payloadRaw = localStorage.getItem(STORAGE_KEY_TEAM_SETS);
         const marker = localStorage.getItem(FIRST_ACCESS_PRESET_MARKER_KEY);
 
-        expect(teamRaw).not.toBeNull();
-        expect(swapsRaw).not.toBeNull();
+        expect(payloadRaw).not.toBeNull();
         expect(marker).toBe('1');
 
-        expect(JSON.parse(teamRaw!)).toEqual([
+        const payload = JSON.parse(payloadRaw!);
+        expect(payload.activeTeamSetIndex).toBe(0);
+        expect(payload.teamSets).toHaveLength(1);
+        expect(payload.teamSets[0].team).toEqual([
             PIKACHU_SERIALIZED,
             DRAGONITE_SERIALIZED,
             SLOWBRO_SERIALIZED,
             null,
             PSYDUCK_SERIALIZED,
         ]);
-        expect(JSON.parse(swapsRaw!)).toEqual([
+        expect(payload.teamSets[0].swaps).toEqual([
             {
                 dayIndex: 0,
                 slotId: 'slot-1',
@@ -57,15 +57,15 @@ describe('FirstAccessPreset', () => {
                 initialEnergy: 100,
             },
         ]);
+        expect(payload.teamSets[0].lastSimulationSnapshot).toBeNull();
     });
 
     it('does not overwrite existing team storage', () => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(['existing-team']));
+        localStorage.setItem(STORAGE_KEY_TEAM_SETS, JSON.stringify({ activeTeamSetIndex: 0, teamSets: [] }));
 
         applyFirstAccessPresetIfNeeded();
 
-        expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual(['existing-team']);
-        expect(localStorage.getItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY)).toBeNull();
+        expect(JSON.parse(localStorage.getItem(STORAGE_KEY_TEAM_SETS)!)).toEqual({ activeTeamSetIndex: 0, teamSets: [] });
         expect(localStorage.getItem(FIRST_ACCESS_PRESET_MARKER_KEY)).toBeNull();
     });
 
@@ -74,8 +74,7 @@ describe('FirstAccessPreset', () => {
 
         applyFirstAccessPresetIfNeeded();
 
-        expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-        expect(localStorage.getItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY)).toBeNull();
+        expect(localStorage.getItem(STORAGE_KEY_TEAM_SETS)).toBeNull();
     });
 
     it('builds runtime box with user entries + hidden preset entries', () => {

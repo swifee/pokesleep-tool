@@ -12,10 +12,28 @@ import { TrialSummary } from './MultiTrialTypes';
 import { TimelineBonusSettings } from './TimelineBonusSettingsTypes';
 import { AverageCookingSummary, CookingSimulationSettings } from './CookingTypes';
 
+export interface TeamSetSimulationSnapshot {
+    averageTotalEP: number;
+    settingsHash: string;
+}
+
+export interface TeamSetState {
+    id: string;
+    name: string;
+    team: (PokemonBoxItem | null)[];
+    swaps: PokemonSwap[];
+    noCollectCells: NoCollectCellSetting[];
+    lastSimulationSnapshot: TeamSetSimulationSnapshot | null;
+}
+
 /**
  * チームタイムラインの状態
  */
 export interface TeamTimelineState {
+    /** 保存されたチームセット */
+    teamSets: TeamSetState[];
+    /** 現在選択中のチームセットインデックス */
+    activeTeamSetIndex: number;
     /** チームに編成された5体のポケモン (null = 空きスロット) */
     team: (PokemonBoxItem | null)[];
     /** 現在選択中のスロットインデックス (ダイアログ用) */
@@ -81,6 +99,16 @@ export interface TeamTimelineState {
  * チームタイムラインのアクション型
  */
 export type TeamTimelineAction =
+    | { type: 'renameActiveTeamSet'; name: string }
+    | { type: 'createTeamSet'; id: string; name: string }
+    | { type: 'duplicateTeamSet'; id: string; name: string }
+    | { type: 'deleteTeamSet'; fallbackId: string; fallbackName: string }
+    | { type: 'selectTeamSet'; index: number }
+    | { type: 'loadTeamSets'; teamSets: TeamSetState[]; activeIndex: number }
+    | {
+        type: 'setActiveTeamSetSimulationSnapshot';
+        snapshot: TeamSetSimulationSnapshot;
+    }
     | { type: 'openSlotDialog'; index: number }
     | { type: 'closeSlotDialog' }
     | { type: 'selectPokemon'; index: number; item: PokemonBoxItem }

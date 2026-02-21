@@ -16,8 +16,8 @@ import PokemonBox, { PokemonBoxItem } from '../../../util/PokemonBox';
 import {
     createInitialState,
     teamTimelineReducer,
-    saveTeamToStorage,
-    loadTeamFromStorage,
+    saveTeamSetsToStorage,
+    loadTeamSetsFromStorage,
     saveTimeSlotsToStorage,
     loadTimeSlotsFromStorage,
     saveConfigToStorage,
@@ -33,6 +33,7 @@ import {
     saveTrialCountToStorage,
     loadTrialCountFromStorage,
 } from './TeamTimelineState';
+import TeamSetToolbar from './components/TeamSetToolbar';
 import TimelineHeader from './components/TimelineHeader';
 import BoxSelectDialog from './components/BoxSelectDialog';
 import TimeSlotEditor from './components/TimeSlotEditor';
@@ -62,6 +63,7 @@ import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
 import { CookingSimulationSettings } from './types/CookingTypes';
 import { saveCookingSettingsToStorage, loadCookingSettingsFromStorage } from './utils/CookingSettingsStorage';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
+import { TeamSetState } from './types/TeamTimelineTypes';
 import SummaryValueModeToggle from './components/SummaryValueModeToggle';
 import ResimulationNoticeBar from './components/ResimulationNoticeBar';
 import AdditionalAnalysisPanel from './components/AdditionalAnalysisPanel';
@@ -106,8 +108,8 @@ import {
 import {
     applyFirstAccessPresetIfNeeded,
     createTimelineRuntimeBox,
-    TEAM_TIMELINE_SWAPS_STORAGE_KEY,
 } from './utils/FirstAccessPreset';
+import { buildSimulationContextHash } from './utils/SimulationContextHash';
 
 interface TeamNormalizationResult {
     normalizedTeam: (PokemonBoxItem | null)[];
@@ -138,7 +140,6 @@ const TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD = 'cubic-bezier(0.25, 0.46, 0.45, 0.9
 const TIMELINE_DETAILS_FADE_DURATION_MS = 450;
 const TIMELINE_PAGE_BOTTOM_PADDING = '3em';
 const TIME_SLOT_SETTINGS_SECTION_ID = 'team-timeline-time-slot-settings';
-const STORAGE_KEY_NO_COLLECT_CELLS = 'PstTeamTimelineNoCollectCells';
 const EMPTY_SIMULATION_RESULT: SimulationResult = {
     slotResults: new Map(),
     dailySummaries: [],
@@ -197,40 +198,6 @@ function pickEveryTenthSeeds(sortedSeeds: readonly number[]): number[] {
     return [...sortedSeeds];
 }
 
-function migrateSwap(rawSwap: unknown): PokemonSwap | null {
-    if (!rawSwap || typeof rawSwap !== 'object') {
-        return null;
-    }
-    const candidate = rawSwap as Partial<PokemonSwap> & { dayIndex?: unknown };
-    if (
-        typeof candidate.slotId !== 'string' ||
-        typeof candidate.teamSlotIndex !== 'number' ||
-        typeof candidate.newPokemonId !== 'number' ||
-        typeof candidate.initialEnergy !== 'number'
-    ) {
-        return null;
-    }
-
-    const dayIndex = typeof candidate.dayIndex === 'number'
-        ? Math.max(0, Math.floor(candidate.dayIndex))
-        : 0;
-    const isRepeatGenerated = candidate.isRepeatGenerated === true
-        ? true
-        : undefined;
-    const newPokemonSerialized = typeof candidate.newPokemonSerialized === 'string'
-        ? candidate.newPokemonSerialized
-        : undefined;
-    return {
-        dayIndex,
-        slotId: candidate.slotId,
-        teamSlotIndex: candidate.teamSlotIndex,
-        newPokemonId: candidate.newPokemonId,
-        newPokemonSerialized,
-        initialEnergy: candidate.initialEnergy,
-        isRepeatGenerated,
-    };
-}
-
 function normalizeTeamWithBoxItems(
     loadedTeam: (PokemonBoxItem | null)[],
     boxItems: readonly PokemonBoxItem[],
@@ -261,6 +228,19 @@ function normalizeTeamWithBoxItems(
     return { normalizedTeam, idRemap };
 }
 
+function normalizeTeamSetWithRuntimeBox(
+    teamSet: TeamSetState,
+    runtimeBox: PokemonBox,
+): TeamSetState {
+    const { normalizedTeam, idRemap } = normalizeTeamWithBoxItems(teamSet.team, runtimeBox.items);
+    return {
+        ...teamSet,
+        team: normalizedTeam,
+        swaps: normalizeLoadedSwapsWithBox(teamSet.swaps, runtimeBox, idRemap),
+        noCollectCells: [...teamSet.noCollectCells],
+    };
+}
+
 function createSwapSignature(swaps: readonly PokemonSwap[]): string {
     return swaps
         .map(
@@ -275,31 +255,14 @@ function createNoCollectSignature(noCollectCells: readonly NoCollectCellSetting[
         .join('|');
 }
 
-function migrateNoCollectCell(rawCell: unknown): NoCollectCellSetting | null {
-    if (!rawCell || typeof rawCell !== 'object') {
-        return null;
-    }
-    const candidate = rawCell as Partial<NoCollectCellSetting>;
-    if (
-        typeof candidate.slotId !== 'string' ||
-        typeof candidate.teamSlotIndex !== 'number'
-    ) {
-        return null;
-    }
-    const dayIndex = typeof candidate.dayIndex === 'number'
-        ? Math.max(0, Math.floor(candidate.dayIndex))
-        : 0;
-    return {
-        dayIndex,
-        slotId: candidate.slotId,
-        teamSlotIndex: Math.max(0, Math.floor(candidate.teamSlotIndex)),
-    };
-}
-
 function createTeamSignature(team: readonly (PokemonBoxItem | null)[]): string {
     return team
         .map((member, index) => `${index}:${member?.id ?? 'null'}`)
         .join('|');
+}
+
+function createTeamSetId(): string {
+    return `team-set-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -410,6 +373,22 @@ export default function TeamTimelineApp() {
     }
     const userBox = userBoxRef.current!;
     const timelineRuntimeBox = timelineRuntimeBoxRef.current!;
+    const currentSimulationContextHash = useMemo(
+        () => buildSimulationContextHash({
+            bonusSettings: state.bonusSettings,
+            cookingSettings: state.cookingSettings,
+            initialEnergy: state.simulationConfig.initialEnergy,
+            simulationDays: state.simulationConfig.simulationDays,
+            timeSlots: state.timeSlots,
+        }),
+        [
+            state.bonusSettings,
+            state.cookingSettings,
+            state.simulationConfig.initialEnergy,
+            state.simulationConfig.simulationDays,
+            state.timeSlots,
+        ],
+    );
 
     // 初回マウント時にデータをロード
     useEffect(() => {
@@ -418,10 +397,16 @@ export default function TeamTimelineApp() {
             return;
         }
 
-        // ロード処理
-        const loadedTeam = loadTeamFromStorage(runtimeBox);
-        const { normalizedTeam, idRemap } = normalizeTeamWithBoxItems(loadedTeam, runtimeBox.items);
-        dispatch({ type: 'loadTeam', team: normalizedTeam });
+        const loadedTeamSets = loadTeamSetsFromStorage(runtimeBox);
+        if (loadedTeamSets) {
+            const normalizedTeamSets = loadedTeamSets.teamSets
+                .map((teamSet) => normalizeTeamSetWithRuntimeBox(teamSet, runtimeBox));
+            dispatch({
+                type: 'loadTeamSets',
+                teamSets: normalizedTeamSets,
+                activeIndex: loadedTeamSets.activeTeamSetIndex,
+            });
+        }
 
         const savedSlots = loadTimeSlotsFromStorage();
         dispatch({ type: 'loadTimeSlots', slots: savedSlots });
@@ -445,46 +430,22 @@ export default function TeamTimelineApp() {
         const cookingSettings = loadCookingSettingsFromStorage();
         dispatch({ type: 'loadCookingSettings', settings: cookingSettings });
 
-        const savedSwaps = localStorage.getItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY);
-        if (savedSwaps) {
-            try {
-                const swaps: PokemonSwap[] = JSON.parse(savedSwaps);
-                if (Array.isArray(swaps)) {
-                    const migratedSwaps = swaps
-                        .map(migrateSwap)
-                        .filter((swap): swap is PokemonSwap => swap !== null);
-                    const normalizedSwaps = normalizeLoadedSwapsWithBox(migratedSwaps, runtimeBox, idRemap);
-                    dispatch({ type: 'loadSwaps', swaps: normalizedSwaps });
-                }
-            } catch (e) {
-                console.error('Failed to load swaps', e);
-            }
-        }
-
-        const savedNoCollectCells = localStorage.getItem(STORAGE_KEY_NO_COLLECT_CELLS);
-        if (savedNoCollectCells) {
-            try {
-                const parsedCells: unknown = JSON.parse(savedNoCollectCells);
-                if (Array.isArray(parsedCells)) {
-                    const migratedNoCollectCells = parsedCells
-                        .map(migrateNoCollectCell)
-                        .filter((cell): cell is NoCollectCellSetting => cell !== null);
-                    dispatch({ type: 'loadNoCollectCells', noCollectCells: migratedNoCollectCells });
-                }
-            } catch (e) {
-                console.error('Failed to load no collect cells', e);
-            }
-        }
-
         // ロード完了をマーク
         setIsInitialized(true);
     }, []); // 依存配列を空に
 
-    // チームが変更されたらlocalStorageに保存（初期化完了後のみ）
+    // チームセットを永続化（初期化完了後のみ）
     useEffect(() => {
-        if (!isInitialized) return; // 初期化前は保存しない
-        saveTeamToStorage(state.team);
-    }, [state.team, isInitialized]);
+        if (!isInitialized) return;
+        const hydratedTeamSets = state.teamSets.map((teamSet) => ({
+            ...teamSet,
+            swaps: hydrateSwapsWithSerializedPokemon(
+                teamSet.swaps,
+                timelineRuntimeBoxRef.current ?? undefined,
+            ),
+        }));
+        saveTeamSetsToStorage(hydratedTeamSets, state.activeTeamSetIndex);
+    }, [state.teamSets, state.activeTeamSetIndex, isInitialized]);
 
     // 時間帯設定の永続化（初期化完了後のみ）
     useEffect(() => {
@@ -515,22 +476,6 @@ export default function TeamTimelineApp() {
         if (!isInitialized) return;
         saveSyncWithIvParameterToStorage(state.syncWithIvParameter);
     }, [state.syncWithIvParameter, isInitialized]);
-
-    // ポケモン入れ替え情報の永続化（初期化完了後のみ）
-    useEffect(() => {
-        if (!isInitialized) return;
-        const swapsToPersist = hydrateSwapsWithSerializedPokemon(
-            state.swaps,
-            timelineRuntimeBoxRef.current ?? undefined,
-        );
-        localStorage.setItem(TEAM_TIMELINE_SWAPS_STORAGE_KEY, JSON.stringify(swapsToPersist));
-    }, [state.swaps, isInitialized]);
-
-    // セル単位の「回収しない」設定の永続化（初期化完了後のみ）
-    useEffect(() => {
-        if (!isInitialized) return;
-        localStorage.setItem(STORAGE_KEY_NO_COLLECT_CELLS, JSON.stringify(state.noCollectCells));
-    }, [state.noCollectCells, isInitialized]);
 
     const previousSwapSignatureRef = useRef<string | null>(null);
     useEffect(() => {
@@ -678,6 +623,13 @@ export default function TeamTimelineApp() {
             cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result });
+        dispatch({
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: result.teamSummary.grandTotalEP,
+                settingsHash: currentSimulationContextHash,
+            },
+        });
         dispatch({ type: 'updateSimulationConfig', config: { seed } });
     }, [
         state.team,
@@ -688,6 +640,7 @@ export default function TeamTimelineApp() {
         state.swaps,
         state.noCollectCells,
         state.cookingSettings,
+        currentSimulationContextHash,
     ]);
 
     const runMultiTrialWithSeed = useCallback(async (
@@ -764,6 +717,13 @@ export default function TeamTimelineApp() {
             cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result: fullResult });
+        dispatch({
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: multiResult.averageTeamSummary.grandTotalEP,
+                settingsHash: currentSimulationContextHash,
+            },
+        });
         dispatch({ type: 'updateSimulationConfig', config: { seed: selectedSeed } });
     }, [
         state.team,
@@ -775,6 +735,7 @@ export default function TeamTimelineApp() {
         state.noCollectCells,
         state.multiTrialCount,
         state.cookingSettings,
+        currentSimulationContextHash,
     ]);
 
     const executeSimulation = useCallback(async (options?: {
@@ -917,6 +878,53 @@ export default function TeamTimelineApp() {
     // タブ切り替えハンドラー
     const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings' | 'cooking') => {
         dispatch({ type: 'selectTab', tab: newValue });
+    }, []);
+
+    const createDefaultTeamSetName = useCallback((index: number) => (
+        `${t('TeamTimeline.team set default name', 'チーム')}${index}`
+    ), [t]);
+
+    const handleTeamSetNameChange = useCallback((name: string) => {
+        dispatch({ type: 'renameActiveTeamSet', name });
+    }, []);
+
+    const handleTeamSetCreate = useCallback(() => {
+        dispatch({
+            type: 'createTeamSet',
+            id: createTeamSetId(),
+            name: createDefaultTeamSetName(state.teamSets.length + 1),
+        });
+    }, [createDefaultTeamSetName, state.teamSets.length]);
+
+    const handleTeamSetDuplicateAt = useCallback((index: number) => {
+        const safeIndex = Math.max(0, Math.min(index, state.teamSets.length - 1));
+        if (safeIndex !== state.activeTeamSetIndex) {
+            dispatch({ type: 'selectTeamSet', index: safeIndex });
+        }
+        const sourceName = state.teamSets[safeIndex]?.name
+            ?? createDefaultTeamSetName(safeIndex + 1);
+        const duplicateSuffix = t('TeamTimeline.team set duplicate suffix', 'コピー');
+        dispatch({
+            type: 'duplicateTeamSet',
+            id: createTeamSetId(),
+            name: `${sourceName} ${duplicateSuffix}`,
+        });
+    }, [createDefaultTeamSetName, state.activeTeamSetIndex, state.teamSets, t]);
+
+    const handleTeamSetDeleteAt = useCallback((index: number) => {
+        const safeIndex = Math.max(0, Math.min(index, state.teamSets.length - 1));
+        if (safeIndex !== state.activeTeamSetIndex) {
+            dispatch({ type: 'selectTeamSet', index: safeIndex });
+        }
+        dispatch({
+            type: 'deleteTeamSet',
+            fallbackId: createTeamSetId(),
+            fallbackName: createDefaultTeamSetName(1),
+        });
+    }, [createDefaultTeamSetName, state.activeTeamSetIndex, state.teamSets.length]);
+
+    const handleTeamSetSelect = useCallback((index: number) => {
+        dispatch({ type: 'selectTeamSet', index });
     }, []);
 
     const handleOpenTimeSlotSettings = useCallback(() => {
@@ -2268,6 +2276,16 @@ export default function TeamTimelineApp() {
                             width: isDesktop ? 'max-content' : '100%',
                         }}
                     >
+                    <TeamSetToolbar
+                        teamSets={state.teamSets}
+                        activeTeamSetIndex={state.activeTeamSetIndex}
+                        currentSimulationContextHash={currentSimulationContextHash}
+                        onNameChange={handleTeamSetNameChange}
+                        onCreate={handleTeamSetCreate}
+                        onDuplicateAt={handleTeamSetDuplicateAt}
+                        onDeleteAt={handleTeamSetDeleteAt}
+                        onSelect={handleTeamSetSelect}
+                    />
                     <TimelineHeader
                         team={state.team}
                         onSlotClick={handleSlotClick}

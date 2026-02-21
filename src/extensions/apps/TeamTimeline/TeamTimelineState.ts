@@ -2,6 +2,8 @@ import PokemonBox, { PokemonBoxItem } from '../../../util/PokemonBox';
 import {
     TeamTimelineState,
     TeamTimelineAction,
+    TeamSetState,
+    TeamSetSimulationSnapshot,
     MAX_TEAM_SIZE,
     STORAGE_KEY,
     SerializedTeam,
@@ -32,11 +34,101 @@ export const STORAGE_KEY_SYNC_IV_PARAMETER = 'PstTeamTimelineSyncIvParam';
 export const STORAGE_KEY_SUMMARY_VALUE_MODE = 'PstTeamTimelineSummaryValueMode';
 export const STORAGE_KEY_SEED_MODE = 'PstTeamTimelineSeedMode';
 export const STORAGE_KEY_TRIAL_COUNT = 'PstTeamTimelineTrialCount';
+export const STORAGE_KEY_TEAM_SETS = 'PstTeamTimelineTeamSetsV1';
+
+interface SerializedTeamSetState {
+    id: string;
+    name: string;
+    team: SerializedTeam;
+    swaps: PokemonSwap[];
+    noCollectCells: NoCollectCellSetting[];
+    lastSimulationSnapshot?: TeamSetSimulationSnapshot | null;
+}
+
+interface SerializedTeamSetPayload {
+    activeTeamSetIndex: number;
+    teamSets: SerializedTeamSetState[];
+}
 
 interface SwapPosition {
     dayIndex: number;
     slotId: string;
     teamSlotIndex: number;
+}
+
+function createEmptyTeam(): (PokemonBoxItem | null)[] {
+    return Array(MAX_TEAM_SIZE).fill(null);
+}
+
+function normalizeTeamLength(team: readonly (PokemonBoxItem | null)[]): (PokemonBoxItem | null)[] {
+    const normalized = [...team];
+    while (normalized.length < MAX_TEAM_SIZE) {
+        normalized.push(null);
+    }
+    return normalized.slice(0, MAX_TEAM_SIZE);
+}
+
+function cloneTeamSet(set: TeamSetState): TeamSetState {
+    return {
+        id: set.id,
+        name: set.name,
+        team: normalizeTeamLength(set.team),
+        swaps: [...set.swaps],
+        noCollectCells: [...set.noCollectCells],
+        lastSimulationSnapshot: set.lastSimulationSnapshot
+            ? { ...set.lastSimulationSnapshot }
+            : null,
+    };
+}
+
+function createEmptyTeamSet(id: string, name: string): TeamSetState {
+    return {
+        id,
+        name,
+        team: createEmptyTeam(),
+        swaps: [],
+        noCollectCells: [],
+        lastSimulationSnapshot: null,
+    };
+}
+
+function clampActiveTeamSetIndex(index: number, teamSets: readonly TeamSetState[]): number {
+    if (teamSets.length === 0) {
+        return 0;
+    }
+    if (!Number.isFinite(index)) {
+        return 0;
+    }
+    return Math.max(0, Math.min(Math.floor(index), teamSets.length - 1));
+}
+
+function replaceActiveTeamSet(
+    state: TeamTimelineState,
+    nextTeam: (PokemonBoxItem | null)[],
+    nextSwaps: PokemonSwap[],
+    nextNoCollectCells: NoCollectCellSetting[],
+): TeamTimelineState {
+    const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+    const nextTeamSets = state.teamSets.map((set, index) => {
+        if (index !== activeIndex) {
+            return set;
+        }
+        return {
+            ...set,
+            team: normalizeTeamLength(nextTeam),
+            swaps: [...nextSwaps],
+            noCollectCells: [...nextNoCollectCells],
+            lastSimulationSnapshot: null,
+        };
+    });
+    return {
+        ...state,
+        activeTeamSetIndex: activeIndex,
+        team: normalizeTeamLength(nextTeam),
+        swaps: [...nextSwaps],
+        noCollectCells: [...nextNoCollectCells],
+        teamSets: nextTeamSets,
+    };
 }
 
 function toSwapPositionKey(position: SwapPosition): string {
@@ -111,8 +203,11 @@ function getResetSimulationFields(): Pick<
  * 初期状態を生成
  */
 export function createInitialState(): TeamTimelineState {
+    const initialTeamSet = createEmptyTeamSet('team-set-initial', 'Team 1');
     return {
-        team: Array(MAX_TEAM_SIZE).fill(null),
+        teamSets: [initialTeamSet],
+        activeTeamSetIndex: 0,
+        team: [...initialTeamSet.team],
         selectedSlotIndex: null,
         boxSelectDialogOpen: false,
         // Phase 3: 時間帯とシミュレーション
@@ -154,6 +249,115 @@ export function teamTimelineReducer(
     action: TeamTimelineAction
 ): TeamTimelineState {
     switch (action.type) {
+        case 'renameActiveTeamSet': {
+            const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+            return {
+                ...state,
+                activeTeamSetIndex: activeIndex,
+                teamSets: state.teamSets.map((set, index) => (
+                    index === activeIndex
+                        ? { ...set, name: action.name }
+                        : set
+                )),
+            };
+        }
+        case 'createTeamSet': {
+            const newSet = createEmptyTeamSet(action.id, action.name);
+            const nextTeamSets = [...state.teamSets, newSet];
+            const nextActiveIndex = nextTeamSets.length - 1;
+            return {
+                ...state,
+                teamSets: nextTeamSets,
+                activeTeamSetIndex: nextActiveIndex,
+                team: [...newSet.team],
+                swaps: [],
+                noCollectCells: [],
+            };
+        }
+        case 'duplicateTeamSet': {
+            const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+            const sourceSet = state.teamSets[activeIndex] ?? createEmptyTeamSet(action.id, action.name);
+            const duplicatedSet: TeamSetState = {
+                ...cloneTeamSet(sourceSet),
+                id: action.id,
+                name: action.name,
+                lastSimulationSnapshot: null,
+            };
+            const nextTeamSets = [...state.teamSets, duplicatedSet];
+            const nextActiveIndex = nextTeamSets.length - 1;
+            return {
+                ...state,
+                teamSets: nextTeamSets,
+                activeTeamSetIndex: nextActiveIndex,
+                team: [...duplicatedSet.team],
+                swaps: [...duplicatedSet.swaps],
+                noCollectCells: [...duplicatedSet.noCollectCells],
+            };
+        }
+        case 'deleteTeamSet': {
+            if (state.teamSets.length <= 1) {
+                const replacement = createEmptyTeamSet(action.fallbackId, action.fallbackName);
+                return {
+                    ...state,
+                    teamSets: [replacement],
+                    activeTeamSetIndex: 0,
+                    team: [...replacement.team],
+                    swaps: [],
+                    noCollectCells: [],
+                };
+            }
+
+            const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+            const nextTeamSets = state.teamSets.filter((_, index) => index !== activeIndex);
+            const nextActiveIndex = clampActiveTeamSetIndex(activeIndex, nextTeamSets);
+            const activeSet = nextTeamSets[nextActiveIndex];
+            return {
+                ...state,
+                teamSets: nextTeamSets,
+                activeTeamSetIndex: nextActiveIndex,
+                team: [...activeSet.team],
+                swaps: [...activeSet.swaps],
+                noCollectCells: [...activeSet.noCollectCells],
+            };
+        }
+        case 'selectTeamSet': {
+            const nextActiveIndex = clampActiveTeamSetIndex(action.index, state.teamSets);
+            const activeSet = state.teamSets[nextActiveIndex];
+            return {
+                ...state,
+                activeTeamSetIndex: nextActiveIndex,
+                team: [...activeSet.team],
+                swaps: [...activeSet.swaps],
+                noCollectCells: [...activeSet.noCollectCells],
+            };
+        }
+        case 'loadTeamSets': {
+            const normalizedTeamSets = action.teamSets.length > 0
+                ? action.teamSets.map(cloneTeamSet)
+                : [createEmptyTeamSet('team-set-initial', 'Team 1')];
+            const nextActiveIndex = clampActiveTeamSetIndex(action.activeIndex, normalizedTeamSets);
+            const activeSet = normalizedTeamSets[nextActiveIndex];
+            return {
+                ...state,
+                teamSets: normalizedTeamSets,
+                activeTeamSetIndex: nextActiveIndex,
+                team: [...activeSet.team],
+                swaps: [...activeSet.swaps],
+                noCollectCells: [...activeSet.noCollectCells],
+            };
+        }
+        case 'setActiveTeamSetSimulationSnapshot': {
+            const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+            return {
+                ...state,
+                activeTeamSetIndex: activeIndex,
+                teamSets: state.teamSets.map((set, index) => (
+                    index === activeIndex
+                        ? { ...set, lastSimulationSnapshot: { ...action.snapshot } }
+                        : set
+                )),
+            };
+        }
         case 'openSlotDialog':
             return {
                 ...state,
@@ -169,26 +373,20 @@ export function teamTimelineReducer(
         case 'selectPokemon': {
             const newTeam = [...state.team];
             newTeam[action.index] = action.item;
-            return {
+            const nextState = {
                 ...state,
-                team: newTeam,
                 selectedSlotIndex: null,
                 boxSelectDialogOpen: false,
             };
+            return replaceActiveTeamSet(nextState, newTeam, state.swaps, state.noCollectCells);
         }
         case 'removePokemon': {
             const newTeam = [...state.team];
             newTeam[action.index] = null;
-            return {
-                ...state,
-                team: newTeam,
-            };
+            return replaceActiveTeamSet(state, newTeam, state.swaps, state.noCollectCells);
         }
         case 'loadTeam':
-            return {
-                ...state,
-                team: action.team,
-            };
+            return replaceActiveTeamSet(state, action.team, state.swaps, state.noCollectCells);
         // Phase 3: 時間帯操作
         case 'addTimeSlot':
             return {
@@ -375,9 +573,8 @@ export function teamTimelineReducer(
                 }
             }
 
-            return {
+            const nextState = {
                 ...state,
-                swaps: [...swapsWithoutOldRepeats, ...allNewSwaps],
                 swapTargetSlotId: null,
                 swapTargetTeamIndex: null,
                 swapTargetDayIndex: null,
@@ -385,6 +582,7 @@ export function teamTimelineReducer(
                 energyDialogOpen: false,
                 pendingSwapPokemonId: null,
             };
+            return replaceActiveTeamSet(nextState, state.team, [...swapsWithoutOldRepeats, ...allNewSwaps], state.noCollectCells);
         }
         case 'confirmSwapDirect': {
             if (
@@ -408,9 +606,8 @@ export function teamTimelineReducer(
                 newPokemonId: action.pokemonId,
                 initialEnergy: action.initialEnergy,
             };
-            return {
+            const nextState = {
                 ...state,
-                swaps: [...filteredSwaps, newSwap],
                 swapTargetSlotId: null,
                 swapTargetTeamIndex: null,
                 swapTargetDayIndex: null,
@@ -418,6 +615,7 @@ export function teamTimelineReducer(
                 energyDialogOpen: false,
                 pendingSwapPokemonId: null,
             };
+            return replaceActiveTeamSet(nextState, state.team, [...filteredSwaps, newSwap], state.noCollectCells);
         }
         case 'removeSwap': {
             const newSwaps = state.swaps.filter(
@@ -438,10 +636,7 @@ export function teamTimelineReducer(
                     return swap.dayIndex !== action.dayIndex;
                 }
             );
-            return {
-                ...state,
-                swaps: newSwaps,
-            };
+            return replaceActiveTeamSet(state, state.team, newSwaps, state.noCollectCells);
         }
         case 'moveSwapSeries': {
             const sourcePosition: SwapPosition = {
@@ -506,10 +701,7 @@ export function teamTimelineReducer(
                 .filter((swap): swap is PokemonSwap => swap !== null);
 
             if (movedSwaps.length === 0) {
-                return {
-                    ...state,
-                    swaps: remainingSwaps,
-                };
+                return replaceActiveTeamSet(state, state.team, remainingSwaps, state.noCollectCells);
             }
 
             const movedSwapKeySet = new Set(
@@ -519,21 +711,12 @@ export function teamTimelineReducer(
                 (swap) => !movedSwapKeySet.has(toSwapPositionKey(getSwapPosition(swap)))
             );
 
-            return {
-                ...state,
-                swaps: [...remainingSwaps, ...movedSwaps],
-            };
+            return replaceActiveTeamSet(state, state.team, [...remainingSwaps, ...movedSwaps], state.noCollectCells);
         }
         case 'clearSwaps':
-            return {
-                ...state,
-                swaps: [],
-            };
+            return replaceActiveTeamSet(state, state.team, [], state.noCollectCells);
         case 'loadSwaps':
-            return {
-                ...state,
-                swaps: action.swaps,
-            };
+            return replaceActiveTeamSet(state, state.team, action.swaps, state.noCollectCells);
         case 'toggleNoCollectCell': {
             const nextTarget: NoCollectCellSetting = {
                 dayIndex: action.dayIndex,
@@ -547,21 +730,22 @@ export function teamTimelineReducer(
                     cell.teamSlotIndex === nextTarget.teamSlotIndex
             );
             if (targetIndex >= 0) {
-                return {
-                    ...state,
-                    noCollectCells: state.noCollectCells.filter((_, index) => index !== targetIndex),
-                };
+                return replaceActiveTeamSet(
+                    state,
+                    state.team,
+                    state.swaps,
+                    state.noCollectCells.filter((_, index) => index !== targetIndex),
+                );
             }
-            return {
-                ...state,
-                noCollectCells: [...state.noCollectCells, nextTarget],
-            };
+            return replaceActiveTeamSet(
+                state,
+                state.team,
+                state.swaps,
+                [...state.noCollectCells, nextTarget],
+            );
         }
         case 'loadNoCollectCells':
-            return {
-                ...state,
-                noCollectCells: action.noCollectCells,
-            };
+            return replaceActiveTeamSet(state, state.team, state.swaps, action.noCollectCells);
         case 'setSeedMode':
             return { ...state, seedMode: action.mode };
         case 'setMultiTrialCount':
@@ -664,6 +848,172 @@ export function loadTeamFromStorage(box: PokemonBox): (PokemonBoxItem | null)[] 
         return team.slice(0, MAX_TEAM_SIZE);
     } catch {
         return Array(MAX_TEAM_SIZE).fill(null);
+    }
+}
+
+function migratePokemonSwap(rawSwap: unknown): PokemonSwap | null {
+    if (!rawSwap || typeof rawSwap !== 'object') {
+        return null;
+    }
+    const candidate = rawSwap as Partial<PokemonSwap> & { dayIndex?: unknown };
+    if (
+        typeof candidate.slotId !== 'string' ||
+        typeof candidate.teamSlotIndex !== 'number' ||
+        typeof candidate.newPokemonId !== 'number' ||
+        typeof candidate.initialEnergy !== 'number'
+    ) {
+        return null;
+    }
+    const dayIndex = typeof candidate.dayIndex === 'number'
+        ? Math.max(0, Math.floor(candidate.dayIndex))
+        : 0;
+    return {
+        dayIndex,
+        slotId: candidate.slotId,
+        teamSlotIndex: Math.max(0, Math.floor(candidate.teamSlotIndex)),
+        newPokemonId: candidate.newPokemonId,
+        newPokemonSerialized: typeof candidate.newPokemonSerialized === 'string'
+            ? candidate.newPokemonSerialized
+            : undefined,
+        initialEnergy: candidate.initialEnergy,
+        isRepeatGenerated: candidate.isRepeatGenerated === true ? true : undefined,
+    };
+}
+
+function migrateNoCollectCell(rawCell: unknown): NoCollectCellSetting | null {
+    if (!rawCell || typeof rawCell !== 'object') {
+        return null;
+    }
+    const candidate = rawCell as Partial<NoCollectCellSetting> & { dayIndex?: unknown };
+    if (
+        typeof candidate.slotId !== 'string' ||
+        typeof candidate.teamSlotIndex !== 'number'
+    ) {
+        return null;
+    }
+    const dayIndex = typeof candidate.dayIndex === 'number'
+        ? Math.max(0, Math.floor(candidate.dayIndex))
+        : 0;
+    return {
+        dayIndex,
+        slotId: candidate.slotId,
+        teamSlotIndex: Math.max(0, Math.floor(candidate.teamSlotIndex)),
+    };
+}
+
+function migrateTeamSetSimulationSnapshot(rawSnapshot: unknown): TeamSetSimulationSnapshot | null {
+    if (!rawSnapshot || typeof rawSnapshot !== 'object') {
+        return null;
+    }
+    const candidate = rawSnapshot as Partial<TeamSetSimulationSnapshot>;
+    if (
+        typeof candidate.averageTotalEP !== 'number'
+        || !Number.isFinite(candidate.averageTotalEP)
+        || typeof candidate.settingsHash !== 'string'
+        || candidate.settingsHash.length === 0
+    ) {
+        return null;
+    }
+    return {
+        averageTotalEP: candidate.averageTotalEP,
+        settingsHash: candidate.settingsHash,
+    };
+}
+
+function deserializeSerializedTeam(
+    serializedTeam: unknown,
+    box: PokemonBox,
+): (PokemonBoxItem | null)[] {
+    if (!Array.isArray(serializedTeam)) {
+        return createEmptyTeam();
+    }
+    const deserialized = serializedTeam.map((item) => {
+        if (typeof item !== 'string') {
+            return null;
+        }
+        const parsed = box.deserializeItem(item);
+        if (!parsed) {
+            return null;
+        }
+        return new PokemonBoxItem(parsed.iv, parsed.nickname);
+    });
+    return normalizeTeamLength(deserialized);
+}
+
+function serializeTeam(team: readonly (PokemonBoxItem | null)[]): SerializedTeam {
+    return normalizeTeamLength(team).map((item) => (item ? item.serialize() : null));
+}
+
+export function saveTeamSetsToStorage(teamSets: TeamSetState[], activeTeamSetIndex: number): void {
+    const payload: SerializedTeamSetPayload = {
+        activeTeamSetIndex: clampActiveTeamSetIndex(activeTeamSetIndex, teamSets),
+        teamSets: teamSets.map((teamSet) => ({
+            id: teamSet.id,
+            name: teamSet.name,
+            team: serializeTeam(teamSet.team),
+            swaps: [...teamSet.swaps],
+            noCollectCells: [...teamSet.noCollectCells],
+            lastSimulationSnapshot: teamSet.lastSimulationSnapshot
+                ? { ...teamSet.lastSimulationSnapshot }
+                : null,
+        })),
+    };
+    localStorage.setItem(STORAGE_KEY_TEAM_SETS, JSON.stringify(payload));
+}
+
+export function loadTeamSetsFromStorage(
+    box: PokemonBox,
+): { teamSets: TeamSetState[]; activeTeamSetIndex: number } | null {
+    const raw = localStorage.getItem(STORAGE_KEY_TEAM_SETS);
+    if (!raw) {
+        return null;
+    }
+    try {
+        const parsed = JSON.parse(raw) as Partial<SerializedTeamSetPayload>;
+        if (!Array.isArray(parsed.teamSets)) {
+            return null;
+        }
+        const teamSets = parsed.teamSets
+            .map((rawTeamSet, index): TeamSetState | null => {
+                if (!rawTeamSet || typeof rawTeamSet !== 'object') {
+                    return null;
+                }
+                const id = typeof rawTeamSet.id === 'string' && rawTeamSet.id.length > 0
+                    ? rawTeamSet.id
+                    : `team-set-${index + 1}`;
+                const name = typeof rawTeamSet.name === 'string' && rawTeamSet.name.length > 0
+                    ? rawTeamSet.name
+                    : `Team ${index + 1}`;
+                const swaps = Array.isArray(rawTeamSet.swaps)
+                    ? rawTeamSet.swaps
+                        .map(migratePokemonSwap)
+                        .filter((swap): swap is PokemonSwap => swap !== null)
+                    : [];
+                const noCollectCells = Array.isArray(rawTeamSet.noCollectCells)
+                    ? rawTeamSet.noCollectCells
+                        .map(migrateNoCollectCell)
+                        .filter((cell): cell is NoCollectCellSetting => cell !== null)
+                    : [];
+                const lastSimulationSnapshot = migrateTeamSetSimulationSnapshot(rawTeamSet.lastSimulationSnapshot);
+                return {
+                    id,
+                    name,
+                    team: deserializeSerializedTeam(rawTeamSet.team, box),
+                    swaps,
+                    noCollectCells,
+                    lastSimulationSnapshot,
+                };
+            })
+            .filter((teamSet): teamSet is TeamSetState => teamSet !== null);
+
+        if (teamSets.length === 0) {
+            return null;
+        }
+
+        const activeTeamSetIndex = clampActiveTeamSetIndex(parsed.activeTeamSetIndex ?? 0, teamSets);
+        return { teamSets, activeTeamSetIndex };
+    } catch {
+        return null;
     }
 }
 

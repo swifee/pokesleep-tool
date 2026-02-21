@@ -39,6 +39,10 @@ vi.mock('./components/TimelineHeader', () => ({
     default: () => null,
 }));
 
+vi.mock('./components/TeamSetToolbar', () => ({
+    default: () => <div data-testid="team-set-toolbar" />,
+}));
+
 vi.mock('./components/SwapSupplementBar', () => ({
     default: () => null,
 }));
@@ -217,7 +221,9 @@ describe('TeamTimelineApp timeline display mode', () => {
         expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('0');
 
         fireEvent.click(screen.getByTestId('timeline-no-collect-toggle'));
-        expect(localStorage.getItem('PstTeamTimelineNoCollectCells')).toContain('"slotId":"wake"');
+        const teamSetsPayload = localStorage.getItem('PstTeamTimelineTeamSetsV1');
+        expect(teamSetsPayload).not.toBeNull();
+        expect(teamSetsPayload!).toContain('"slotId":"wake"');
         expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('1');
 
         firstRender.unmount();

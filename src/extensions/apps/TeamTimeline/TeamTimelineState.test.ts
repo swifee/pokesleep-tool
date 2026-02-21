@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
     createInitialState,
     teamTimelineReducer,
+    saveTeamSetsToStorage,
+    loadTeamSetsFromStorage,
+    STORAGE_KEY_TEAM_SETS,
     loadSummaryValueModeFromStorage,
     saveSummaryValueModeToStorage,
     STORAGE_KEY_SUMMARY_VALUE_MODE,
@@ -16,6 +19,7 @@ import {
 } from './TeamTimelineState';
 import { SimulationResult, PokemonSwap } from './types/TimeSlotTypes';
 import type { PokemonBoxItem } from '../../../util/PokemonBox';
+import PokemonBox from '../../../util/PokemonBox';
 
 function createSimulationResult(grandTotalEP: number): SimulationResult {
     return {
@@ -63,6 +67,12 @@ describe('teamTimelineReducer', () => {
         expect(state.seedMode).toBe('random');
         expect(state.multiTrialCount).toBe(1000);
         expect(state.noCollectCells).toEqual([]);
+        expect(state.teamSets).toHaveLength(1);
+        expect(state.activeTeamSetIndex).toBe(0);
+        expect(state.teamSets[0].team).toEqual(state.team);
+        expect(state.teamSets[0].swaps).toEqual(state.swaps);
+        expect(state.teamSets[0].noCollectCells).toEqual(state.noCollectCells);
+        expect(state.teamSets[0].lastSimulationSnapshot).toBeNull();
         expect(state.syncWithIvParameter).toBe(true);
         expect(state.cookingSettings.basePotCapacity).toBe(81);
         expect(state.cookingSettings.recipeLevels).toEqual({});
@@ -251,6 +261,250 @@ describe('noCollect cell behavior', () => {
             { dayIndex: 0, slotId: 'slot-1', teamSlotIndex: 0 },
             { dayIndex: 1, slotId: 'slot-3', teamSlotIndex: 4 },
         ]);
+    });
+});
+
+describe('team set actions', () => {
+    it('createTeamSet appends empty set and selects it', () => {
+        const next = teamTimelineReducer(createInitialState(), {
+            type: 'createTeamSet',
+            id: 'new-set',
+            name: '新規セット',
+        });
+
+        expect(next.teamSets).toHaveLength(2);
+        expect(next.activeTeamSetIndex).toBe(1);
+        expect(next.teamSets[1].id).toBe('new-set');
+        expect(next.teamSets[1].name).toBe('新規セット');
+        expect(next.teamSets[1].team).toEqual([null, null, null, null, null]);
+        expect(next.team).toEqual([null, null, null, null, null]);
+        expect(next.swaps).toEqual([]);
+        expect(next.noCollectCells).toEqual([]);
+    });
+
+    it('duplicateTeamSet clones team/swaps/noCollect and selects duplicate', () => {
+        const base = createInitialState();
+        const withSnapshot = teamTimelineReducer(base, {
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: { averageTotalEP: 4321, settingsHash: 'hash-a' },
+        });
+        const withMember = teamTimelineReducer(withSnapshot, {
+            type: 'selectPokemon',
+            index: 0,
+            item: { id: 10, iv: { idForm: 25 }, filledNickname: () => 'P' } as unknown as PokemonBoxItem,
+        });
+        const withSwap = teamTimelineReducer(withMember, {
+            type: 'confirmSwapDirect',
+            pokemonId: 999,
+            initialEnergy: 80,
+        });
+        const seeded = {
+            ...withSwap,
+            swapTargetSlotId: 'slot-1',
+            swapTargetTeamIndex: 0,
+            swapTargetDayIndex: 0,
+        };
+        const withRealSwap = teamTimelineReducer(seeded, {
+            type: 'confirmSwapDirect',
+            pokemonId: 999,
+            initialEnergy: 80,
+        });
+        const withNoCollect = teamTimelineReducer(withRealSwap, {
+            type: 'toggleNoCollectCell',
+            slotId: 'slot-1',
+            teamIndex: 0,
+            dayIndex: 0,
+        });
+
+        const duplicated = teamTimelineReducer(withNoCollect, {
+            type: 'duplicateTeamSet',
+            id: 'dup-set',
+            name: 'コピー',
+        });
+
+        expect(duplicated.teamSets).toHaveLength(2);
+        expect(duplicated.activeTeamSetIndex).toBe(1);
+        expect(duplicated.teamSets[1].team).toEqual(withNoCollect.teamSets[0].team);
+        expect(duplicated.teamSets[1].swaps).toEqual(withNoCollect.teamSets[0].swaps);
+        expect(duplicated.teamSets[1].noCollectCells).toEqual(withNoCollect.teamSets[0].noCollectCells);
+        expect(duplicated.teamSets[1].lastSimulationSnapshot).toBeNull();
+    });
+
+    it('deleteTeamSet keeps adjacent set selected', () => {
+        let state = teamTimelineReducer(createInitialState(), {
+            type: 'createTeamSet',
+            id: 'set-2',
+            name: 'set2',
+        });
+        state = teamTimelineReducer(state, {
+            type: 'createTeamSet',
+            id: 'set-3',
+            name: 'set3',
+        });
+        state = teamTimelineReducer(state, { type: 'selectTeamSet', index: 1 });
+
+        const next = teamTimelineReducer(state, {
+            type: 'deleteTeamSet',
+            fallbackId: 'fallback',
+            fallbackName: 'fallback',
+        });
+
+        expect(next.teamSets.map((teamSet) => teamSet.id)).toEqual(['team-set-initial', 'set-3']);
+        expect(next.activeTeamSetIndex).toBe(1);
+    });
+
+    it('deleteTeamSet recreates one empty set when last set is removed', () => {
+        const next = teamTimelineReducer(createInitialState(), {
+            type: 'deleteTeamSet',
+            fallbackId: 'new-empty',
+            fallbackName: 'チーム1',
+        });
+
+        expect(next.teamSets).toHaveLength(1);
+        expect(next.teamSets[0].id).toBe('new-empty');
+        expect(next.teamSets[0].name).toBe('チーム1');
+        expect(next.team).toEqual([null, null, null, null, null]);
+        expect(next.swaps).toEqual([]);
+        expect(next.noCollectCells).toEqual([]);
+    });
+
+    it('selectTeamSet switches team/swaps/noCollect snapshot', () => {
+        let state = teamTimelineReducer(createInitialState(), {
+            type: 'createTeamSet',
+            id: 'set-2',
+            name: 'set2',
+        });
+        state = teamTimelineReducer(state, { type: 'selectTeamSet', index: 0 });
+        state = teamTimelineReducer(state, {
+            type: 'selectPokemon',
+            index: 0,
+            item: { id: 111, iv: { idForm: 25 }, filledNickname: () => 'A' } as unknown as PokemonBoxItem,
+        });
+        state = teamTimelineReducer(state, { type: 'selectTeamSet', index: 1 });
+
+        expect(state.team[0]).toBeNull();
+        expect(state.swaps).toEqual([]);
+        expect(state.noCollectCells).toEqual([]);
+
+        const back = teamTimelineReducer(state, { type: 'selectTeamSet', index: 0 });
+        expect(back.team[0]).not.toBeNull();
+    });
+
+    it('selectPokemon/removePokemon/confirmSwap/toggleNoCollect update active team set', () => {
+        const selectedPokemon = {
+            id: 123,
+            iv: { idForm: 25, level: 60 },
+            filledNickname: () => 'ピカチュウ',
+        } as unknown as PokemonBoxItem;
+        const selected = teamTimelineReducer(createInitialState(), {
+            type: 'selectPokemon',
+            index: 0,
+            item: selectedPokemon,
+        });
+        expect(selected.teamSets[0].team[0]).toBe(selectedPokemon);
+
+        const removed = teamTimelineReducer(selected, { type: 'removePokemon', index: 0 });
+        expect(removed.teamSets[0].team[0]).toBeNull();
+
+        const swapReady = {
+            ...removed,
+            swapTargetSlotId: 'slot-1',
+            swapTargetTeamIndex: 0,
+            swapTargetDayIndex: 0,
+        };
+        const swapped = teamTimelineReducer(swapReady, {
+            type: 'confirmSwapDirect',
+            pokemonId: 999,
+            initialEnergy: 80,
+        });
+        expect(swapped.teamSets[0].swaps).toHaveLength(1);
+
+        const toggled = teamTimelineReducer(swapped, {
+            type: 'toggleNoCollectCell',
+            slotId: 'slot-1',
+            teamIndex: 0,
+            dayIndex: 0,
+        });
+        expect(toggled.teamSets[0].noCollectCells).toHaveLength(1);
+    });
+
+    it('setActiveTeamSetSimulationSnapshot updates only active team set', () => {
+        let state = teamTimelineReducer(createInitialState(), {
+            type: 'createTeamSet',
+            id: 'set-2',
+            name: 'set2',
+        });
+        state = teamTimelineReducer(state, { type: 'selectTeamSet', index: 0 });
+        const updated = teamTimelineReducer(state, {
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: 12345,
+                settingsHash: 'ctx-hash-1',
+            },
+        });
+
+        expect(updated.teamSets[0].lastSimulationSnapshot).toEqual({
+            averageTotalEP: 12345,
+            settingsHash: 'ctx-hash-1',
+        });
+        expect(updated.teamSets[1].lastSimulationSnapshot).toBeNull();
+    });
+
+    it('clears active snapshot when team/swaps/noCollect are modified', () => {
+        const selectedPokemon = {
+            id: 222,
+            iv: { idForm: 25, level: 60 },
+            filledNickname: () => 'ピカチュウ',
+        } as unknown as PokemonBoxItem;
+        const withSnapshot = teamTimelineReducer(createInitialState(), {
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: 5000,
+                settingsHash: 'ctx-hash-2',
+            },
+        });
+
+        const afterSelect = teamTimelineReducer(withSnapshot, {
+            type: 'selectPokemon',
+            index: 0,
+            item: selectedPokemon,
+        });
+        expect(afterSelect.teamSets[0].lastSimulationSnapshot).toBeNull();
+
+        const reseeded = teamTimelineReducer(afterSelect, {
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: 5001,
+                settingsHash: 'ctx-hash-2',
+            },
+        });
+        const swapReady = {
+            ...reseeded,
+            swapTargetSlotId: 'slot-1',
+            swapTargetTeamIndex: 0,
+            swapTargetDayIndex: 0,
+        };
+        const afterSwap = teamTimelineReducer(swapReady, {
+            type: 'confirmSwapDirect',
+            pokemonId: 999,
+            initialEnergy: 80,
+        });
+        expect(afterSwap.teamSets[0].lastSimulationSnapshot).toBeNull();
+
+        const withSnapshotAgain = teamTimelineReducer(afterSwap, {
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: 5002,
+                settingsHash: 'ctx-hash-2',
+            },
+        });
+        const afterNoCollect = teamTimelineReducer(withSnapshotAgain, {
+            type: 'toggleNoCollectCell',
+            slotId: 'slot-1',
+            teamIndex: 0,
+            dayIndex: 0,
+        });
+        expect(afterNoCollect.teamSets[0].lastSimulationSnapshot).toBeNull();
     });
 });
 
@@ -554,5 +808,81 @@ describe('simulation controls storage', () => {
 
         localStorage.setItem(STORAGE_KEY_SYNC_IV_PARAMETER, '1');
         expect(loadSyncWithIvParameterFromStorage()).toBe(true);
+    });
+});
+
+describe('team set storage', () => {
+    it('saves and loads team set payload', () => {
+        const teamSets = [
+            {
+                id: 'set-1',
+                name: 'チーム1',
+                team: [null, null, null, null, null],
+                swaps: [
+                    {
+                        dayIndex: 0,
+                        slotId: 'slot-1',
+                        teamSlotIndex: 0,
+                        newPokemonId: 999,
+                        initialEnergy: 80,
+                    },
+                ],
+                noCollectCells: [{ dayIndex: 0, slotId: 'slot-1', teamSlotIndex: 0 }],
+                lastSimulationSnapshot: { averageTotalEP: 24680, settingsHash: 'ctx-storage' },
+            },
+            {
+                id: 'set-2',
+                name: 'チーム2',
+                team: [null, null, null, null, null],
+                swaps: [],
+                noCollectCells: [],
+                lastSimulationSnapshot: null,
+            },
+        ];
+
+        saveTeamSetsToStorage(teamSets, 1);
+        const loaded = loadTeamSetsFromStorage(new PokemonBox());
+
+        expect(loaded).not.toBeNull();
+        expect(loaded!.activeTeamSetIndex).toBe(1);
+        expect(loaded!.teamSets).toHaveLength(2);
+        expect(loaded!.teamSets[0].name).toBe('チーム1');
+        expect(loaded!.teamSets[0].swaps).toHaveLength(1);
+        expect(loaded!.teamSets[0].noCollectCells).toHaveLength(1);
+        expect(loaded!.teamSets[0].lastSimulationSnapshot).toEqual({
+            averageTotalEP: 24680,
+            settingsHash: 'ctx-storage',
+        });
+    });
+
+    it('returns null when team set storage is missing or invalid', () => {
+        localStorage.removeItem(STORAGE_KEY_TEAM_SETS);
+        expect(loadTeamSetsFromStorage(new PokemonBox())).toBeNull();
+
+        localStorage.setItem(STORAGE_KEY_TEAM_SETS, '{"invalid":true}');
+        expect(loadTeamSetsFromStorage(new PokemonBox())).toBeNull();
+    });
+
+    it('falls back to null when snapshot data is invalid', () => {
+        localStorage.setItem(STORAGE_KEY_TEAM_SETS, JSON.stringify({
+            activeTeamSetIndex: 0,
+            teamSets: [
+                {
+                    id: 'set-1',
+                    name: 'チーム1',
+                    team: [null, null, null, null, null],
+                    swaps: [],
+                    noCollectCells: [],
+                    lastSimulationSnapshot: {
+                        averageTotalEP: 'not-number',
+                        settingsHash: 123,
+                    },
+                },
+            ],
+        }));
+
+        const loaded = loadTeamSetsFromStorage(new PokemonBox());
+        expect(loaded).not.toBeNull();
+        expect(loaded!.teamSets[0].lastSimulationSnapshot).toBeNull();
     });
 });

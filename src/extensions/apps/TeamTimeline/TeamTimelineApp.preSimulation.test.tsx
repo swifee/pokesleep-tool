@@ -14,6 +14,25 @@ vi.mock('./components/TimelineHeader', () => ({
     default: () => <div data-testid="timeline-header" />,
 }));
 
+vi.mock('./components/TeamSetToolbar', () => ({
+    default: ({
+        onCreate,
+        onSelect,
+    }: {
+        onCreate?: () => void;
+        onSelect?: (index: number) => void;
+    }) => (
+        <div data-testid="team-set-toolbar">
+            <button type="button" data-testid="team-set-create-click" onClick={() => onCreate?.()}>
+                create-team-set
+            </button>
+            <button type="button" data-testid="team-set-select-second-click" onClick={() => onSelect?.(1)}>
+                select-team-set-2
+            </button>
+        </div>
+    ),
+}));
+
 vi.mock('./components/SwapSupplementBar', () => ({
     default: () => null,
 }));
@@ -132,6 +151,7 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
     it('shows timeline table before simulation and hides summary areas', () => {
         render(<TeamTimelineApp />);
 
+        expect(screen.getByTestId('team-set-toolbar')).toBeDefined();
         expect(screen.getByTestId('team-timeline-pre-simulation-table')).toBeDefined();
 
         const timeline = screen.getByTestId('timeline-table');
@@ -144,6 +164,18 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
 
         expect(screen.queryByTestId('team-summary-row')).toBeNull();
         expect(screen.queryByTestId('daily-summary-row')).toBeNull();
+    });
+
+    it('switches team state by team set dropdown selection', () => {
+        render(<TeamTimelineApp />);
+
+        const timeline = screen.getByTestId('timeline-table');
+        expect(timeline.getAttribute('data-team')).toBe('Pikachu|Dragonite|Slowbro|null|Psyduck');
+
+        fireEvent.click(screen.getByTestId('team-set-create-click'));
+        fireEvent.click(screen.getByTestId('team-set-select-second-click'));
+
+        expect(screen.getByTestId('timeline-table').getAttribute('data-team')).toBe('null|null|null|null|null');
     });
 
     it('opens team box dialog when clicking timeline header slot', () => {
