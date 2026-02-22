@@ -550,7 +550,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                                         </SimpleSkillIconItem>
                                     )}
                                     {result.skillOverflowCount > 0 && (
-                                        <SimpleSkillIconItem data-testid="timeline-cell-simple-skill-none">
+                                        <SimpleSkillIconItem
+                                            data-testid="timeline-cell-simple-skill-none"
+                                            data-skill-overflow="true"
+                                        >
                                             <TeamTimelineIcon name="skill_none" data-simple-skill-icon="true" />
                                         </SimpleSkillIconItem>
                                     )}
@@ -1049,6 +1052,9 @@ const SimpleSkillIconItem = styled('span')({
     '& svg': {
         width: '8px',
         height: '8px',
+    },
+    '&[data-skill-overflow="true"]': {
+        color: '#9e9e9e',
     },
 });
 

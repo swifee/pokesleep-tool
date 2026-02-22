@@ -280,7 +280,9 @@ describe('TimelineCell ingredient ordering', () => {
         expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).toContain('5');
         expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).not.toContain('14');
         expect(screen.getByTestId('timeline-cell-simple-skill')).toBeDefined();
-        expect(screen.getByTestId('timeline-cell-simple-skill-none')).toBeDefined();
+        const simpleSkillOverflowIcon = screen.getByTestId('timeline-cell-simple-skill-none');
+        expect(simpleSkillOverflowIcon).toBeDefined();
+        expect(getComputedStyle(simpleSkillOverflowIcon).color).toBe('rgb(158, 158, 158)');
         expect(screen.queryByTestId('timeline-cell-help-icon-work')).toBeNull();
     });
 
