@@ -111,6 +111,8 @@ type AggregationState = {
         recipeAccs: Map<string, CookingRecipeAccumulator>;
         leftoverIngredientSums: Map<IngredientName, number>;
         leftoverIngredientSeen: Set<IngredientName>;
+        leftoverIngredientAfterExtraSums: Map<IngredientName, number>;
+        leftoverIngredientAfterExtraSeen: Set<IngredientName>;
         totalInitialIngredientEPSum: number;
         hasCookingResult: boolean;
     };
@@ -136,6 +138,8 @@ function createAggregationState(): AggregationState {
             recipeAccs: new Map<string, CookingRecipeAccumulator>(),
             leftoverIngredientSums: new Map<IngredientName, number>(),
             leftoverIngredientSeen: new Set<IngredientName>(),
+            leftoverIngredientAfterExtraSums: new Map<IngredientName, number>(),
+            leftoverIngredientAfterExtraSeen: new Set<IngredientName>(),
             totalInitialIngredientEPSum: 0,
             hasCookingResult: false,
         },
@@ -236,6 +240,16 @@ function accumulateCookingResult(
         });
     }
 
+    const extraIngredientUsageMap = new Map<IngredientName, number>();
+    for (const event of cookingResult.events) {
+        for (const usage of event.extraIngredientsUsed ?? []) {
+            extraIngredientUsageMap.set(
+                usage.name,
+                (extraIngredientUsageMap.get(usage.name) ?? 0) + usage.count,
+            );
+        }
+    }
+
     for (const [name, count] of Object.entries(cookingResult.leftoverIngredients.total)) {
         if (count == null || count <= 0) {
             continue;
@@ -245,6 +259,16 @@ function accumulateCookingResult(
         state.cookingAcc.leftoverIngredientSums.set(
             ingredientName,
             (state.cookingAcc.leftoverIngredientSums.get(ingredientName) ?? 0) + count,
+        );
+
+        const postLeftoverCount = Math.max(
+            0,
+            count - (extraIngredientUsageMap.get(ingredientName) ?? 0),
+        );
+        state.cookingAcc.leftoverIngredientAfterExtraSeen.add(ingredientName);
+        state.cookingAcc.leftoverIngredientAfterExtraSums.set(
+            ingredientName,
+            (state.cookingAcc.leftoverIngredientAfterExtraSums.get(ingredientName) ?? 0) + postLeftoverCount,
         );
     }
 }
@@ -283,9 +307,22 @@ function finalizeAverageCookingSummary(
             return a.name.localeCompare(b.name);
         });
 
+    const leftoverIngredientsAfterExtra = [...state.cookingAcc.leftoverIngredientAfterExtraSeen]
+        .map((name) => ({
+            name,
+            count: roundToSingleDecimal((state.cookingAcc.leftoverIngredientAfterExtraSums.get(name) ?? 0) / trialCount),
+        }))
+        .sort((a, b) => {
+            if (b.count !== a.count) {
+                return b.count - a.count;
+            }
+            return a.name.localeCompare(b.name);
+        });
+
     return {
         recipes,
         leftoverIngredients,
+        leftoverIngredientsAfterExtra,
         averageInitialIngredientEP: Math.round(state.cookingAcc.totalInitialIngredientEPSum / trialCount),
     };
 }

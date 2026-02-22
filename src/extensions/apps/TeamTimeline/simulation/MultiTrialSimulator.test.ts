@@ -73,6 +73,35 @@ function createCookingResult(
     };
 }
 
+function createCookingEventWithExtraUsages(
+    mealSlotId: string,
+    recipeName: string,
+    cookingEP: number,
+    extraIngredientsUsed: Array<{ name: 'apple' | 'milk'; count: number }>,
+): CookingSimulationResult['events'][number] {
+    return {
+        mealSlotId,
+        mealType: 'breakfast',
+        recipeName,
+        isGreatSuccess: false,
+        cookingEP,
+        eBase: cookingEP,
+        eDisplay: cookingEP,
+        eFinal: cookingEP,
+        ingredientsUsed: [],
+        extraIngredientsUsed: extraIngredientsUsed.map((usage) => ({
+            name: usage.name,
+            count: usage.count,
+            pokemonAttribution: new Map<number, number>(),
+            fromInitial: usage.count,
+        })),
+        remainingPotCapacity: 0,
+        effectivePotCapacity: 30,
+        tastyChancePercent: 10,
+        cookingPowerUpBonusUsed: 0,
+    };
+}
+
 describe('runMultiTrialSimulation', () => {
     beforeEach(() => {
         runSimulationMock.mockReset();
@@ -427,6 +456,47 @@ describe('runMultiTrialSimulation', () => {
 
         expect(result.averageCookingSummary?.leftoverIngredients).toEqual([
             { name: 'apple', count: 0 },
+        ]);
+    });
+
+    it('aggregates leftoverIngredientsAfterExtra as trial average', () => {
+        runSimulationMock
+            .mockReturnValueOnce({
+                ...createSimulationResult(
+                    [createDailySummary(1, 10, 100)],
+                    createTeamSummary(1000),
+                ),
+                cookingResult: createCookingResult(
+                    [createCookingEventWithExtraUsages('meal-1', 'recipeA', 100, [{ name: 'apple', count: 2 }])],
+                    { apple: 5, milk: 2 },
+                ),
+            })
+            .mockReturnValueOnce({
+                ...createSimulationResult(
+                    [createDailySummary(1, 10, 100)],
+                    createTeamSummary(1000),
+                ),
+                cookingResult: createCookingResult(
+                    [createCookingEventWithExtraUsages('meal-2', 'recipeA', 100, [
+                        { name: 'apple', count: 1 },
+                        { name: 'milk', count: 3 },
+                    ])],
+                    { apple: 1, milk: 2 },
+                ),
+            });
+
+        const result = runMultiTrialSimulation({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 2,
+            initialSeed: 2000,
+        });
+
+        expect(result.averageCookingSummary?.leftoverIngredientsAfterExtra).toEqual([
+            { name: 'apple', count: 1.5 },
+            { name: 'milk', count: 1 },
         ]);
     });
 });

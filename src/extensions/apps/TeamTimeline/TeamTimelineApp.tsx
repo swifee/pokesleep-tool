@@ -28,6 +28,8 @@ import {
     loadSyncWithIvParameterFromStorage,
     saveSummaryValueModeToStorage,
     loadSummaryValueModeFromStorage,
+    saveLeftoverIncludeExtraUsageToStorage,
+    loadLeftoverIncludeExtraUsageFromStorage,
     saveSeedModeToStorage,
     loadSeedModeFromStorage,
     saveTrialCountToStorage,
@@ -285,6 +287,7 @@ export default function TeamTimelineApp() {
     // 初期ロード完了フラグ
     const [isInitialized, setIsInitialized] = useState(false);
     const [summaryValueMode, setSummaryValueMode] = useState<SummaryValueMode>('periodTotal');
+    const [leftoverIncludeExtraUsage, setLeftoverIncludeExtraUsage] = useState(false);
     const [simulationProgress, setSimulationProgress] = useState(0);
     const [showResimulationNotice, setShowResimulationNotice] = useState(false);
     const [pendingSwapRemoval, setPendingSwapRemoval] = useState<PendingSwapRemoval | null>(null);
@@ -423,6 +426,7 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'setSeedMode', mode: loadSeedModeFromStorage() });
         dispatch({ type: 'setMultiTrialCount', count: loadTrialCountFromStorage() });
         setSummaryValueMode(loadSummaryValueModeFromStorage());
+        setLeftoverIncludeExtraUsage(loadLeftoverIncludeExtraUsageFromStorage());
         const savedBonusSettings = loadBonusSettingsFromStorage();
         dispatch({ type: 'loadBonusSettings', settings: savedBonusSettings });
         const syncWithIvParameter = loadSyncWithIvParameterFromStorage();
@@ -551,6 +555,11 @@ export default function TeamTimelineApp() {
         if (!isInitialized) return;
         saveSummaryValueModeToStorage(summaryValueMode);
     }, [summaryValueMode, isInitialized]);
+
+    useEffect(() => {
+        if (!isInitialized) return;
+        saveLeftoverIncludeExtraUsageToStorage(leftoverIncludeExtraUsage);
+    }, [leftoverIncludeExtraUsage, isInitialized]);
 
     useEffect(() => {
         if (!isInitialized) return;
@@ -2447,6 +2456,9 @@ export default function TeamTimelineApp() {
                                         simulationDays={state.simulationConfig.simulationDays}
                                         valueMode={summaryValueMode}
                                         averageCookingSummary={state.multiTrialAverageCookingSummary}
+                                        showLeftoverIncludeExtraUsageToggle
+                                        leftoverIncludeExtraUsage={leftoverIncludeExtraUsage}
+                                        onLeftoverIncludeExtraUsageChange={setLeftoverIncludeExtraUsage}
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.multiTrialAverageDailySummaries!}
@@ -2631,6 +2643,9 @@ export default function TeamTimelineApp() {
                                         showValueModeToggle={showSummaryValueToggle}
                                         onValueModeChange={handleSummaryValueModeChange}
                                         cookingResult={state.simulationResult!.cookingResult}
+                                        showLeftoverIncludeExtraUsageToggle
+                                        leftoverIncludeExtraUsage={leftoverIncludeExtraUsage}
+                                        onLeftoverIncludeExtraUsageChange={setLeftoverIncludeExtraUsage}
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.simulationResult!.dailySummaries}

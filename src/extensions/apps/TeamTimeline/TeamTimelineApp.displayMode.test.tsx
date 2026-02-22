@@ -12,6 +12,17 @@ vi.mock('react-i18next', () => ({
 vi.mock('./TeamTimelineState', async () => {
     const actual = await vi.importActual<typeof import('./TeamTimelineState')>('./TeamTimelineState');
     const baseState = actual.createInitialState();
+    const teamSummary = {
+        totalIngredients: [],
+        totalBerryEP: 0,
+        totalIngredientEP: 0,
+        totalSkillEP: 0,
+        grandTotalEP: 0,
+        totalPresentCandyCount: 0,
+        totalCookingPotCapacityIncrease: 0,
+        totalTastyChanceIncreasePercent: 0,
+        totalDreamShardCount: 0,
+    };
     return {
         ...actual,
         createInitialState: () => ({
@@ -19,17 +30,17 @@ vi.mock('./TeamTimelineState', async () => {
             simulationResult: {
                 slotResults: new Map(),
                 dailySummaries: [],
-                teamSummary: {
-                    totalIngredients: [],
-                    totalBerryEP: 0,
-                    totalIngredientEP: 0,
-                    totalSkillEP: 0,
-                    grandTotalEP: 0,
-                    totalPresentCandyCount: 0,
-                    totalCookingPotCapacityIncrease: 0,
-                    totalTastyChanceIncreasePercent: 0,
-                    totalDreamShardCount: 0,
-                },
+                teamSummary,
+            },
+            multiTrialResults: [
+                { seed: 1, grandTotalEP: 0 },
+                { seed: 2, grandTotalEP: 0 },
+            ],
+            multiTrialAverageDailySummaries: [],
+            multiTrialAverageTeamSummary: teamSummary,
+            multiTrialAverageCookingSummary: {
+                recipes: [],
+                leftoverIngredients: [{ name: 'apple', count: 1 }],
             },
         }),
     };
@@ -68,7 +79,28 @@ vi.mock('./components/AdditionalAnalysisPanel', () => ({
 }));
 
 vi.mock('./components/TeamSummaryRow', () => ({
-    default: () => null,
+    default: ({
+        layoutMode,
+        leftoverIncludeExtraUsage,
+        onLeftoverIncludeExtraUsageChange,
+    }: {
+        layoutMode?: 'details' | 'average';
+        leftoverIncludeExtraUsage?: boolean;
+        onLeftoverIncludeExtraUsageChange?: (checked: boolean) => void;
+    }) => (
+        <div data-testid={`team-summary-row-${layoutMode ?? 'unknown'}`}>
+            <span data-testid={`leftover-toggle-state-${layoutMode ?? 'unknown'}`}>
+                {leftoverIncludeExtraUsage ? 'on' : 'off'}
+            </span>
+            <button
+                type="button"
+                data-testid={`leftover-toggle-button-${layoutMode ?? 'unknown'}`}
+                onClick={() => onLeftoverIncludeExtraUsageChange?.(!(leftoverIncludeExtraUsage ?? false))}
+            >
+                toggle-leftover
+            </button>
+        </div>
+    ),
 }));
 
 vi.mock('./components/DailySummaryRow', () => ({
@@ -240,5 +272,29 @@ describe('TeamTimelineApp timeline display mode', () => {
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('false');
         fireEvent.click(screen.getByTestId('timeline-no-collect-toggle'));
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
+    });
+
+    it('shares leftover toggle state across average and details summary rows', () => {
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('leftover-toggle-state-average').textContent).toBe('off');
+        expect(screen.getByTestId('leftover-toggle-state-details').textContent).toBe('off');
+
+        fireEvent.click(screen.getByTestId('leftover-toggle-button-details'));
+
+        expect(screen.getByTestId('leftover-toggle-state-average').textContent).toBe('on');
+        expect(screen.getByTestId('leftover-toggle-state-details').textContent).toBe('on');
+    });
+
+    it('persists leftover toggle state across remounts', () => {
+        const firstRender = render(<TeamTimelineApp />);
+        fireEvent.click(screen.getByTestId('leftover-toggle-button-average'));
+        expect(localStorage.getItem('PstTeamTimelineLeftoverIncludeExtraUsage')).toBe('1');
+
+        firstRender.unmount();
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('leftover-toggle-state-average').textContent).toBe('on');
+        expect(screen.getByTestId('leftover-toggle-state-details').textContent).toBe('on');
     });
 });
