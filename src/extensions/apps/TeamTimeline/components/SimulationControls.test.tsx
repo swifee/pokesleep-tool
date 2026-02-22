@@ -2,9 +2,15 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import SimulationControls from './SimulationControls';
+import { createDefaultTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
 
 interface ChildrenProps {
     children?: React.ReactNode;
+}
+
+interface BoxProps extends ChildrenProps {
+    sx?: unknown;
+    ['data-testid']?: string;
 }
 
 interface ButtonProps extends ChildrenProps {
@@ -50,7 +56,11 @@ interface MenuItemProps extends ChildrenProps {
 }
 
 vi.mock('@mui/material', () => ({
-    Box: ({ children }: ChildrenProps) => <div>{children}</div>,
+    Box: ({ children, sx, ...rest }: BoxProps) => (
+        <div data-sx={sx ? JSON.stringify(sx) : undefined} {...rest}>
+            {children}
+        </div>
+    ),
     Typography: ({ children }: ChildrenProps) => <span>{children}</span>,
     Button: ({ children, onClick, disabled, sx, ...rest }: ButtonProps) => (
         <button
@@ -109,7 +119,18 @@ vi.mock('../../../../data/fields', () => ({
     default: [
         { index: 0, name: 'Greengrass Isle', emoji: '🏝️' },
         { index: 1, name: 'Cyan Beach', emoji: '🏖️' },
+        { index: 7, name: 'Greengrass Isle EX', emoji: '🌱' },
     ],
+    getFavoriteBerries: (index: number) => {
+        if (index === 1) {
+            return ['water', 'fairy', 'flying'];
+        }
+        if (index === 7) {
+            return ['poison', 'bug', 'dragon'];
+        }
+        return [];
+    },
+    isExpertField: (index: number) => index === 7,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -124,7 +145,14 @@ vi.mock('react-i18next', () => ({
 }));
 
 function renderControls(overrides?: Partial<React.ComponentProps<typeof SimulationControls>>) {
+    const defaultBonusSettings = createDefaultTimelineBonusSettings();
     const props: React.ComponentProps<typeof SimulationControls> = {
+        bonusSettings: {
+            ...defaultBonusSettings,
+            fieldIndex: 0,
+            isGoodCampTicketSet: false,
+            event: 'none',
+        },
         fieldIndex: 0,
         isGoodCampTicketSet: false,
         cookingSimEnabled: false,
@@ -161,6 +189,7 @@ describe('SimulationControls', () => {
 
         rerender(
             <SimulationControls
+                bonusSettings={createDefaultTimelineBonusSettings()}
                 fieldIndex={0}
                 isGoodCampTicketSet={false}
                 cookingSimEnabled
@@ -188,19 +217,48 @@ describe('SimulationControls', () => {
         expect((screen.getByTestId('cooking-category-select') as HTMLSelectElement).disabled).toBe(false);
     });
 
-    it('updates field/camp/cooking settings and opens settings tab', () => {
+    it('shows read-only summary text for field/camp/event and keeps settings navigation', () => {
+        const base = createDefaultTimelineBonusSettings();
+        const { props } = renderControls({
+            fieldIndex: 7,
+            bonusSettings: {
+                ...base,
+                fieldIndex: 7,
+                favoriteType: ['poison', 'bug', 'dragon'],
+                expertEffect: 'berry',
+            },
+        });
+
+        expect(screen.getByText('Greengrass Isle EX(poison/bug/dragon/きのみエナジー2.4倍)')).toBeDefined();
+        expect(screen.getByText('キャンチケOFF')).toBeDefined();
+        expect(screen.getByText('イベントなし')).toBeDefined();
+        expect(screen.queryByTestId('field-select')).toBeNull();
+        expect(screen.queryByLabelText('good-camp-ticket-switch')).toBeNull();
+
+        fireEvent.click(screen.getByTestId('event-settings-button'));
+        expect(props.onOpenSettingsTab).toHaveBeenCalledTimes(1);
+    });
+
+    it('wraps all controls in one white rounded panel', () => {
+        renderControls();
+        const panel = screen.getByTestId('simulation-controls-panel');
+        const panelStyle = panel.getAttribute('data-sx');
+
+        expect(panelStyle).toContain('"backgroundColor":"#fff"');
+        expect(panelStyle).toContain('"borderRadius":"6px"');
+    });
+
+    it('updates cooking settings and opens settings tab', () => {
         const { props } = renderControls({ cookingSimEnabled: true });
 
-        fireEvent.change(screen.getByTestId('field-select'), { target: { value: '1' } });
-        fireEvent.click(screen.getByLabelText('キャンプチケット'));
-        fireEvent.click(screen.getByLabelText('料理'));
+        fireEvent.click(screen.getByLabelText('cooking-sim-switch'));
         fireEvent.change(screen.getByTestId('cooking-category-select'), { target: { value: 'salad' } });
         fireEvent.click(screen.getByTestId('event-settings-button'));
 
-        expect(props.onFieldIndexChange).toHaveBeenCalledWith(1);
-        expect(props.onGoodCampTicketChange).toHaveBeenCalledWith(true);
         expect(props.onCookingSimEnabledChange).toHaveBeenCalledWith(false);
         expect(props.onCookingCategoryChange).toHaveBeenCalledWith('salad');
+        expect(props.onFieldIndexChange).not.toHaveBeenCalled();
+        expect(props.onGoodCampTicketChange).not.toHaveBeenCalled();
         expect(props.onOpenSettingsTab).toHaveBeenCalledTimes(1);
     });
 
@@ -227,6 +285,7 @@ describe('SimulationControls', () => {
     it('keeps run button enabled while loading and disables only when team is empty', () => {
         const { rerender } = render(
             <SimulationControls
+                bonusSettings={createDefaultTimelineBonusSettings()}
                 fieldIndex={0}
                 isGoodCampTicketSet={false}
                 cookingSimEnabled={false}
@@ -256,6 +315,7 @@ describe('SimulationControls', () => {
 
         rerender(
             <SimulationControls
+                bonusSettings={createDefaultTimelineBonusSettings()}
                 fieldIndex={0}
                 isGoodCampTicketSet={false}
                 cookingSimEnabled={false}
@@ -284,6 +344,7 @@ describe('SimulationControls', () => {
 
         rerender(
             <SimulationControls
+                bonusSettings={createDefaultTimelineBonusSettings()}
                 fieldIndex={0}
                 isGoodCampTicketSet={false}
                 cookingSimEnabled={false}

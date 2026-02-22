@@ -2367,6 +2367,7 @@ export default function TeamTimelineApp() {
 
                     {/* シミュレーション実行コントロール */}
                     <SimulationControls
+                        bonusSettings={state.bonusSettings}
                         fieldIndex={state.bonusSettings.fieldIndex}
                         isGoodCampTicketSet={state.bonusSettings.isGoodCampTicketSet}
                         cookingSimEnabled={state.cookingSettings.enabled}

@@ -41,7 +41,20 @@ describe('NoCollectSupplementBar', () => {
             />
         );
 
-        expect(screen.getByTestId('no-collect-supplement-bar')).toBeDefined();
+        const bar = screen.getByTestId('no-collect-supplement-bar');
+        const barStyle = window.getComputedStyle(bar);
+        const styleText = bar.getAttribute('style') ?? '';
+        expect(bar).toBeDefined();
+        expect(barStyle.gap).toBe('2px');
+        expect(styleText).not.toContain('border:');
+        expect(styleText).not.toContain('background-color:');
+        const resetButton = screen.getByTestId('no-collect-supplement-delete-button');
+        const resetButtonStyle = window.getComputedStyle(resetButton);
+        expect(resetButton).toBeDefined();
+        expect(resetButtonStyle.height).toBe('18px');
+        expect(resetButtonStyle.fontSize).toBe('10px');
+        expect(resetButtonStyle.paddingLeft).toBe('8px');
+        expect(resetButtonStyle.paddingRight).toBe('8px');
         expect(screen.getByText('食材,きのみを回収しない設定がされています。')).toBeDefined();
         expect(screen.getAllByTestId('no-collect-supplement-entry')).toHaveLength(2);
         expect(screen.getByText('2回')).toBeDefined();

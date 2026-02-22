@@ -39,16 +39,13 @@ const SwapSupplementBar = React.memo(({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',
-        gap: '6px',
+        gap: '2px',
         width: 'min(540px, 100%)',
         maxWidth: CONTROL_BLOCK_MAX_WIDTH,
         minHeight: '30px',
         px: '8px',
         py: '5px',
         boxSizing: 'border-box',
-        border: '2px solid #1976d2',
-        borderRadius: '6px',
-        backgroundColor: '#fff',
         mb: '13px',
       }}
     >
@@ -76,15 +73,15 @@ const SwapSupplementBar = React.memo(({
           data-testid="swap-supplement-delete-button"
           onClick={onClear}
           sx={{
-            minWidth: '44px',
-            height: '22px',
+            minWidth: '40px',
+            height: '18px',
             borderRadius: '8px',
-            px: '10px',
+            px: '8px',
             borderColor: '#1976d2',
             backgroundColor: '#fff',
             color: '#1976d2',
-            fontSize: '12px',
-            lineHeight: '15px',
+            fontSize: '10px',
+            lineHeight: '12px',
             letterSpacing: '-0.48px',
             fontWeight: 400,
             flexShrink: 0,

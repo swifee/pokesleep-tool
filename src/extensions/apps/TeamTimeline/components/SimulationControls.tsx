@@ -13,15 +13,17 @@ import {
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { useTranslation } from 'react-i18next';
-import fields from '../../../../data/fields';
+import fields, { getFavoriteBerries, isExpertField } from '../../../../data/fields';
 import {
   allFavoriteFieldIndex,
   noFavoriteFieldIndex,
 } from '../../../../util/PokemonStrength';
 import { CookingCategory } from '../types/CookingTypes';
 import { TRIAL_COUNT_OPTIONS } from '../types/MultiTrialTypes';
+import { TimelineBonusSettings } from '../types/TimelineBonusSettingsTypes';
 
 interface SimulationControlsProps {
+  bonusSettings: TimelineBonusSettings;
   fieldIndex: number;
   isGoodCampTicketSet: boolean;
   cookingSimEnabled: boolean;
@@ -58,9 +60,25 @@ const CONTROL_VALUE_STYLE = {
   letterSpacing: '-0.48px',
 };
 
+const COMPACT_CONTROL_WIDTH = '70px';
+const COMPACT_CONTROL_RADIUS = '6px';
+
+const CONTROLS_PANEL_STYLE = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+  mb: '8px',
+  px: '6px',
+  pt: '5px',
+  pb: '8px',
+  borderRadius: COMPACT_CONTROL_RADIUS,
+  backgroundColor: '#fff',
+};
+
 const PROGRESS_TRACK_BACKGROUND = '#94bffc';
 
 export const SimulationControls: React.FC<SimulationControlsProps> = ({
+  bonusSettings,
   fieldIndex,
   isGoodCampTicketSet,
   cookingSimEnabled,
@@ -73,8 +91,6 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
   simulationLoading,
   simulationProgress,
   isTeamEmpty,
-  onFieldIndexChange,
-  onGoodCampTicketChange,
   onCookingSimEnabledChange,
   onCookingCategoryChange,
   onOpenSettingsTab,
@@ -91,14 +107,53 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
     : eventName === 'custom'
       ? `${t('event', 'イベント')}: ${t('events.advanced', '詳細設定')}`
       : t(`events.${eventName}`, eventName);
-
-  const handleFieldChange = (event: { target: { value: unknown } }) => {
-    onFieldIndexChange(Number(event.target.value));
-  };
-
-  const handleGoodCampTicketToggle = (event: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
-    onGoodCampTicketChange(typeof checked === 'boolean' ? checked : event.target.checked);
-  };
+  const selectedField = fieldIndex >= 0
+    ? fields.find((field) => field.index === fieldIndex)
+    : undefined;
+  const favoriteTypeLabels = React.useMemo(() => {
+    if (fieldIndex < 0) {
+      return [];
+    }
+    const fixedBerries = getFavoriteBerries(fieldIndex);
+    const favoriteTypes = fixedBerries.length === 3
+      ? fixedBerries
+      : bonusSettings.favoriteType;
+    return favoriteTypes.map((type) => t(`types.${type}`, type));
+  }, [bonusSettings.favoriteType, fieldIndex, t]);
+  const expertEffectLabel = React.useMemo(() => {
+    if (!isExpertField(fieldIndex)) {
+      return null;
+    }
+    if (bonusSettings.expertEffect === 'ing') {
+      return t('expert ing effect', '食材+1');
+    }
+    if (bonusSettings.expertEffect === 'skill') {
+      return t('expert skill effect', 'スキル 1.25倍');
+    }
+    return t('expert berry effect', 'きのみエナジー2.4倍');
+  }, [bonusSettings.expertEffect, fieldIndex, t]);
+  const fieldLabel = React.useMemo(() => {
+    if (fieldIndex === noFavoriteFieldIndex) {
+      return t('no favorite berries', 'きのみ得意なし');
+    }
+    if (fieldIndex === allFavoriteFieldIndex) {
+      return t('all favorite berries', '全きのみ得意');
+    }
+    if (!selectedField) {
+      return t('research area', 'フィールド');
+    }
+    const details = expertEffectLabel
+      ? [...favoriteTypeLabels, expertEffectLabel]
+      : favoriteTypeLabels;
+    const areaLabel = t(`area.${selectedField.index}`, selectedField.name);
+    return details.length > 0
+      ? `${areaLabel}(${details.join('/')})`
+      : areaLabel;
+  }, [expertEffectLabel, favoriteTypeLabels, fieldIndex, selectedField, t]);
+  const campTicketLabel = `${t('good camp ticket (short)', 'キャンチケ')}${t(
+    isGoodCampTicketSet ? 'on' : 'off',
+    isGoodCampTicketSet ? 'ON' : 'OFF'
+  )}`;
 
   const handleCookingSimToggle = (event: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
     onCookingSimEnabledChange(typeof checked === 'boolean' ? checked : event.target.checked);
@@ -137,7 +192,44 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '6px', mb: '8px' }}>
+    <Box sx={CONTROLS_PANEL_STYLE} data-testid="simulation-controls-panel">
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '6px',
+        }}
+      >
+        <Box
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          <Typography sx={{ ...CONTROL_LABEL_STYLE, whiteSpace: 'nowrap' }} data-testid="field-summary-text">
+            {fieldLabel}
+          </Typography>
+          <Typography sx={{ ...CONTROL_LABEL_STYLE, whiteSpace: 'nowrap' }} data-testid="camp-ticket-summary-text">
+            {campTicketLabel}
+          </Typography>
+          <Typography sx={{ ...CONTROL_LABEL_STYLE, whiteSpace: 'nowrap' }} data-testid="event-summary-text">
+            {eventLabel}
+          </Typography>
+        </Box>
+        <IconButton
+          size="small"
+          onClick={onOpenSettingsTab}
+          data-testid="event-settings-button"
+          aria-label={t('TeamTimeline.open settings', '設定を開く')}
+          sx={{ p: '2px' }}
+        >
+          <SettingsIcon sx={{ fontSize: '16px' }} />
+        </IconButton>
+      </Box>
+
       <Box
         sx={{
           display: 'flex',
@@ -146,17 +238,37 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
           gap: '8px',
         }}
       >
+        <FormControlLabel
+          sx={{ m: 0 }}
+          labelPlacement="start"
+          control={(
+            <Switch
+              checked={cookingSimEnabled}
+              onChange={handleCookingSimToggle}
+              size="small"
+              inputProps={{ 'aria-label': 'cooking-sim-switch' }}
+            />
+          )}
+          label={(
+            <Typography sx={{ ...CONTROL_LABEL_STYLE, whiteSpace: 'nowrap' }}>
+              {t('TeamTimeline.simulation cooking short', '料理')}
+            </Typography>
+          )}
+        />
+
         <Select
-          value={fieldIndex}
-          onChange={handleFieldChange}
-          data-testid="field-select"
+          value={cookingCategory}
+          onChange={handleCookingCategoryChange}
+          renderValue={renderCookingCategoryValue}
+          data-testid="cooking-category-select"
+          disabled={!cookingSimEnabled}
           size="small"
           sx={{
-            minWidth: '130px',
-            height: '28px',
+            width: COMPACT_CONTROL_WIDTH,
+            height: '20px',
             '& .MuiSelect-select': {
               ...CONTROL_VALUE_STYLE,
-              py: '3px',
+              py: '1px',
               pl: '5px',
               pr: '18px !important',
             },
@@ -166,118 +278,16 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             },
           }}
         >
-          <MenuItem key={noFavoriteFieldIndex} value={noFavoriteFieldIndex} sx={CONTROL_VALUE_STYLE}>
-            {t('no favorite berries', 'きのみ得意なし')}
+          <MenuItem value="curry" sx={CONTROL_VALUE_STYLE}>
+            {t('TeamTimeline.cooking curry', 'カレー・シチュー')}
           </MenuItem>
-          <MenuItem key={allFavoriteFieldIndex} value={allFavoriteFieldIndex} sx={CONTROL_VALUE_STYLE}>
-            {t('all favorite berries', '全きのみ得意')}
+          <MenuItem value="salad" sx={CONTROL_VALUE_STYLE}>
+            {t('TeamTimeline.cooking salad', 'サラダ')}
           </MenuItem>
-          {fields.map((field) => (
-            <MenuItem key={field.index} value={field.index} sx={CONTROL_VALUE_STYLE}>
-              {`${field.emoji} ${t(`area.${field.index}`, field.name)}`}
-            </MenuItem>
-          ))}
+          <MenuItem value="dessert" sx={CONTROL_VALUE_STYLE}>
+            {t('TeamTimeline.cooking dessert', 'デザート・ドリンク')}
+          </MenuItem>
         </Select>
-
-        <FormControlLabel
-          sx={{ m: 0 }}
-          control={(
-            <Switch
-              checked={isGoodCampTicketSet}
-              onChange={handleGoodCampTicketToggle}
-              size="small"
-              inputProps={{ 'aria-label': 'good-camp-ticket-switch' }}
-            />
-          )}
-          label={(
-            <Typography sx={CONTROL_LABEL_STYLE}>
-              {t('TeamTimeline.simulation camp ticket', 'キャンプチケット')}
-            </Typography>
-          )}
-        />
-
-        <Box
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            flexWrap: 'nowrap',
-            gap: '6px',
-          }}
-        >
-          <FormControlLabel
-            sx={{ m: 0 }}
-            control={(
-              <Switch
-                checked={cookingSimEnabled}
-                onChange={handleCookingSimToggle}
-                size="small"
-                inputProps={{ 'aria-label': 'cooking-sim-switch' }}
-              />
-            )}
-            label={(
-              <Typography sx={{ ...CONTROL_LABEL_STYLE, whiteSpace: 'nowrap' }}>
-                {t('TeamTimeline.simulation cooking short', '料理')}
-              </Typography>
-            )}
-          />
-
-          <Select
-            value={cookingCategory}
-            onChange={handleCookingCategoryChange}
-            renderValue={renderCookingCategoryValue}
-            data-testid="cooking-category-select"
-            disabled={!cookingSimEnabled}
-            size="small"
-            sx={{
-              width: '96px',
-              height: '28px',
-              '& .MuiSelect-select': {
-                ...CONTROL_VALUE_STYLE,
-                py: '3px',
-                pl: '5px',
-                pr: '18px !important',
-              },
-              '& .MuiSelect-icon': {
-                right: '2px',
-                fontSize: '18px',
-              },
-            }}
-          >
-            <MenuItem value="curry" sx={CONTROL_VALUE_STYLE}>
-              {t('TeamTimeline.cooking curry', 'カレー・シチュー')}
-            </MenuItem>
-            <MenuItem value="salad" sx={CONTROL_VALUE_STYLE}>
-              {t('TeamTimeline.cooking salad', 'サラダ')}
-            </MenuItem>
-            <MenuItem value="dessert" sx={CONTROL_VALUE_STYLE}>
-              {t('TeamTimeline.cooking dessert', 'デザート・ドリンク')}
-            </MenuItem>
-          </Select>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            minHeight: '28px',
-            border: '1px solid #d1d1d1',
-            borderRadius: '6px',
-            px: '8px',
-            backgroundColor: '#fff',
-            gap: '2px',
-          }}
-        >
-          <Typography sx={CONTROL_VALUE_STYLE}>{eventLabel}</Typography>
-          <IconButton
-            size="small"
-            onClick={onOpenSettingsTab}
-            data-testid="event-settings-button"
-            aria-label={t('TeamTimeline.open settings', '設定を開く')}
-            sx={{ p: '2px', ml: '2px' }}
-          >
-            <SettingsIcon sx={{ fontSize: '16px' }} />
-          </IconButton>
-        </Box>
       </Box>
 
       <Box
@@ -298,7 +308,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             data-testid="simulation-days-select"
             size="small"
             sx={{
-              width: '70px',
+              width: COMPACT_CONTROL_WIDTH,
               height: '20px',
               '& .MuiSelect-select': {
                 ...CONTROL_VALUE_STYLE,
@@ -328,7 +338,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             data-testid="trial-count-select"
             size="small"
             sx={{
-              width: '70px',
+              width: COMPACT_CONTROL_WIDTH,
               height: '20px',
               '& .MuiSelect-select': {
                 ...CONTROL_VALUE_STYLE,
@@ -377,7 +387,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             sx={{
               width: '63px',
               '& .MuiInputBase-root': {
-                borderRadius: '6px',
+                borderRadius: COMPACT_CONTROL_RADIUS,
                 height: '20px',
               },
               '& input': {

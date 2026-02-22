@@ -47,8 +47,20 @@ describe('SwapSupplementBar', () => {
         );
 
         expect(screen.getByText('途中でのポケモン入れ替えが設定されています。')).toBeDefined();
-        expect(screen.getByTestId('swap-supplement-bar')).toBeDefined();
-        expect(screen.getByTestId('swap-supplement-delete-button')).toBeDefined();
+        const bar = screen.getByTestId('swap-supplement-bar');
+        const barStyle = window.getComputedStyle(bar);
+        const styleText = bar.getAttribute('style') ?? '';
+        expect(bar).toBeDefined();
+        expect(barStyle.gap).toBe('2px');
+        expect(styleText).not.toContain('border:');
+        expect(styleText).not.toContain('background-color:');
+        const resetButton = screen.getByTestId('swap-supplement-delete-button');
+        const resetButtonStyle = window.getComputedStyle(resetButton);
+        expect(resetButton).toBeDefined();
+        expect(resetButtonStyle.height).toBe('18px');
+        expect(resetButtonStyle.fontSize).toBe('10px');
+        expect(resetButtonStyle.paddingLeft).toBe('8px');
+        expect(resetButtonStyle.paddingRight).toBe('8px');
         expect(screen.getAllByTestId('swap-supplement-icon')).toHaveLength(2);
         expect(screen.getByText('10H')).toBeDefined();
         expect(screen.getByText('(42%)')).toBeDefined();

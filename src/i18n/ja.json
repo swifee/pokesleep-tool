@@ -358,6 +358,7 @@
         "cooking leftover": "余り食材",
         "cooking no recipe": "作れるレシピなし",
         "cooking recipe bonus note": "※ 料理シミュレーションOFF時にのみ適用されます",
+        "cooking recipe bonus and average level note": "※[レシピボーナス]と[平均レシピレベル]は料理シミュレーションOFF時にのみ適用されます",
         "cooking remaining pot": "残り容量",
         "recipe specialAppleCurry": "とくせんリンゴカレー",
         "recipe simpleWhiteStew": "たんじゅんホワイトシチュー",

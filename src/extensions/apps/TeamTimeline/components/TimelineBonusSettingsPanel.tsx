@@ -180,7 +180,7 @@ const TimelineBonusSettingsPanel = React.memo(({
 
             {cookingSimEnabled && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
-                    {t('TeamTimeline.cooking recipe bonus note', '※ 料理シミュレーションOFF時にのみ適用されます')}
+                    {t('TeamTimeline.cooking recipe bonus and average level note', '※[レシピボーナス]と[平均レシピレベル]は料理シミュレーションOFF時にのみ適用されます')}
                 </Typography>
             )}
 
