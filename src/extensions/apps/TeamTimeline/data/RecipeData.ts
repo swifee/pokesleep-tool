@@ -665,10 +665,10 @@ export const RECIPES: readonly RecipeDefinition[] = [
         name: 'sparkSpiceSpicyCola',
         category: 'dessert',
         ingredients: [
-            { name: 'coffee', count: 35 },
             { name: 'leek', count: 20 },
+            { name: 'apple', count: 35 },
             { name: 'ginger', count: 20 },
-            { name: 'herb', count: 12 },
+            { name: 'coffee', count: 12 },
         ],
         recipeBonus: 0.61,
     },
