@@ -66,6 +66,8 @@ const COMPACT_CONTROL_RADIUS = '6px';
 const CONTROLS_PANEL_STYLE = {
   display: 'flex',
   flexDirection: 'column',
+  width: '100%',
+  boxSizing: 'border-box',
   gap: '6px',
   mb: '8px',
   px: '6px',

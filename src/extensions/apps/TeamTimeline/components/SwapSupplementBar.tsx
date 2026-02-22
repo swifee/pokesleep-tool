@@ -10,8 +10,6 @@ export interface SwapSupplementBarProps {
   onClear: () => void;
 }
 
-const CONTROL_BLOCK_MAX_WIDTH = '540px';
-
 function formatMetric(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
@@ -40,8 +38,7 @@ const SwapSupplementBar = React.memo(({
         flexDirection: 'column',
         alignItems: 'stretch',
         gap: '2px',
-        width: 'min(540px, 100%)',
-        maxWidth: CONTROL_BLOCK_MAX_WIDTH,
+        width: '100%',
         minHeight: '30px',
         px: '8px',
         py: '5px',

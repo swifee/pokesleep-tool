@@ -153,6 +153,7 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
 
         expect(screen.getByTestId('team-set-toolbar')).toBeDefined();
         expect(screen.getByTestId('team-timeline-pre-simulation-table')).toBeDefined();
+        expect(screen.getByTestId('team-timeline-pre-simulation-scroll-container').getAttribute('data-scroll-overflow-x')).toBe('hidden');
 
         const timeline = screen.getByTestId('timeline-table');
         expect(timeline.getAttribute('data-compact-empty')).toBe('true');

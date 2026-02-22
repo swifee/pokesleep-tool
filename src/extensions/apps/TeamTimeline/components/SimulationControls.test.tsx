@@ -244,6 +244,8 @@ describe('SimulationControls', () => {
         const panel = screen.getByTestId('simulation-controls-panel');
         const panelStyle = panel.getAttribute('data-sx');
 
+        expect(panelStyle).toContain('"width":"100%"');
+        expect(panelStyle).toContain('"boxSizing":"border-box"');
         expect(panelStyle).toContain('"backgroundColor":"#fff"');
         expect(panelStyle).toContain('"borderRadius":"6px"');
     });

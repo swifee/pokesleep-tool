@@ -119,14 +119,14 @@ describe('DailySummaryRow', () => {
         expect(firstCardStyle.width).toBe('100%');
     });
 
-    it('shows 個別成績 as default label in details mode', () => {
+    it('does not show 個別成績 by default in details mode', () => {
         const items = [createPokemon('Pikachu', 12, 'Solo')];
         const box = new PokemonBox(items);
         const summaries = [createDailySummary(items[0].id, 1)];
 
         render(<DailySummaryRow dailySummaries={summaries} box={box} layoutMode="details" />);
 
-        expect(screen.getByText('個別成績')).toBeDefined();
+        expect(screen.queryByText('個別成績')).toBeNull();
     });
 
     it('does not show label in average mode', () => {

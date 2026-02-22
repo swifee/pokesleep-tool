@@ -10,8 +10,6 @@ export interface NoCollectSupplementBarProps {
   onClear: () => void;
 }
 
-const CONTROL_BLOCK_MAX_WIDTH = '540px';
-
 const NoCollectSupplementBar = React.memo(({
   noCollectCount,
   entries,
@@ -31,8 +29,7 @@ const NoCollectSupplementBar = React.memo(({
         flexDirection: 'column',
         alignItems: 'stretch',
         gap: '2px',
-        width: 'min(540px, 100%)',
-        maxWidth: CONTROL_BLOCK_MAX_WIDTH,
+        width: '100%',
         minHeight: '30px',
         px: '8px',
         py: '5px',

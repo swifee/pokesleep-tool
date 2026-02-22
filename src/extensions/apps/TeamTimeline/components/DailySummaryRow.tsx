@@ -38,9 +38,6 @@ interface DailySummaryRowProps {
 }
 
 const SUMMARY_CARD_WIDTH = 96;
-const SUMMARY_COLUMN_GAP = 4;
-const SUMMARY_MAX_COLUMNS = 5;
-const SUMMARY_GRID_MAX_WIDTH = SUMMARY_CARD_WIDTH * SUMMARY_MAX_COLUMNS + SUMMARY_COLUMN_GAP * (SUMMARY_MAX_COLUMNS - 1);
 
 interface SkillIngredientPopoverTriggerProps {
     countLabel: string;
@@ -153,22 +150,12 @@ const DailySummaryRow = React.memo(({
     );
     const shouldShowTimelineDurationShare = showTimelineDurationShare && totalTimelineDurationMinutes > 0;
 
-    const defaultSingleLineLabel = t('TeamTimeline.individual results', '個別成績');
-    const defaultStackedLabel = t('TeamTimeline.individual results stacked', '個別\n成績');
-
     return (
         <RowWrapper data-testid="daily-summary-row" data-layout={layoutMode}>
-            {layoutMode === 'details' && (
-                <LabelCell>
-                    {label ? (
-                        label
-                    ) : (
-                        <>
-                            <span className="label-stacked">{defaultStackedLabel}</span>
-                            <span className="label-inline">{defaultSingleLineLabel}</span>
-                        </>
-                    )}
-                </LabelCell>
+            {layoutMode === 'details' && label && (
+                <LabelText>
+                    {label}
+                </LabelText>
             )}
             <GridCell data-testid="daily-summary-grid">
                 {dailySummaries.map(summary => {
@@ -329,46 +316,21 @@ const DailySummaryRow = React.memo(({
 });
 
 const RowWrapper = styled('div')({
-    display: 'grid',
-    gridTemplateColumns: '40px minmax(0, 1fr)',
-    columnGap: 0,
-    rowGap: '4px',
-    alignItems: 'start',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
     marginTop: '6px',
-    '&[data-layout="average"]': {
-        gridTemplateColumns: 'minmax(0, 1fr)',
-    },
-    '@media (max-width: 540px)': {
-        gridTemplateColumns: 'minmax(0, 1fr)',
-    },
 });
 
-const LabelCell = styled('div')({
-    width: '40px',
-    minWidth: '40px',
-    padding: '3px',
+const LabelText = styled('div')({
+    width: '100%',
     fontSize: '10px',
     lineHeight: '13px',
     letterSpacing: '-0.5px',
     color: '#000',
+    fontWeight: 700,
     whiteSpace: 'pre-wrap',
-    overflow: 'hidden',
-    '& .label-stacked': {
-        display: 'inline',
-        whiteSpace: 'pre-line',
-    },
-    '& .label-inline': {
-        display: 'none',
-        whiteSpace: 'nowrap',
-    },
-    '@media (max-width: 540px)': {
-        '& .label-stacked': {
-            display: 'none',
-        },
-        '& .label-inline': {
-            display: 'inline',
-        },
-    },
 });
 
 const GridCell = styled('div')({
@@ -377,7 +339,6 @@ const GridCell = styled('div')({
     gap: '6px 4px',
     alignItems: 'stretch',
     width: '100%',
-    maxWidth: `${SUMMARY_GRID_MAX_WIDTH}px`,
     minWidth: 0,
 });
 

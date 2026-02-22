@@ -176,9 +176,11 @@ describe('TeamTimelineApp timeline display mode', () => {
 
         const table = screen.getByTestId('timeline-table');
         expect(table.getAttribute('data-display-mode')).toBe('detailed');
+        expect(screen.getByTestId('team-timeline-post-simulation-scroll-container').getAttribute('data-scroll-overflow-x')).toBe('auto');
 
         fireEvent.click(screen.getByRole('switch', { name: 'シンプル表示' }));
         expect(table.getAttribute('data-display-mode')).toBe('simple');
+        expect(screen.getByTestId('team-timeline-post-simulation-scroll-container').getAttribute('data-scroll-overflow-x')).toBe('hidden');
     });
 
     it('does not persist display mode after remount', () => {

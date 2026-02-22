@@ -222,7 +222,7 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
   };
 
   return (
-    <Box sx={{ mb: '10px', width: 'min(540px, 100%)' }}>
+    <Box sx={{ mb: '10px', width: '100%' }}>
       <Box
         data-testid="trial-status-row"
         sx={{

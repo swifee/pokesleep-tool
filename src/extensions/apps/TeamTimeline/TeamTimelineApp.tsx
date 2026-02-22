@@ -145,6 +145,7 @@ const TIMELINE_WIPE_REVEAL_EASING_IN_QUAD = 'cubic-bezier(0.55, 0.085, 0.68, 0.5
 const TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 const TIMELINE_DETAILS_FADE_DURATION_MS = 450;
 const TIMELINE_PAGE_BOTTOM_PADDING = '3em';
+const TEAM_TIMELINE_CONTENT_WIDTH_PX = 540;
 const TIME_SLOT_SETTINGS_SECTION_ID = 'team-timeline-time-slot-settings';
 const EMPTY_SIMULATION_RESULT: SimulationResult = {
     slotResults: new Map(),
@@ -2328,14 +2329,15 @@ export default function TeamTimelineApp() {
             {state.activeTab === 'team' && (
                 <Box
                     sx={{
-                        maxWidth: isDesktop ? '960px' : '600px',
+                        width: '100%',
+                        maxWidth: `${TEAM_TIMELINE_CONTENT_WIDTH_PX}px`,
                     }}
                 >
                     <Box
                         sx={{
                             transform: `scale(${teamScale})`,
                             transformOrigin: 'top left',
-                            width: isDesktop ? 'max-content' : '100%',
+                            width: '100%',
                         }}
                     >
                     <TeamSetToolbar
@@ -2508,10 +2510,12 @@ export default function TeamTimelineApp() {
                     {showPreSimulationTimeline && (
                         <Box sx={{ mt: '18px' }} data-testid="team-timeline-pre-simulation-table">
                             <Box
+                                data-testid="team-timeline-pre-simulation-scroll-container"
+                                data-scroll-overflow-x="hidden"
                                 sx={{
                                     width: '100%',
                                     maxWidth: '100%',
-                                    overflowX: 'auto',
+                                    overflowX: 'hidden',
                                     overflowY: 'hidden',
                                     WebkitOverflowScrolling: 'touch',
                                 }}
@@ -2590,10 +2594,12 @@ export default function TeamTimelineApp() {
                                         )}
                                     />
                                     <Box
+                                        data-testid="team-timeline-post-simulation-scroll-container"
+                                        data-scroll-overflow-x={timelineDisplayMode === 'detailed' ? 'auto' : 'hidden'}
                                         sx={{
                                             width: '100%',
                                             maxWidth: '100%',
-                                            overflowX: 'auto',
+                                            overflowX: timelineDisplayMode === 'detailed' ? 'auto' : 'hidden',
                                             overflowY: 'hidden',
                                             WebkitOverflowScrolling: 'touch',
                                         }}
@@ -2649,7 +2655,7 @@ export default function TeamTimelineApp() {
                 <Box
                     sx={{
                         width: '100%',
-                        maxWidth: isDesktop ? '960px' : '100%',
+                        maxWidth: `${TEAM_TIMELINE_CONTENT_WIDTH_PX}px`,
                     }}
                 >
                     <TimelineBonusSettingsPanel
@@ -2699,7 +2705,7 @@ export default function TeamTimelineApp() {
                 <Box
                     sx={{
                         width: '100%',
-                        maxWidth: isDesktop ? '960px' : '100%',
+                        maxWidth: `${TEAM_TIMELINE_CONTENT_WIDTH_PX}px`,
                     }}
                 >
                     <CookingSettingsPanel
