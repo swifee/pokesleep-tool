@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Box,
@@ -20,6 +20,7 @@ import {
     DEFAULT_RECIPE_LEVEL,
 } from '../types/CookingTypes';
 import { getRecipesByCategory } from '../data/RecipeData';
+import { ingredientStrength } from '../../../../util/PokemonRp';
 import { IngredientNames, IngredientName } from '../../../../data/pokemons';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
 import TeamTimelineIcon from './TimelineIcons';
@@ -34,7 +35,7 @@ const MAX_POT_CAPACITY = 99;
 const POT_CAPACITY_STEP = 3;
 const MIN_RECIPE_LEVEL = 1;
 const MAX_RECIPE_LEVEL = 65;
-const LEVEL_INPUT_STEP = 5;
+const LEVEL_INPUT_STEP = 1;
 const INGREDIENT_INPUT_STEP = 5;
 const NUMERIC_INPUT_WIDTH = '5ch';
 const NUMERIC_TEXT_FIELD_SX = {
@@ -120,6 +121,13 @@ function normalizePotCapacity(value: number): number {
 
 function getRecipeIngredientTotal(recipe: ReturnType<typeof getRecipesByCategory>[number]): number {
     return recipe.ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
+}
+
+function getRecipeLevel1BaseEnergy(recipe: ReturnType<typeof getRecipesByCategory>[number]): number {
+    const rawStrength = recipe.ingredients.reduce((sum, ingredient) => {
+        return sum + (ingredientStrength[ingredient.name] * ingredient.count);
+    }, 0);
+    return Math.round(rawStrength * (1 + recipe.recipeBonus));
 }
 
 const RECIPE_ICON_SIZE_PX = 12;
@@ -247,7 +255,15 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
         });
     }, [settings, onChange]);
 
-    const recipes = getRecipesByCategory(settings.category);
+    const recipes = useMemo(() => {
+        return [...getRecipesByCategory(settings.category)].sort((a, b) => {
+            const baseEnergyDiff = getRecipeLevel1BaseEnergy(b) - getRecipeLevel1BaseEnergy(a);
+            if (baseEnergyDiff !== 0) {
+                return baseEnergyDiff;
+            }
+            return a.name.localeCompare(b.name);
+        });
+    }, [settings.category]);
     const initialIngredientTotal = IngredientNames.reduce((sum, ingredientName) => {
         return sum + (settings.initialIngredients[ingredientName] ?? 0);
     }, 0);
@@ -509,6 +525,17 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                             );
                         })}
                     </Box>
+                    <Typography
+                        variant="caption"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.2, color: '#666' }}
+                        data-testid="cooking-recipe-lock-note"
+                    >
+                        <LockOutlinedIcon
+                            sx={{ fontSize: '1.1rem', color: LOCK_ICON_ON_COLOR }}
+                            data-testid="cooking-recipe-lock-note-icon"
+                        />
+                        ：その料理を作成しないようにする
+                    </Typography>
 
                     <Divider sx={{ my: 1.5 }} />
 
@@ -608,6 +635,17 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                         data-testid="cooking-initial-ingredients-total"
                     >
                         入力値合計: {initialIngredientTotal.toLocaleString()}
+                    </Typography>
+                    <Typography
+                        variant="caption"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.2, color: '#666' }}
+                        data-testid="cooking-extra-ingredient-lock-note"
+                    >
+                        <LockOutlinedIcon
+                            sx={{ fontSize: '1.1rem', color: LOCK_ICON_ON_COLOR }}
+                            data-testid="cooking-extra-ingredient-lock-note-icon"
+                        />
+                        ：追加食材として使用しないようにする
                     </Typography>
                 </Box>
             )}

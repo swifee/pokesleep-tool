@@ -10,8 +10,6 @@ export interface SwapSupplementBarProps {
   onClear: () => void;
 }
 
-const CONTROL_BLOCK_MAX_WIDTH = '540px';
-
 function formatMetric(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
@@ -39,16 +37,12 @@ const SwapSupplementBar = React.memo(({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',
-        gap: '6px',
-        width: 'min(540px, 100%)',
-        maxWidth: CONTROL_BLOCK_MAX_WIDTH,
+        gap: '2px',
+        width: '100%',
         minHeight: '30px',
         px: '8px',
         py: '5px',
         boxSizing: 'border-box',
-        border: '2px solid #1976d2',
-        borderRadius: '6px',
-        backgroundColor: '#fff',
         mb: '13px',
       }}
     >
@@ -56,8 +50,9 @@ const SwapSupplementBar = React.memo(({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '8px',
+          justifyContent: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '4px',
         }}
       >
         <Typography
@@ -71,20 +66,26 @@ const SwapSupplementBar = React.memo(({
           {t('TeamTimeline.swap configured notice', '途中でのポケモン入れ替えが設定されています。')}
         </Typography>
         <Button
-          variant="contained"
+          variant="outlined"
           data-testid="swap-supplement-delete-button"
           onClick={onClear}
           sx={{
-            minWidth: '44px',
-            height: '22px',
+            minWidth: '40px',
+            height: '18px',
             borderRadius: '8px',
-            px: '10px',
-            background: 'linear-gradient(180deg, #4e8ce8 0%, #176eee 100%)',
-            fontSize: '12px',
-            lineHeight: '15px',
+            px: '8px',
+            borderColor: '#1976d2',
+            backgroundColor: '#fff',
+            color: '#1976d2',
+            fontSize: '10px',
+            lineHeight: '12px',
             letterSpacing: '-0.48px',
             fontWeight: 400,
             flexShrink: 0,
+            '&:hover': {
+              borderColor: '#1976d2',
+              backgroundColor: '#f4f8ff',
+            },
           }}
         >
           {t('TeamTimeline.reset', 'リセット')}

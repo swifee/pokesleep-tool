@@ -20,6 +20,7 @@ import {
     getDisplayLabel,
     getMealType,
     SWAP_NONE_POKEMON_ID,
+    NoCollectCellSetting,
 } from '../types/TimeSlotTypes';
 import { calculateDuration, isSleepingSlot } from '../utils/TimeSlotUtils';
 import { buildExpandedTimeline } from '../utils/TimelineDayExpansion';
@@ -44,6 +45,7 @@ import { buildStrengthParameterFromTimelineBonusSettings } from '../utils/Timeli
 import { CookingCategory, CookingSimulationSettings, CookingSimulationResult, CookingEventResult } from '../types/CookingTypes';
 import {
     createIngredientBag,
+    createBagIngredientSnapshot,
     addIngredientsToBag,
     deductIngredientCountsFromBag,
     executeMealCooking,
@@ -62,6 +64,27 @@ const MIXED_RECIPE_NAME_BY_CATEGORY: Record<CookingCategory, string> = {
     salad: 'mixedSalad',
     dessert: 'mixedJuice',
 };
+
+function toTimelineCellKey(dayIndex: number, slotId: string, teamSlotIndex: number): string {
+    return `${dayIndex}:${slotId}:${teamSlotIndex}`;
+}
+
+function addIngredientResultsToMap(
+    target: Map<IngredientName, number>,
+    ingredients: readonly { name: IngredientName; count: number }[],
+): void {
+    for (const ingredient of ingredients) {
+        target.set(ingredient.name, (target.get(ingredient.name) ?? 0) + ingredient.count);
+    }
+}
+
+function ingredientMapToResultArray(map: ReadonlyMap<IngredientName, number>): { name: IngredientName; count: number }[] {
+    return [...map.entries()].map(([name, count]) => ({ name, count }));
+}
+
+function sumIngredientCounts(ingredients: readonly { count: number }[]): number {
+    return ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
+}
 
 export interface SimulationAnalysisOptions {
     disabledPokemonIds?: readonly number[];
@@ -83,6 +106,8 @@ export interface SimulationInput {
     bonusSettings: TimelineBonusSettings;
     /** ポケモン入れ替え設定（オプショナル） */
     swaps?: PokemonSwap[];
+    /** セル単位の「回収しない」設定（オプショナル） */
+    noCollectCells?: NoCollectCellSetting[];
     /** ボックス（入れ替え時のポケモン取得用、オプショナル） */
     box?: PokemonBox;
     /** 追加分析用オプション */
@@ -107,6 +132,12 @@ interface PokemonState {
     skillStock: number;
     /** 現在の所持数（きのみ+食材の合計） */
     inventoryCount: number;
+    /** 回収待ちのきのみ所持数 */
+    carriedBerryCount: number;
+    /** 回収待ちのおてつだい食材 */
+    carriedHelpIngredients: Map<IngredientName, number>;
+    /** 回収待ちのスキル食材 */
+    carriedSkillIngredients: Map<IngredientName, number>;
     /** おてつだい周期の余り秒数（次スロットへ持ち越し） */
     bankedTimeSeconds: number;
     /** スキルストック上限（specialtyから計算） */
@@ -285,6 +316,8 @@ function applyExtraIngredientsToBaselineEvents(
             continue;
         }
 
+        const bagIngredientsBeforeCooking = createBagIngredientSnapshot(bag);
+
         const replayedIngredientsUsed = deductIngredientCountsFromBag(
             bag,
             getBaselineUsageCounts(baselineEvent),
@@ -358,6 +391,8 @@ function applyExtraIngredientsToBaselineEvents(
             cookingEP,
             ingredientsUsed: replayedIngredientsUsed,
             extraIngredientsUsed: replayedExtraIngredientsUsed,
+            bagIngredientsBeforeCooking,
+            bagIngredientsBeforeCookingWithoutExtra: baselineEvent.bagIngredientsBeforeCooking,
             remainingPotCapacity: Math.max(0, baselineEvent.remainingPotCapacity - extraIngredientCount),
         });
 
@@ -498,7 +533,16 @@ function runCookingPostProcess(
  * シミュレーションを実行
  */
 export function runSimulation(input: SimulationInput): SimulationResult {
-    const { team, timeSlots, config, bonusSettings, swaps = [], box, analysisOptions } = input;
+    const {
+        team,
+        timeSlots,
+        config,
+        bonusSettings,
+        swaps = [],
+        noCollectCells = [],
+        box,
+        analysisOptions,
+    } = input;
     const disabledPokemonIds = new Set<number>(analysisOptions?.disabledPokemonIds ?? []);
     const keepDisabledPokemonTargetable = analysisOptions?.keepDisabledPokemonTargetable !== false;
     const suppressEnergyDeltaSkillPokemonIds = new Set<number>(
@@ -559,6 +603,18 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         list.push(swap);
         swapsBySlot.set(key, list);
     });
+    const swapCellKeySet = new Set<string>();
+    swaps.forEach((swap) => {
+        const dayIndex = typeof swap.dayIndex === 'number' ? swap.dayIndex : 0;
+        swapCellKeySet.add(toTimelineCellKey(dayIndex, swap.slotId, swap.teamSlotIndex));
+    });
+    const activeNoCollectCellKeySet = new Set<string>();
+    noCollectCells.forEach((cell) => {
+        const key = toTimelineCellKey(cell.dayIndex, cell.slotId, cell.teamSlotIndex);
+        if (!swapCellKeySet.has(key)) {
+            activeNoCollectCellKeySet.add(key);
+        }
+    });
 
     // 5. 現在のチームを追跡（入れ替えで変化する）
     const currentTeam: (PokemonBoxItem | null)[] = [...team];
@@ -576,6 +632,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             // 新規追加
             skillStock: 0,
             inventoryCount: 0,
+            carriedBerryCount: 0,
+            carriedHelpIngredients: new Map<IngredientName, number>(),
+            carriedSkillIngredients: new Map<IngredientName, number>(),
             bankedTimeSeconds: 0,
             maxSkillStock: getMaxSkillStock(pokemon.iv.pokemon.specialty),
             maxInventory: pokemon.iv.carryLimit,
@@ -914,6 +973,45 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             // 最終げんき（既に0以上が保証されている）
             const finalEnergy = currentEnergy;
 
+            const slotCellKey = toTimelineCellKey(
+                expandedSlot.dayIndex,
+                expandedSlot.originalSlotId,
+                state.slotIndex,
+            );
+            const isNoCollectEnabled = activeNoCollectCellKeySet.has(slotCellKey);
+            const skillIngredientsFromSkill = skillResult.skillIngredients ?? [];
+
+            state.carriedBerryCount += helpOutput.berryCount;
+            addIngredientResultsToMap(state.carriedHelpIngredients, helpOutput.ingredients);
+            addIngredientResultsToMap(state.carriedSkillIngredients, skillIngredientsFromSkill);
+            state.inventoryCount = helpOutput.newInventory + sumIngredientCounts(skillIngredientsFromSkill);
+
+            const helpBonusContext = getPokemonBonusContext(state.pokemon).help;
+            const effectiveMaxInventory = Math.ceil(
+                state.maxInventory * (helpBonusContext.isGoodCampTicketSet ? 1.2 : 1)
+            );
+
+            let collectedBerryCount = 0;
+            let collectedHelpIngredients: { name: IngredientName; count: number }[] = [];
+            let collectedSkillIngredients: { name: IngredientName; count: number }[] = [];
+
+            if (isNoCollectEnabled) {
+                const overflowInventoryCount = Math.max(0, state.inventoryCount - effectiveMaxInventory);
+                collectedBerryCount = Math.min(overflowInventoryCount, state.carriedBerryCount);
+                if (collectedBerryCount > 0) {
+                    state.carriedBerryCount -= collectedBerryCount;
+                    state.inventoryCount -= collectedBerryCount;
+                }
+            } else {
+                collectedBerryCount = state.carriedBerryCount;
+                collectedHelpIngredients = ingredientMapToResultArray(state.carriedHelpIngredients);
+                collectedSkillIngredients = ingredientMapToResultArray(state.carriedSkillIngredients);
+                state.carriedBerryCount = 0;
+                state.carriedHelpIngredients.clear();
+                state.carriedSkillIngredients.clear();
+                state.inventoryCount = 0;
+            }
+
             // TimeSlotResult を生成
             const result: TimeSlotResult = {
                 slotId: slot.id,
@@ -923,9 +1021,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 isSleeping,
                 helpCount: helpOutput.helpCount,
                 skillTriggerCount: helpOutput.skillTriggerCount,
-                berryCount: helpOutput.berryCount,
-                ingredients: helpOutput.ingredients,
-                skillIngredients: skillResult.skillIngredients,
+                berryCount: collectedBerryCount,
+                ingredients: collectedHelpIngredients,
+                skillIngredients: collectedSkillIngredients,
                 energyStart: state.currentEnergy, // 開始時のげんき（時間減少前）
                 energyEnd: finalEnergy,
                 mealRecovery: wakeAndMealData.mealRecovery,
@@ -1034,9 +1132,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 
             // 状態を最終値で更新
             state.currentEnergy = finalEnergy;
-            // 新規追加: タイムスロット終了時のリセット
+            // スキルストックは時間帯終了でリセット
             state.skillStock = 0;        // スキルストックをリセット
-            state.inventoryCount = 0;    // 所持数をリセット（回収扱い）
             state.bankedTimeSeconds = helpOutput.newBankedTimeSeconds;  // 持ち越し秒数を更新
             state.stockpileCount = skillResult.stockpileCountAfter;
             state.berryBurstDisguiseLocked = skillResult.berryBurstDisguiseLockedAfter;
@@ -1090,6 +1187,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 // 新規追加
                 skillStock: 0,
                 inventoryCount: 0,
+                carriedBerryCount: 0,
+                carriedHelpIngredients: new Map<IngredientName, number>(),
+                carriedSkillIngredients: new Map<IngredientName, number>(),
                 bankedTimeSeconds: 0,
                 maxSkillStock: getMaxSkillStock(newPokemon.iv.pokemon.specialty),
                 maxInventory: newPokemon.iv.carryLimit,

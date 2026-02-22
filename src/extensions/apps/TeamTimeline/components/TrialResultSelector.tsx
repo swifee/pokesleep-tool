@@ -22,6 +22,7 @@ const DISTRIBUTION_CHART_HEIGHT_PX = 50;
 const DISTRIBUTION_VISIBILITY_STORAGE_KEY = 'PstTeamTimelineDistributionVisible';
 const EDGE_AWARE_TOOLTIP_PADDING_PX = 8;
 const EDGE_AWARE_TOOLTIP_OFFSET_Y_PX = 8;
+const SLIDER_ARROW_ICON_VERTICAL_OFFSET_PX = -2;
 
 const EdgeAwareSliderValueLabel = React.memo(({ children, open, value }: SliderValueLabelProps) => (
   <Tooltip
@@ -92,8 +93,19 @@ function resolveHistogramBinCount(trialCount: number): number {
   return Math.min(trialCount, clampedBinCount);
 }
 
-function toDisplayBinIndex(rawBinIndex: number, binCount: number): number {
-  return (binCount - 1) - rawBinIndex;
+function resolveDisplaySliderValue(selectedIndex: number, maxIndex: number): number {
+  return Math.max(0, Math.min(maxIndex, maxIndex - selectedIndex));
+}
+
+function resolveSelectedIndexFromSliderValue(sliderValue: number, maxIndex: number): number {
+  return Math.max(0, Math.min(maxIndex, maxIndex - sliderValue));
+}
+
+function normalizeSingleSliderValue(value: number | number[]): number {
+  if (Array.isArray(value)) {
+    return value[0] ?? 0;
+  }
+  return value;
 }
 
 function loadDistributionVisibilityFromStorage(): boolean {
@@ -118,15 +130,19 @@ function saveDistributionVisibilityToStorage(isVisible: boolean): void {
 
 const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: TrialResultSelectorProps) => {
   const { t } = useTranslation();
-  const [localSliderValue, setLocalSliderValue] = useState<number>(selectedIndex);
+  const maxIndex = Math.max(results.length - 1, 0);
+  const [localSliderValue, setLocalSliderValue] = useState<number>(
+    () => resolveDisplaySliderValue(selectedIndex, maxIndex)
+  );
   const [showDistribution, setShowDistribution] = useState<boolean>(() => loadDistributionVisibilityFromStorage());
 
   useEffect(() => {
-    setLocalSliderValue(selectedIndex);
-  }, [selectedIndex]);
+    setLocalSliderValue(resolveDisplaySliderValue(selectedIndex, maxIndex));
+  }, [selectedIndex, maxIndex]);
 
-  const maxIndex = Math.max(results.length - 1, 0);
   const clampedSliderValue = Math.max(0, Math.min(localSliderValue, maxIndex));
+  const selectedTrialIndex = resolveSelectedIndexFromSliderValue(clampedSliderValue, maxIndex);
+  const selectedRank = selectedIndex + 1;
 
   const histogram = useMemo(() => {
     if (results.length === 0) {
@@ -147,9 +163,8 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
     const range = maxEp - minEp;
 
     epValues.forEach((ep) => {
-      const rawBinIndex = resolveHistogramBinIndex(ep, minEp, range, binCount);
-      const displayBinIndex = toDisplayBinIndex(rawBinIndex, binCount);
-      bins[displayBinIndex] += 1;
+      const binIndex = resolveHistogramBinIndex(ep, minEp, range, binCount);
+      bins[binIndex] += 1;
     });
 
     const maxBinCount = bins.reduce((currentMax, count) => Math.max(currentMax, count), 0);
@@ -161,42 +176,41 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
     };
   }, [results]);
 
-  const selectedEp = results[clampedSliderValue]?.grandTotalEP;
+  const selectedEp = results[selectedTrialIndex]?.grandTotalEP;
   const selectedBinIndex = selectedEp === undefined
     ? -1
-    : toDisplayBinIndex(
-      resolveHistogramBinIndex(selectedEp, histogram.minEp, histogram.range, histogram.bins.length),
-      histogram.bins.length
-    );
+    : resolveHistogramBinIndex(selectedEp, histogram.minEp, histogram.range, histogram.bins.length);
 
   if (results.length <= 1) {
     return null;
   }
 
   const handlePrev = () => {
-    if (selectedIndex <= 0) {
-      return;
-    }
-    const nextIndex = selectedIndex - 1;
-    setLocalSliderValue(nextIndex);
-    onSelect(nextIndex);
-  };
-
-  const handleNext = () => {
     if (selectedIndex >= maxIndex) {
       return;
     }
     const nextIndex = selectedIndex + 1;
-    setLocalSliderValue(nextIndex);
+    setLocalSliderValue(resolveDisplaySliderValue(nextIndex, maxIndex));
+    onSelect(nextIndex);
+  };
+
+  const handleNext = () => {
+    if (selectedIndex <= 0) {
+      return;
+    }
+    const nextIndex = selectedIndex - 1;
+    setLocalSliderValue(resolveDisplaySliderValue(nextIndex, maxIndex));
     onSelect(nextIndex);
   };
 
   const handleSliderChange = (_event: Event, value: number | number[]) => {
-    setLocalSliderValue(value as number);
+    setLocalSliderValue(normalizeSingleSliderValue(value));
   };
 
   const handleSliderCommitted = (_event: React.SyntheticEvent | Event, value: number | number[]) => {
-    onSelect(value as number);
+    const sliderValue = normalizeSingleSliderValue(value);
+    setLocalSliderValue(sliderValue);
+    onSelect(resolveSelectedIndexFromSliderValue(sliderValue, maxIndex));
   };
 
   const handleToggleDistribution = () => {
@@ -208,11 +222,12 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
   };
 
   return (
-    <Box sx={{ mb: '10px', width: 'min(540px, 100%)' }}>
+    <Box sx={{ mb: '10px', width: '100%' }}>
       <Box
+        data-testid="trial-status-row"
         sx={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-end',
           color: '#000',
           fontSize: '10px',
           lineHeight: '13px',
@@ -221,19 +236,10 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
         }}
       >
         <Typography component="span" sx={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
-          {t('TeamTimeline.trial count prefix', '{{count}}回中、上から', {
+          {t('TeamTimeline.trial rank prefix', '{{count}}回中、', {
             count: results.length,
           })}
         </Typography>
-        <IconButton
-          size="small"
-          aria-label="previous-trial"
-          onClick={handlePrev}
-          disabled={selectedIndex <= 0}
-          sx={{ p: 0, mx: '2px' }}
-        >
-          <NavigateBeforeIcon sx={{ fontSize: '16px' }} />
-        </IconButton>
         <Typography
           component="span"
           sx={{
@@ -243,21 +249,15 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
             letterSpacing: '-0.65px',
             minWidth: '20px',
             textAlign: 'center',
+            transform: 'translateY(-1px)',
           }}
         >
-          {selectedIndex + 1}
+          {t('TeamTimeline.trial rank label', '{{rank}}位', {
+            rank: selectedRank,
+          })}
         </Typography>
-        <IconButton
-          size="small"
-          aria-label="next-trial"
-          onClick={handleNext}
-          disabled={selectedIndex >= maxIndex}
-          sx={{ p: 0, mx: '2px' }}
-        >
-          <NavigateNextIcon sx={{ fontSize: '16px' }} />
-        </IconButton>
         <Typography component="span" sx={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
-          {t('TeamTimeline.trial count suffix', '番目の結果を表示中')}
+          {t('TeamTimeline.trial rank suffix', 'の結果を表示中')}
         </Typography>
         <Link
           component="button"
@@ -311,30 +311,64 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
           })}
         </Box>
       )}
-      <Box sx={{ px: '5px' }}>
-        <Slider
-          value={clampedSliderValue}
-          min={0}
-          max={maxIndex}
-          step={1}
-          onChange={handleSliderChange}
-          onChangeCommitted={handleSliderCommitted}
-          slots={{ valueLabel: EdgeAwareSliderValueLabel }}
-          valueLabelDisplay="auto"
-          valueLabelFormat={(value) => {
-            const ep = results[value]?.grandTotalEP;
-            if (ep === undefined) {
-              return `${value + 1}`;
-            }
-            return (
-              <>
-                {value + 1}
-                {': '}
-                <EpValue value={Math.round(ep).toLocaleString()} />
-              </>
-            );
-          }}
-        />
+      <Box data-testid="trial-slider-controls" sx={{ display: 'flex', alignItems: 'center' }}>
+        <IconButton
+          size="small"
+          aria-label="previous-trial"
+          onClick={handlePrev}
+          disabled={selectedIndex >= maxIndex}
+          sx={{ p: 0, mx: '2px' }}
+        >
+          <NavigateBeforeIcon
+            sx={{
+              fontSize: '16px',
+              transform: `translateY(${SLIDER_ARROW_ICON_VERTICAL_OFFSET_PX}px)`,
+            }}
+          />
+        </IconButton>
+        <Box sx={{ px: '5px', flex: 1 }}>
+          <Slider
+            value={clampedSliderValue}
+            min={0}
+            max={maxIndex}
+            step={1}
+            onChange={handleSliderChange}
+            onChangeCommitted={handleSliderCommitted}
+            slots={{ valueLabel: EdgeAwareSliderValueLabel }}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(value) => {
+              const selectedTrialIndexFromSlider = resolveSelectedIndexFromSliderValue(value, maxIndex);
+              const rankLabel = t('TeamTimeline.trial rank label', '{{rank}}位', {
+                rank: selectedTrialIndexFromSlider + 1,
+              });
+              const ep = results[selectedTrialIndexFromSlider]?.grandTotalEP;
+              if (ep === undefined) {
+                return rankLabel;
+              }
+              return (
+                <>
+                  {rankLabel}
+                  {': '}
+                  <EpValue value={Math.round(ep).toLocaleString()} />
+                </>
+              );
+            }}
+          />
+        </Box>
+        <IconButton
+          size="small"
+          aria-label="next-trial"
+          onClick={handleNext}
+          disabled={selectedIndex <= 0}
+          sx={{ p: 0, mx: '2px' }}
+        >
+          <NavigateNextIcon
+            sx={{
+              fontSize: '16px',
+              transform: `translateY(${SLIDER_ARROW_ICON_VERTICAL_OFFSET_PX}px)`,
+            }}
+          />
+        </IconButton>
       </Box>
     </Box>
   );

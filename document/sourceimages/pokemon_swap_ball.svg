@@ -1,0 +1,15 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- 下半分 -->
+    <path d="M 10 100 A 90 90 0 0 0 190 100 Z" fill="none" stroke="#5EC64D" stroke-width="16"/>
+    <!-- 上半分(塗り) -->
+    <path d="M 10 100 A 90 90 0 0 1 190 100 Z" fill="#5EC64D" />
+    <line x1="10" y1="100" x2="190" y2="100" stroke="#5EC64D" stroke-width="16"/>
+    
+    <circle cx="100" cy="100" r="28" fill="#FFFFFF" stroke="#5EC64D" stroke-width="16"/>
+    
+    <!-- 右向き矢印 (上半分) -->
+    <path d="M 115 45 L 135 65 L 115 85 M 65 65 L 135 65" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    
+    <!-- 左向き矢印 (下半分) -->
+    <path d="M 85 155 L 65 135 L 85 115 M 135 135 L 65 135" stroke="#5EC64D" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

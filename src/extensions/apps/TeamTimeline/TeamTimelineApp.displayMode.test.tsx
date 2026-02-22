@@ -39,6 +39,10 @@ vi.mock('./components/TimelineHeader', () => ({
     default: () => null,
 }));
 
+vi.mock('./components/TeamSetToolbar', () => ({
+    default: () => <div data-testid="team-set-toolbar" />,
+}));
+
 vi.mock('./components/SwapSupplementBar', () => ({
     default: () => null,
 }));
@@ -130,17 +134,32 @@ vi.mock('./components/TimelineTable', () => ({
     default: ({
         displayMode,
         onHeaderSlotClick,
+        noCollectCells,
+        onNoCollectToggle,
     }: {
         displayMode?: 'detailed' | 'simple';
         onHeaderSlotClick?: (index: number) => void;
+        noCollectCells?: { dayIndex: number; slotId: string; teamSlotIndex: number }[];
+        onNoCollectToggle?: (slotId: string, teamIndex: number, dayIndex: number) => void;
     }) => (
-        <div data-testid="timeline-table" data-display-mode={displayMode ?? 'detailed'}>
+        <div
+            data-testid="timeline-table"
+            data-display-mode={displayMode ?? 'detailed'}
+            data-no-collect-count={String(noCollectCells?.length ?? 0)}
+        >
             <button
                 type="button"
                 data-testid="timeline-header-slot-click"
                 onClick={() => onHeaderSlotClick?.(0)}
             >
                 header
+            </button>
+            <button
+                type="button"
+                data-testid="timeline-no-collect-toggle"
+                onClick={() => onNoCollectToggle?.('wake', 0, 0)}
+            >
+                no-collect
             </button>
         </div>
     ),
@@ -149,6 +168,7 @@ vi.mock('./components/TimelineTable', () => ({
 describe('TeamTimelineApp timeline display mode', () => {
     beforeEach(() => {
         localStorage.clear();
+        localStorage.setItem('PstTeamTimelinePresetAppliedV1', '1');
     });
 
     it('uses detailed mode by default and toggles to simple mode', () => {
@@ -156,9 +176,11 @@ describe('TeamTimelineApp timeline display mode', () => {
 
         const table = screen.getByTestId('timeline-table');
         expect(table.getAttribute('data-display-mode')).toBe('detailed');
+        expect(screen.getByTestId('team-timeline-post-simulation-scroll-container').getAttribute('data-scroll-overflow-x')).toBe('auto');
 
         fireEvent.click(screen.getByRole('switch', { name: 'シンプル表示' }));
         expect(table.getAttribute('data-display-mode')).toBe('simple');
+        expect(screen.getByTestId('team-timeline-post-simulation-scroll-container').getAttribute('data-scroll-overflow-x')).toBe('hidden');
     });
 
     it('does not persist display mode after remount', () => {
@@ -193,6 +215,30 @@ describe('TeamTimelineApp timeline display mode', () => {
 
         expect(screen.getByTestId('team-box-dialog').getAttribute('data-open')).toBe('false');
         expect(screen.getByRole('switch', { name: 'シンプル表示' })).toBeDefined();
+        expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
+    });
+
+    it('persists no-collect cells and restores them after remount', () => {
+        const firstRender = render(<TeamTimelineApp />);
+        expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('0');
+
+        fireEvent.click(screen.getByTestId('timeline-no-collect-toggle'));
+        const teamSetsPayload = localStorage.getItem('PstTeamTimelineTeamSetsV1');
+        expect(teamSetsPayload).not.toBeNull();
+        expect(teamSetsPayload!).toContain('"slotId":"wake"');
+        expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('1');
+
+        firstRender.unmount();
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('timeline-table').getAttribute('data-no-collect-count')).toBe('1');
+    });
+
+    it('shows re-simulation notice when no-collect setting changes', () => {
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('false');
+        fireEvent.click(screen.getByTestId('timeline-no-collect-toggle'));
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
     });
 });

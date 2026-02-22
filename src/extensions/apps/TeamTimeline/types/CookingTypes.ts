@@ -97,6 +97,8 @@ export interface CookingEventResult {
     readonly cookingPowerUpBonusUsed: number;
     /** 料理直前のバッグ内食材の内訳 */
     readonly bagIngredientsBeforeCooking?: readonly CookingBagIngredientSnapshotEntry[];
+    /** ここまで追加食材を一切使わなかった場合の料理直前バッグ内食材 */
+    readonly bagIngredientsBeforeCookingWithoutExtra?: readonly CookingBagIngredientSnapshotEntry[];
 }
 
 /** 日ごとの料理サマリー */

@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type PokemonBox from '../../../util/PokemonBox';
 import TeamTimelineApp from './TeamTimelineApp';
 
 vi.mock('react-i18next', () => ({
@@ -11,6 +12,25 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('./components/TimelineHeader', () => ({
     default: () => <div data-testid="timeline-header" />,
+}));
+
+vi.mock('./components/TeamSetToolbar', () => ({
+    default: ({
+        onCreate,
+        onSelect,
+    }: {
+        onCreate?: () => void;
+        onSelect?: (index: number) => void;
+    }) => (
+        <div data-testid="team-set-toolbar">
+            <button type="button" data-testid="team-set-create-click" onClick={() => onCreate?.()}>
+                create-team-set
+            </button>
+            <button type="button" data-testid="team-set-select-second-click" onClick={() => onSelect?.(1)}>
+                select-team-set-2
+            </button>
+        </div>
+    ),
 }));
 
 vi.mock('./components/SwapSupplementBar', () => ({
@@ -62,14 +82,17 @@ vi.mock('./components/SwapEnergyDialog', () => ({
 vi.mock('./components/BoxSelectDialog', () => ({
     default: ({
         open,
+        box,
         onSelectNone,
     }: {
         open: boolean;
+        box: PokemonBox;
         onSelectNone?: () => void;
     }) => (
         <div
             data-testid={onSelectNone ? 'swap-box-dialog' : 'team-box-dialog'}
             data-open={open ? 'true' : 'false'}
+            data-item-count={String(box.items.length)}
         />
     ),
 }));
@@ -79,12 +102,16 @@ vi.mock('./components/TimelineTable', () => ({
         compactEmptyCells,
         alwaysShowSwapButton,
         displayMode,
+        team,
+        swaps,
         onHeaderSlotClick,
         onOpenTimeSlotSettings,
     }: {
         compactEmptyCells?: boolean;
         alwaysShowSwapButton?: boolean;
         displayMode?: 'detailed' | 'simple';
+        team: Array<{ iv: { pokemonName: string } } | null>;
+        swaps: Array<{ dayIndex: number; slotId: string; teamSlotIndex: number; newPokemonId: number }>;
         onHeaderSlotClick?: (index: number) => void;
         onOpenTimeSlotSettings?: () => void;
     }) => (
@@ -93,6 +120,10 @@ vi.mock('./components/TimelineTable', () => ({
             data-compact-empty={compactEmptyCells ? 'true' : 'false'}
             data-always-show-swap={alwaysShowSwapButton ? 'true' : 'false'}
             data-display-mode={displayMode ?? 'detailed'}
+            data-team={team.map(member => member?.iv.pokemonName ?? 'null').join('|')}
+            data-swaps={swaps
+                .map(swap => `${swap.dayIndex}:${swap.slotId}:${swap.teamSlotIndex}:${swap.newPokemonId}`)
+                .join('|')}
         >
             <button
                 type="button"
@@ -120,20 +151,40 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
     it('shows timeline table before simulation and hides summary areas', () => {
         render(<TeamTimelineApp />);
 
+        expect(screen.getByTestId('team-set-toolbar')).toBeDefined();
         expect(screen.getByTestId('team-timeline-pre-simulation-table')).toBeDefined();
+        expect(screen.getByTestId('team-timeline-pre-simulation-scroll-container').getAttribute('data-scroll-overflow-x')).toBe('hidden');
 
         const timeline = screen.getByTestId('timeline-table');
         expect(timeline.getAttribute('data-compact-empty')).toBe('true');
         expect(timeline.getAttribute('data-always-show-swap')).toBe('true');
+        expect(timeline.getAttribute('data-team')).toBe('Pikachu|Dragonite|Slowbro|null|Psyduck');
+        expect(timeline.getAttribute('data-swaps')).toContain('0:slot-1:3:1000005');
+        expect(timeline.getAttribute('data-swaps')).toContain('0:slot-2:3:1000006');
+        expect(localStorage.getItem('PstTeamTimelinePresetAppliedV1')).toBe('1');
 
         expect(screen.queryByTestId('team-summary-row')).toBeNull();
         expect(screen.queryByTestId('daily-summary-row')).toBeNull();
+    });
+
+    it('switches team state by team set dropdown selection', () => {
+        render(<TeamTimelineApp />);
+
+        const timeline = screen.getByTestId('timeline-table');
+        expect(timeline.getAttribute('data-team')).toBe('Pikachu|Dragonite|Slowbro|null|Psyduck');
+
+        fireEvent.click(screen.getByTestId('team-set-create-click'));
+        fireEvent.click(screen.getByTestId('team-set-select-second-click'));
+
+        expect(screen.getByTestId('timeline-table').getAttribute('data-team')).toBe('null|null|null|null|null');
     });
 
     it('opens team box dialog when clicking timeline header slot', () => {
         render(<TeamTimelineApp />);
 
         expect(screen.getByTestId('team-box-dialog').getAttribute('data-open')).toBe('false');
+        expect(screen.getByTestId('team-box-dialog').getAttribute('data-item-count')).toBe('0');
+        expect(screen.getByTestId('swap-box-dialog').getAttribute('data-item-count')).toBe('0');
 
         fireEvent.click(screen.getByTestId('timeline-header-slot-click'));
 
@@ -148,5 +199,13 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
         fireEvent.click(screen.getByTestId('timeline-open-time-slot-settings-click'));
 
         expect(screen.getByTestId('time-slot-editor')).toBeDefined();
+    });
+
+    it('shows current sleep energy value next to slider in settings tab', () => {
+        render(<TeamTimelineApp />);
+
+        fireEvent.click(screen.getByTestId('timeline-open-time-slot-settings-click'));
+
+        expect(screen.getByTestId('team-timeline-sleep-energy-value').textContent).toBe('50');
     });
 });

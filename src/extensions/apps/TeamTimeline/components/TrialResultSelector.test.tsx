@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TrialResultSelector from './TrialResultSelector';
 
@@ -106,7 +106,9 @@ vi.mock('react-i18next', () => ({
             if (!defaultValue) {
                 return _key;
             }
-            return defaultValue.replace('{{count}}', String(options?.count ?? ''));
+            return Object.entries(options ?? {}).reduce((value, [name, replacement]) => (
+                value.replace(`{{${name}}}`, String(replacement))
+            ), defaultValue);
         },
     }),
 }));
@@ -141,16 +143,21 @@ describe('TrialResultSelector', () => {
         const onSelect = vi.fn();
         render(<TrialResultSelector results={RESULTS} selectedIndex={1} onSelect={onSelect} />);
 
-        expect(screen.getByText('3回中、上から')).toBeDefined();
-        expect(screen.getByText('番目の結果を表示中')).toBeDefined();
+        expect(screen.getByText('3回中、')).toBeDefined();
+        expect(screen.getByText('の結果を表示中')).toBeDefined();
 
-        const prevButton = screen.getByRole('button', { name: 'previous-trial' });
-        const nextButton = screen.getByRole('button', { name: 'next-trial' });
+        const statusRow = screen.getByTestId('trial-status-row');
+        expect(within(statusRow).queryByRole('button', { name: 'previous-trial' })).toBeNull();
+        expect(within(statusRow).queryByRole('button', { name: 'next-trial' })).toBeNull();
+
+        const sliderControls = screen.getByTestId('trial-slider-controls');
+        const prevButton = within(sliderControls).getByRole('button', { name: 'previous-trial' });
+        const nextButton = within(sliderControls).getByRole('button', { name: 'next-trial' });
         fireEvent.click(prevButton);
         fireEvent.click(nextButton);
 
-        expect(onSelect).toHaveBeenNthCalledWith(1, 0);
-        expect(onSelect).toHaveBeenNthCalledWith(2, 2);
+        expect(onSelect).toHaveBeenNthCalledWith(1, 2);
+        expect(onSelect).toHaveBeenNthCalledWith(2, 0);
     });
 
     it('commits slider value on mouse up', () => {
@@ -161,7 +168,7 @@ describe('TrialResultSelector', () => {
         fireEvent.change(slider, { target: { value: '2' } });
         fireEvent.mouseUp(slider, { target: { value: '2' } });
 
-        expect(onSelect).toHaveBeenCalledWith(2);
+        expect(onSelect).toHaveBeenCalledWith(0);
     });
 
     it('toggles distribution chart visibility by link', () => {
@@ -240,6 +247,6 @@ describe('TrialResultSelector', () => {
         expect(tooltip.getAttribute('data-open')).toBe('true');
         expect(tooltip.getAttribute('data-modifiers')).toContain('preventOverflow');
         expect(tooltip.getAttribute('data-modifiers')).toContain('flip');
-        expect(tooltip.getAttribute('data-title')).toContain('2:');
+        expect(tooltip.getAttribute('data-title')).toContain('2位:');
     });
 });

@@ -68,6 +68,88 @@ describe('TimelineCell swap ui', () => {
         expect(container.querySelector('.swap-info')).toBeNull();
     });
 
+    it('shows no-collect button in off state by default and calls toggle handler', () => {
+        const onNoCollectToggle = vi.fn();
+
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                onNoCollectToggle={onNoCollectToggle}
+            />
+        );
+
+        const button = screen.getByTestId('timeline-cell-no-collect-toggle');
+        expect(button.getAttribute('data-enabled')).toBe('false');
+        expect(button.getAttribute('data-always-visible')).toBe('false');
+        fireEvent.click(button);
+        expect(onNoCollectToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows no-collect button in on state when enabled', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                noCollectEnabled
+                onNoCollectToggle={vi.fn()}
+            />
+        );
+
+        expect(screen.getByTestId('timeline-cell-no-collect-toggle').getAttribute('data-enabled')).toBe('true');
+    });
+
+    it('keeps no-collect button always visible when alwaysShowSwapButton is enabled', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                alwaysShowSwapButton
+                onNoCollectToggle={vi.fn()}
+            />
+        );
+
+        expect(screen.getByTestId('timeline-cell-no-collect-toggle').getAttribute('data-always-visible')).toBe('true');
+    });
+
+    it('keeps no-collect button always visible in simple mode', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                displayMode="simple"
+                onNoCollectToggle={vi.fn()}
+            />
+        );
+
+        expect(screen.getByTestId('timeline-cell-no-collect-toggle').getAttribute('data-always-visible')).toBe('true');
+    });
+
+    it('hides no-collect button when swap is configured', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                hasSwap
+                swappedPokemonName="ピカチュウ"
+                onSwapClick={vi.fn()}
+                onNoCollectToggle={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByTestId('timeline-cell-no-collect-toggle')).toBeNull();
+    });
+
     it('renders empty content without placeholder dash in compact empty mode', () => {
         const { container } = render(
             <TimelineCell
@@ -193,6 +275,63 @@ describe('TimelineCell swap ui', () => {
         expect(container.querySelector('.swap-info')).not.toBeNull();
         fireEvent.click(screen.getByText('ピカチュウ'));
         expect(onSwapClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps swap info container bottom-aligned after simulation results', () => {
+        const { container } = render(
+            <TimelineCell
+                result={{
+                    slotId: 'slot-1',
+                    pokemonId: 1,
+                    teamIndex: 0,
+                    durationMinutes: 60,
+                    isSleeping: false,
+                    helpCount: 3,
+                    skillTriggerCount: 0,
+                    berryCount: 2,
+                    ingredients: [{ name: 'sausage', count: 1 }],
+                    skillIngredients: [],
+                    energyStart: 50,
+                    energyEnd: 50,
+                    mealRecovery: 0,
+                    skillRecovery: 0,
+                    wakeRecovery: 0,
+                    energyDecay: 0,
+                    skillOverflowCount: 0,
+                    overflowIngredients: [],
+                    selfSkillRecovery: 0,
+                    directSkillEP: 0,
+                    moonlightGivenRecovery: 0,
+                    moonlightReceivedRecovery: 0,
+                    energizingCheerGivenRecovery: 0,
+                    energizingCheerReceivedRecovery: 0,
+                    energizingCheerEvents: [],
+                    nuzzleTriggeredSkillEvents: [],
+                    proxySkillEvents: [],
+                    presentCandyCount: 0,
+                    berryJuiceCount: 0,
+                    supportSkillBerryCount: 0,
+                    supportSkillBerryEP: 0,
+                    supportHelpEvents: [],
+                    stockpileStoreCount: 0,
+                    stockpileCountAtStore: 0,
+                    stockpileSpitCount: 0,
+                    badDreamsHitCount: 0,
+                    badDreamsTotalDamageGiven: 0,
+                    badDreamsDamageTaken: 0,
+                }}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                hasSwap
+                swappedPokemonName="サンダース"
+                onSwapClick={vi.fn()}
+            />
+        );
+
+        const swapInfoContainer = container.querySelector('[data-swap-drag-state]') as HTMLElement | null;
+        expect(swapInfoContainer).not.toBeNull();
+        expect(swapInfoContainer ? getComputedStyle(swapInfoContainer).marginTop : '').toBe('auto');
     });
 
     it('hides leading swap icon and marks compact label in narrow viewport mode', () => {

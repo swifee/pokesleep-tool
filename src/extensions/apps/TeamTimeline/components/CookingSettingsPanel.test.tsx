@@ -144,6 +144,14 @@ vi.mock('./TimelineIcons', () => ({
     },
 }));
 
+vi.mock('../../../../util/PokemonRp', () => ({
+    ingredientStrength: {
+        apple: 10,
+        mushroom: 20,
+        egg: 30,
+    },
+}));
+
 vi.mock('../../../../data/pokemons', async () => {
     const actual = await vi.importActual<typeof import('../../../../data/pokemons')>('../../../../data/pokemons');
     return {
@@ -155,12 +163,24 @@ vi.mock('../../../../data/pokemons', async () => {
 vi.mock('../data/RecipeData', () => {
     const recipes = [
         {
+            name: 'starterSoup',
+            category: 'curry',
+            ingredients: [{ name: 'apple', count: 10 }],
+            recipeBonus: 0.19,
+        },
+        {
             name: 'megaStew',
             category: 'curry',
             ingredients: [
                 { name: 'apple', count: 30 },
                 { name: 'mushroom', count: 30 },
             ],
+            recipeBonus: 0.19,
+        },
+        {
+            name: 'legendStew',
+            category: 'curry',
+            ingredients: [{ name: 'egg', count: 50 }],
             recipeBonus: 0.19,
         },
         {
@@ -186,7 +206,7 @@ function createSettings(overrides?: Partial<CookingSimulationSettings>): Cooking
     return {
         enabled: true,
         category: 'curry',
-        recipeLevels: { megaStew: 50, lightSalad: 50, sweetDrink: 50 },
+        recipeLevels: { starterSoup: 50, megaStew: 50, legendStew: 50, lightSalad: 50, sweetDrink: 50 },
         basePotCapacity: 81,
         initialIngredients: { apple: 30, mushroom: 24, egg: 600 },
         disabledRecipes: {},
@@ -221,6 +241,17 @@ describe('CookingSettingsPanel', () => {
         expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'salad' }));
     });
 
+    it('sorts recipes by level-1 base energy in descending order', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const highEnergyRecipe = screen.getByTestId('recipe-row-legendStew');
+        const midEnergyRecipe = screen.getByTestId('recipe-row-megaStew');
+        const lowEnergyRecipe = screen.getByTestId('recipe-row-starterSoup');
+
+        expect(highEnergyRecipe.compareDocumentPosition(midEnergyRecipe) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(midEnergyRecipe.compareDocumentPosition(lowEnergyRecipe) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    });
+
     it('initializes recipe defaults to 50 and does not show category label prefix', () => {
         render(<CookingSettingsPanel settings={createSettings({ recipeLevels: {} })} onChange={vi.fn()} />);
 
@@ -243,18 +274,18 @@ describe('CookingSettingsPanel', () => {
         }));
     });
 
-    it('steps recipe level by 5 using minus/plus buttons', () => {
+    it('steps recipe level by 1 using minus/plus buttons', () => {
         const onChange = vi.fn();
         render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
 
         fireEvent.click(screen.getByTestId('recipe-level-decrement-megaStew'));
         expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-            recipeLevels: expect.objectContaining({ megaStew: 45 }),
+            recipeLevels: expect.objectContaining({ megaStew: 49 }),
         }));
 
         fireEvent.click(screen.getByTestId('recipe-level-increment-megaStew'));
         expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-            recipeLevels: expect.objectContaining({ megaStew: 55 }),
+            recipeLevels: expect.objectContaining({ megaStew: 51 }),
         }));
     });
 
@@ -359,6 +390,24 @@ describe('CookingSettingsPanel', () => {
 
         const ingredientArea = screen.getByTestId('cooking-initial-ingredients');
         expect(within(ingredientArea).queryByText('とくせんリンゴ')).toBeNull();
+    });
+
+    it('shows lock icon description notes under recipe list and initial ingredient total', () => {
+        render(<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />);
+
+        const recipeList = screen.getByTestId('recipe-level-list');
+        const recipeLockNote = screen.getByTestId('cooking-recipe-lock-note');
+        const recipeLockNoteIcon = screen.getByTestId('cooking-recipe-lock-note-icon');
+        const initialIngredientTotal = screen.getByTestId('cooking-initial-ingredients-total');
+        const extraIngredientLockNote = screen.getByTestId('cooking-extra-ingredient-lock-note');
+        const extraIngredientLockNoteIcon = screen.getByTestId('cooking-extra-ingredient-lock-note-icon');
+
+        expect(recipeLockNote.textContent).toContain('：その料理を作成しないようにする');
+        expect(extraIngredientLockNote.textContent).toContain('：追加食材として使用しないようにする');
+        expect(recipeLockNoteIcon.tagName.toLowerCase()).toBe('svg');
+        expect(extraIngredientLockNoteIcon.tagName.toLowerCase()).toBe('svg');
+        expect(recipeList.compareDocumentPosition(recipeLockNote) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        expect(initialIngredientTotal.compareDocumentPosition(extraIngredientLockNote) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
     it('uses timeline-equivalent icon size in recipe ingredient summary', () => {

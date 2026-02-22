@@ -71,10 +71,14 @@ describe('CookingResultRow', () => {
         expect(screen.getByText('4')).toBeDefined();
     });
 
-    it('shows consumed count and non-consumed count in parentheses for extra ingredients', () => {
+    it('shows actual count and no-extra cumulative count in parentheses', () => {
         const event: CookingEventResult = {
             ...EVENT,
             bagIngredientsBeforeCooking: [
+                { name: 'apple', count: 60 },
+                { name: 'egg', count: 40 },
+            ],
+            bagIngredientsBeforeCookingWithoutExtra: [
                 { name: 'apple', count: 75 },
                 { name: 'egg', count: 40 },
             ],
@@ -96,6 +100,23 @@ describe('CookingResultRow', () => {
         expect(screen.getByText('40')).toBeDefined();
     });
 
+    it('shows 0 (x) for ingredients that would remain only without extra ingredients', () => {
+        const event: CookingEventResult = {
+            ...EVENT,
+            bagIngredientsBeforeCooking: [],
+            bagIngredientsBeforeCookingWithoutExtra: [
+                { name: 'apple', count: 5 },
+            ],
+        };
+
+        render(<CookingResultRow event={event} teamSize={5} />);
+
+        fireEvent.click(screen.getByTestId('cooking-bag-trigger-breakfast-1'));
+
+        expect(screen.getByText('apple')).toBeDefined();
+        expect(screen.getByText('0 (5)')).toBeDefined();
+    });
+
     it('opens help popover when clicking question mark icon', () => {
         const event: CookingEventResult = {
             ...EVENT,
@@ -109,7 +130,7 @@ describe('CookingResultRow', () => {
         fireEvent.click(screen.getByTestId('cooking-bag-trigger-breakfast-1'));
         fireEvent.click(screen.getByTestId('cooking-bag-help-trigger-breakfast-1'));
 
-        expect(screen.getByText('カッコ内はここまでスキマ食材を一切入れなかった場合の数')).toBeDefined();
+        expect(screen.getByText('カッコ内はここまで追加食材を一切入れなかった場合の数')).toBeDefined();
     });
 
     it('renders extra ingredients with plus and parentheses', () => {

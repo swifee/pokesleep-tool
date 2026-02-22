@@ -2,6 +2,7 @@ import React from 'react';
 import { styled } from '@mui/system';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CloseIcon from '@mui/icons-material/Close';
+import BlockIcon from '@mui/icons-material/Block';
 import { IconButton } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { TimeSlotResult } from '../types/TimeSlotTypes';
@@ -54,6 +55,8 @@ interface TimelineCellProps {
     onSwapLongPressStart?: (detail: SwapLongPressStartDetail) => void;
     swapDragState?: SwapDragState;
     displayMode?: TimelineDisplayMode;
+    noCollectEnabled?: boolean;
+    onNoCollectToggle?: () => void;
 }
 
 /**
@@ -81,14 +84,19 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
         onSwapLongPressStart,
         swapDragState = 'idle',
         displayMode = 'detailed',
+        noCollectEnabled = false,
+        onNoCollectToggle,
     } = props;
     const { t } = useTranslation();
     const swapButtonTitle = t('TeamTimeline.swap pokemon');
     const removeSwapButtonTitle = t('TeamTimeline.swap remove', '入れ替え設定を解除');
+    const noCollectButtonTitle = t('TeamTimeline.no collect toggle', '回収しない');
     const hasSwapInfo = !disableSwapUi && Boolean(hasSwap && swappedPokemonName);
     const showSwapButton = !disableSwapUi && Boolean(onSwapClick) && !hasSwapInfo;
+    const showNoCollectButton = !disableSwapUi && !hasSwapInfo && !hasSwap && Boolean(onNoCollectToggle);
     const isSimpleMode = displayMode === 'simple';
     const shouldAlwaysShowSwapButton = alwaysShowSwapButton || isSimpleMode;
+    const shouldAlwaysShowNoCollectButton = shouldAlwaysShowSwapButton;
     const isCompactEmptyCell = compactEmpty && result === null;
     const isCompactLayout = isCompactEmptyCell || compactFirstSlot || isSimpleMode;
     const isNarrowSwapInfoLayout = fitToViewport;
@@ -132,6 +140,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             return;
         }
         onRemoveSwapClick?.();
+    };
+
+    const handleNoCollectButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        onNoCollectToggle?.();
     };
 
     const clearLongPressTimer = React.useCallback(() => {
@@ -267,6 +280,30 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             >
                 <SwapHorizIcon className="swap-icon" sx={{ fontSize: 16 }} />
             </SwapIconButton>
+        );
+    };
+
+    const renderNoCollectControl = () => {
+        if (!showNoCollectButton) {
+            return null;
+        }
+
+        return (
+            <NoCollectIconButton
+                type="button"
+                className="no-collect-trigger"
+                data-always-visible={shouldAlwaysShowNoCollectButton ? 'true' : 'false'}
+                data-enabled={noCollectEnabled ? 'true' : 'false'}
+                data-testid="timeline-cell-no-collect-toggle"
+                onClick={handleNoCollectButtonClick}
+                title={noCollectButtonTitle}
+                aria-label={noCollectButtonTitle}
+                style={{
+                    right: showSwapButton ? '24px' : '2px',
+                }}
+            >
+                <BlockIcon className="no-collect-icon" sx={{ fontSize: 14 }} />
+            </NoCollectIconButton>
         );
     };
 
@@ -424,6 +461,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 $isSleeping={isSleeping}
                 $hasSwap={hasSwap}
                 $showSwapButton={showSwapButton}
+                $showNoCollectButton={showNoCollectButton}
                 $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
                 $compact={isCompactLayout}
                 $simple={false}
@@ -439,6 +477,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     {renderPokemonIcon()}
                 </EmptyContent>
                 {renderSwapInfo()}
+                {renderNoCollectControl()}
                 {renderSwapControl()}
             </StyledCell>
         );
@@ -475,6 +514,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 $isSleeping={isSleeping}
                 $hasSwap={hasSwap}
                 $showSwapButton={showSwapButton}
+                $showNoCollectButton={showNoCollectButton}
                 $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
                 $compact={isCompactLayout}
                 $simple={true}
@@ -520,6 +560,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     </SimpleRightArea>
                 </SimpleLayout>
                 {renderSwapInfo()}
+                {renderNoCollectControl()}
                 {renderSwapControl()}
             </StyledCell>
         );
@@ -721,6 +762,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             $isSleeping={isSleeping}
             $hasSwap={hasSwap}
             $showSwapButton={showSwapButton}
+            $showNoCollectButton={showNoCollectButton}
             $alwaysShowSwapButton={shouldAlwaysShowSwapButton}
             $compact={isCompactLayout}
             $simple={false}
@@ -825,6 +867,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             )}
 
             {renderSwapInfo()}
+            {renderNoCollectControl()}
             {renderSwapControl()}
         </StyledCell>
     );
@@ -834,13 +877,23 @@ const StyledCell = styled('div')<{
     $isSleeping: boolean;
     $hasSwap?: boolean;
     $showSwapButton: boolean;
+    $showNoCollectButton: boolean;
     $alwaysShowSwapButton: boolean;
     $compact: boolean;
     $simple: boolean;
     $fitToViewport: boolean;
     $swapDragState: SwapDragState;
 }>(
-    ({ $isSleeping, $showSwapButton, $alwaysShowSwapButton, $compact, $simple, $fitToViewport, $swapDragState }) => ({
+    ({
+        $isSleeping,
+        $showSwapButton,
+        $showNoCollectButton,
+        $alwaysShowSwapButton,
+        $compact,
+        $simple,
+        $fitToViewport,
+        $swapDragState,
+    }) => ({
     position: 'relative',
     width: $fitToViewport
         ? 'calc((100% - var(--timeline-time-cell-width, 40px)) / var(--timeline-team-size, 5))'
@@ -855,8 +908,16 @@ const StyledCell = styled('div')<{
     padding: $simple
         ? '2px'
         : $compact
-            ? `2px 2px ${$showSwapButton ? '22px' : '2px'}`
-            : `3px 3px ${$showSwapButton ? '26px' : '3px'}`,
+            ? `2px 2px ${
+                $showSwapButton || $showNoCollectButton
+                    ? ($showSwapButton && $showNoCollectButton ? '42px' : '22px')
+                    : '2px'
+            }`
+            : `3px 3px ${
+                $showSwapButton || $showNoCollectButton
+                    ? ($showSwapButton && $showNoCollectButton ? '46px' : '26px')
+                    : '3px'
+            }`,
     borderLeft: '0.5px solid #e2e2e2',
     backgroundColor: $swapDragState === 'target'
         ? '#fff4de'
@@ -872,14 +933,22 @@ const StyledCell = styled('div')<{
         opacity: $alwaysShowSwapButton ? 1 : 0,
         pointerEvents: $alwaysShowSwapButton ? 'auto' : 'none',
     },
+    '& .no-collect-trigger': {
+        opacity: $alwaysShowSwapButton ? 1 : 0,
+        pointerEvents: $alwaysShowSwapButton ? 'auto' : 'none',
+    },
     ...(!$alwaysShowSwapButton ? {
-        '&:hover .swap-trigger, &:focus-within .swap-trigger': {
+        '&:hover .swap-trigger, &:focus-within .swap-trigger, &:hover .no-collect-trigger, &:focus-within .no-collect-trigger': {
             opacity: 1,
             pointerEvents: 'auto',
         },
     } : {}),
     '@media (hover: none), (pointer: coarse)': {
         '& .swap-trigger': {
+            opacity: 1,
+            pointerEvents: 'auto',
+        },
+        '& .no-collect-trigger': {
             opacity: 1,
             pointerEvents: 'auto',
         },
@@ -1147,6 +1216,35 @@ const RecoveryInfoLine = styled('div')({
     },
 });
 
+const NoCollectIconButton = styled(IconButton)({
+    position: 'absolute',
+    bottom: '2px',
+    width: '20px',
+    height: '20px',
+    padding: '0',
+    border: '1px solid #b8bcc3',
+    backgroundColor: '#fff',
+    color: '#9aa0aa',
+    borderRadius: '999px',
+    zIndex: 2,
+    '&:hover': {
+        backgroundColor: '#f5f6f8',
+    },
+    '& .no-collect-icon': {
+        color: '#9aa0aa',
+    },
+    '&[data-enabled="true"]': {
+        borderColor: '#1e64d6',
+        color: '#1e64d6',
+        '&:hover': {
+            backgroundColor: '#edf4ff',
+        },
+        '& .no-collect-icon': {
+            color: '#1e64d6',
+        },
+    },
+});
+
 const SwapIconButton = styled(IconButton)({
     position: 'absolute',
     right: '2px',
@@ -1170,7 +1268,7 @@ const SwapIconButton = styled(IconButton)({
 
 const SwapInfoContainer = styled('div')<{ $dragState: SwapDragState }>(({ $dragState }) => ({
     border: '1px solid #62d540',
-    marginTop: '2px',
+    marginTop: 'auto',
     marginLeft: '0',
     marginRight: '0',
     width: '100%',

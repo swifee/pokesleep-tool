@@ -16,8 +16,8 @@ import PokemonBox, { PokemonBoxItem } from '../../../util/PokemonBox';
 import {
     createInitialState,
     teamTimelineReducer,
-    saveTeamToStorage,
-    loadTeamFromStorage,
+    saveTeamSetsToStorage,
+    loadTeamSetsFromStorage,
     saveTimeSlotsToStorage,
     loadTimeSlotsFromStorage,
     saveConfigToStorage,
@@ -33,6 +33,7 @@ import {
     saveTrialCountToStorage,
     loadTrialCountFromStorage,
 } from './TeamTimelineState';
+import TeamSetToolbar from './components/TeamSetToolbar';
 import TimelineHeader from './components/TimelineHeader';
 import BoxSelectDialog from './components/BoxSelectDialog';
 import TimeSlotEditor from './components/TimeSlotEditor';
@@ -40,6 +41,7 @@ import TimelineTable from './components/TimelineTable';
 import DailySummaryRow from './components/DailySummaryRow';
 import TeamSummaryRow from './components/TeamSummaryRow';
 import SwapSupplementBar from './components/SwapSupplementBar';
+import NoCollectSupplementBar from './components/NoCollectSupplementBar';
 import TrialResultSelector from './components/TrialResultSelector';
 import { SwapEnergyDialog } from './components/SwapEnergyDialog';
 import SwapRemoveConfirmDialog from './components/SwapRemoveConfirmDialog';
@@ -49,6 +51,7 @@ import {
     PokemonSwap,
     SWAP_NONE_POKEMON_ID,
     SimulationResult,
+    NoCollectCellSetting,
 } from './types/TimeSlotTypes';
 import { runSimulation } from './simulation/TimelineSimulator';
 import SimulationControls from './components/SimulationControls';
@@ -61,6 +64,7 @@ import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
 import { CookingSimulationSettings } from './types/CookingTypes';
 import { saveCookingSettingsToStorage, loadCookingSettingsFromStorage } from './utils/CookingSettingsStorage';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
+import { TeamSetState } from './types/TeamTimelineTypes';
 import SummaryValueModeToggle from './components/SummaryValueModeToggle';
 import ResimulationNoticeBar from './components/ResimulationNoticeBar';
 import AdditionalAnalysisPanel from './components/AdditionalAnalysisPanel';
@@ -98,10 +102,20 @@ import {
 import { isSwapReassignment } from './utils/SwapReassignmentUtils';
 import { buildSwapSupplementSequences } from './utils/SwapSupplementUtils';
 import {
+    buildNoCollectSupplementEntries,
+    countActiveNoCollectCells,
+} from './utils/NoCollectSupplementUtils';
+import {
     loadTimelineBonusSettingsFromIvStorage,
+    normalizeTimelineBonusSettings,
     saveTimelineBonusSettingsToIvStorage,
     IV_PARAMETER_STORAGE_KEY,
 } from './utils/TimelineBonusSettingsBridge';
+import {
+    applyFirstAccessPresetIfNeeded,
+    createTimelineRuntimeBox,
+} from './utils/FirstAccessPreset';
+import { buildSimulationContextHash } from './utils/SimulationContextHash';
 
 interface TeamNormalizationResult {
     normalizedTeam: (PokemonBoxItem | null)[];
@@ -131,6 +145,7 @@ const TIMELINE_WIPE_REVEAL_EASING_IN_QUAD = 'cubic-bezier(0.55, 0.085, 0.68, 0.5
 const TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 const TIMELINE_DETAILS_FADE_DURATION_MS = 450;
 const TIMELINE_PAGE_BOTTOM_PADDING = '3em';
+const TEAM_TIMELINE_CONTENT_WIDTH_PX = 540;
 const TIME_SLOT_SETTINGS_SECTION_ID = 'team-timeline-time-slot-settings';
 const EMPTY_SIMULATION_RESULT: SimulationResult = {
     slotResults: new Map(),
@@ -190,40 +205,6 @@ function pickEveryTenthSeeds(sortedSeeds: readonly number[]): number[] {
     return [...sortedSeeds];
 }
 
-function migrateSwap(rawSwap: unknown): PokemonSwap | null {
-    if (!rawSwap || typeof rawSwap !== 'object') {
-        return null;
-    }
-    const candidate = rawSwap as Partial<PokemonSwap> & { dayIndex?: unknown };
-    if (
-        typeof candidate.slotId !== 'string' ||
-        typeof candidate.teamSlotIndex !== 'number' ||
-        typeof candidate.newPokemonId !== 'number' ||
-        typeof candidate.initialEnergy !== 'number'
-    ) {
-        return null;
-    }
-
-    const dayIndex = typeof candidate.dayIndex === 'number'
-        ? Math.max(0, Math.floor(candidate.dayIndex))
-        : 0;
-    const isRepeatGenerated = candidate.isRepeatGenerated === true
-        ? true
-        : undefined;
-    const newPokemonSerialized = typeof candidate.newPokemonSerialized === 'string'
-        ? candidate.newPokemonSerialized
-        : undefined;
-    return {
-        dayIndex,
-        slotId: candidate.slotId,
-        teamSlotIndex: candidate.teamSlotIndex,
-        newPokemonId: candidate.newPokemonId,
-        newPokemonSerialized,
-        initialEnergy: candidate.initialEnergy,
-        isRepeatGenerated,
-    };
-}
-
 function normalizeTeamWithBoxItems(
     loadedTeam: (PokemonBoxItem | null)[],
     boxItems: readonly PokemonBoxItem[],
@@ -254,6 +235,19 @@ function normalizeTeamWithBoxItems(
     return { normalizedTeam, idRemap };
 }
 
+function normalizeTeamSetWithRuntimeBox(
+    teamSet: TeamSetState,
+    runtimeBox: PokemonBox,
+): TeamSetState {
+    const { normalizedTeam, idRemap } = normalizeTeamWithBoxItems(teamSet.team, runtimeBox.items);
+    return {
+        ...teamSet,
+        team: normalizedTeam,
+        swaps: normalizeLoadedSwapsWithBox(teamSet.swaps, runtimeBox, idRemap),
+        noCollectCells: [...teamSet.noCollectCells],
+    };
+}
+
 function createSwapSignature(swaps: readonly PokemonSwap[]): string {
     return swaps
         .map(
@@ -262,10 +256,20 @@ function createSwapSignature(swaps: readonly PokemonSwap[]): string {
         .join('|');
 }
 
+function createNoCollectSignature(noCollectCells: readonly NoCollectCellSetting[]): string {
+    return noCollectCells
+        .map(cell => `${cell.dayIndex}:${cell.slotId}:${cell.teamSlotIndex}`)
+        .join('|');
+}
+
 function createTeamSignature(team: readonly (PokemonBoxItem | null)[]): string {
     return team
         .map((member, index) => `${index}:${member?.id ?? 'null'}`)
         .join('|');
+}
+
+function createTeamSetId(): string {
+    return `team-set-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -365,24 +369,51 @@ export default function TeamTimelineApp() {
     ]);
 
     // ボックスのロード（初回のみ）
-    const boxRef = useRef<PokemonBox | null>(null);
-    if (boxRef.current === null) {
-        boxRef.current = new PokemonBox();
-        boxRef.current.load();
+    const userBoxRef = useRef<PokemonBox | null>(null);
+    const timelineRuntimeBoxRef = useRef<PokemonBox | null>(null);
+    if (userBoxRef.current === null || timelineRuntimeBoxRef.current === null) {
+        const loadedUserBox = new PokemonBox();
+        loadedUserBox.load();
+        userBoxRef.current = loadedUserBox;
+        timelineRuntimeBoxRef.current = createTimelineRuntimeBox(loadedUserBox);
+        applyFirstAccessPresetIfNeeded();
     }
-    const box = boxRef.current;
+    const userBox = userBoxRef.current!;
+    const timelineRuntimeBox = timelineRuntimeBoxRef.current!;
+    const currentSimulationContextHash = useMemo(
+        () => buildSimulationContextHash({
+            bonusSettings: state.bonusSettings,
+            cookingSettings: state.cookingSettings,
+            initialEnergy: state.simulationConfig.initialEnergy,
+            simulationDays: state.simulationConfig.simulationDays,
+            timeSlots: state.timeSlots,
+        }),
+        [
+            state.bonusSettings,
+            state.cookingSettings,
+            state.simulationConfig.initialEnergy,
+            state.simulationConfig.simulationDays,
+            state.timeSlots,
+        ],
+    );
 
     // 初回マウント時にデータをロード
     useEffect(() => {
-        const loadedBox = boxRef.current;
-        if (!loadedBox) {
+        const runtimeBox = timelineRuntimeBoxRef.current;
+        if (!runtimeBox) {
             return;
         }
 
-        // ロード処理
-        const loadedTeam = loadTeamFromStorage(loadedBox);
-        const { normalizedTeam, idRemap } = normalizeTeamWithBoxItems(loadedTeam, loadedBox.items);
-        dispatch({ type: 'loadTeam', team: normalizedTeam });
+        const loadedTeamSets = loadTeamSetsFromStorage(runtimeBox);
+        if (loadedTeamSets) {
+            const normalizedTeamSets = loadedTeamSets.teamSets
+                .map((teamSet) => normalizeTeamSetWithRuntimeBox(teamSet, runtimeBox));
+            dispatch({
+                type: 'loadTeamSets',
+                teamSets: normalizedTeamSets,
+                activeIndex: loadedTeamSets.activeTeamSetIndex,
+            });
+        }
 
         const savedSlots = loadTimeSlotsFromStorage();
         dispatch({ type: 'loadTimeSlots', slots: savedSlots });
@@ -406,31 +437,22 @@ export default function TeamTimelineApp() {
         const cookingSettings = loadCookingSettingsFromStorage();
         dispatch({ type: 'loadCookingSettings', settings: cookingSettings });
 
-        const savedSwaps = localStorage.getItem('PstTeamTimelineSwaps');
-        if (savedSwaps) {
-            try {
-                const swaps: PokemonSwap[] = JSON.parse(savedSwaps);
-                if (Array.isArray(swaps)) {
-                    const migratedSwaps = swaps
-                        .map(migrateSwap)
-                        .filter((swap): swap is PokemonSwap => swap !== null);
-                    const normalizedSwaps = normalizeLoadedSwapsWithBox(migratedSwaps, loadedBox, idRemap);
-                    dispatch({ type: 'loadSwaps', swaps: normalizedSwaps });
-                }
-            } catch (e) {
-                console.error('Failed to load swaps', e);
-            }
-        }
-
         // ロード完了をマーク
         setIsInitialized(true);
     }, []); // 依存配列を空に
 
-    // チームが変更されたらlocalStorageに保存（初期化完了後のみ）
+    // チームセットを永続化（初期化完了後のみ）
     useEffect(() => {
-        if (!isInitialized) return; // 初期化前は保存しない
-        saveTeamToStorage(state.team);
-    }, [state.team, isInitialized]);
+        if (!isInitialized) return;
+        const hydratedTeamSets = state.teamSets.map((teamSet) => ({
+            ...teamSet,
+            swaps: hydrateSwapsWithSerializedPokemon(
+                teamSet.swaps,
+                timelineRuntimeBoxRef.current ?? undefined,
+            ),
+        }));
+        saveTeamSetsToStorage(hydratedTeamSets, state.activeTeamSetIndex);
+    }, [state.teamSets, state.activeTeamSetIndex, isInitialized]);
 
     // 時間帯設定の永続化（初期化完了後のみ）
     useEffect(() => {
@@ -462,13 +484,6 @@ export default function TeamTimelineApp() {
         saveSyncWithIvParameterToStorage(state.syncWithIvParameter);
     }, [state.syncWithIvParameter, isInitialized]);
 
-    // ポケモン入れ替え情報の永続化（初期化完了後のみ）
-    useEffect(() => {
-        if (!isInitialized) return;
-        const swapsToPersist = hydrateSwapsWithSerializedPokemon(state.swaps, boxRef.current ?? undefined);
-        localStorage.setItem('PstTeamTimelineSwaps', JSON.stringify(swapsToPersist));
-    }, [state.swaps, isInitialized]);
-
     const previousSwapSignatureRef = useRef<string | null>(null);
     useEffect(() => {
         const signature = createSwapSignature(state.swaps);
@@ -487,6 +502,25 @@ export default function TeamTimelineApp() {
         }
         setShowResimulationNotice(true);
     }, [state.swaps, state.simulationResult, isInitialized]);
+
+    const previousNoCollectSignatureRef = useRef<string | null>(null);
+    useEffect(() => {
+        const signature = createNoCollectSignature(state.noCollectCells);
+        if (!isInitialized) {
+            previousNoCollectSignatureRef.current = signature;
+            return;
+        }
+
+        const previousSignature = previousNoCollectSignatureRef.current;
+        previousNoCollectSignatureRef.current = signature;
+        if (previousSignature === null || previousSignature === signature) {
+            return;
+        }
+        if (state.simulationResult === null) {
+            return;
+        }
+        setShowResimulationNotice(true);
+    }, [state.noCollectCells, state.simulationResult, isInitialized]);
 
     const previousTeamSignatureRef = useRef<string | null>(null);
     useEffect(() => {
@@ -591,10 +625,18 @@ export default function TeamTimelineApp() {
             },
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
-            box: boxRef.current || undefined,
+            noCollectCells: state.noCollectCells,
+            box: timelineRuntimeBoxRef.current || undefined,
             cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result });
+        dispatch({
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: result.teamSummary.grandTotalEP,
+                settingsHash: currentSimulationContextHash,
+            },
+        });
         dispatch({ type: 'updateSimulationConfig', config: { seed } });
     }, [
         state.team,
@@ -603,7 +645,9 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
         state.cookingSettings,
+        currentSimulationContextHash,
     ]);
 
     const runMultiTrialWithSeed = useCallback(async (
@@ -622,7 +666,8 @@ export default function TeamTimelineApp() {
             bonusSettings: state.bonusSettings,
             cookingSettings: state.cookingSettings,
             swaps: state.swaps,
-            box: boxRef.current || undefined,
+            noCollectCells: state.noCollectCells,
+            box: timelineRuntimeBoxRef.current || undefined,
             trialCount: state.multiTrialCount,
             initialSeed,
             onProgress: (progress) => {
@@ -674,10 +719,18 @@ export default function TeamTimelineApp() {
             },
             bonusSettings: state.bonusSettings,
             swaps: state.swaps,
-            box: boxRef.current || undefined,
+            noCollectCells: state.noCollectCells,
+            box: timelineRuntimeBoxRef.current || undefined,
             cookingSettings: state.cookingSettings,
         });
         dispatch({ type: 'setSimulationResult', result: fullResult });
+        dispatch({
+            type: 'setActiveTeamSetSimulationSnapshot',
+            snapshot: {
+                averageTotalEP: multiResult.averageTeamSummary.grandTotalEP,
+                settingsHash: currentSimulationContextHash,
+            },
+        });
         dispatch({ type: 'updateSimulationConfig', config: { seed: selectedSeed } });
     }, [
         state.team,
@@ -686,8 +739,10 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
         state.multiTrialCount,
         state.cookingSettings,
+        currentSimulationContextHash,
     ]);
 
     const executeSimulation = useCallback(async (options?: {
@@ -778,7 +833,8 @@ export default function TeamTimelineApp() {
                 },
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
-                box: boxRef.current || undefined,
+                noCollectCells: state.noCollectCells,
+                box: timelineRuntimeBoxRef.current || undefined,
                 cookingSettings: state.cookingSettings,
             });
             dispatch({ type: 'setSimulationResult', result });
@@ -794,6 +850,7 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
         state.cookingSettings,
     ]);
 
@@ -828,6 +885,53 @@ export default function TeamTimelineApp() {
     // タブ切り替えハンドラー
     const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: 'team' | 'settings' | 'cooking') => {
         dispatch({ type: 'selectTab', tab: newValue });
+    }, []);
+
+    const createDefaultTeamSetName = useCallback((index: number) => (
+        `${t('TeamTimeline.team set default name', 'チーム')}${index}`
+    ), [t]);
+
+    const handleTeamSetNameChange = useCallback((name: string) => {
+        dispatch({ type: 'renameActiveTeamSet', name });
+    }, []);
+
+    const handleTeamSetCreate = useCallback(() => {
+        dispatch({
+            type: 'createTeamSet',
+            id: createTeamSetId(),
+            name: createDefaultTeamSetName(state.teamSets.length + 1),
+        });
+    }, [createDefaultTeamSetName, state.teamSets.length]);
+
+    const handleTeamSetDuplicateAt = useCallback((index: number) => {
+        const safeIndex = Math.max(0, Math.min(index, state.teamSets.length - 1));
+        if (safeIndex !== state.activeTeamSetIndex) {
+            dispatch({ type: 'selectTeamSet', index: safeIndex });
+        }
+        const sourceName = state.teamSets[safeIndex]?.name
+            ?? createDefaultTeamSetName(safeIndex + 1);
+        const duplicateSuffix = t('TeamTimeline.team set duplicate suffix', 'コピー');
+        dispatch({
+            type: 'duplicateTeamSet',
+            id: createTeamSetId(),
+            name: `${sourceName} ${duplicateSuffix}`,
+        });
+    }, [createDefaultTeamSetName, state.activeTeamSetIndex, state.teamSets, t]);
+
+    const handleTeamSetDeleteAt = useCallback((index: number) => {
+        const safeIndex = Math.max(0, Math.min(index, state.teamSets.length - 1));
+        if (safeIndex !== state.activeTeamSetIndex) {
+            dispatch({ type: 'selectTeamSet', index: safeIndex });
+        }
+        dispatch({
+            type: 'deleteTeamSet',
+            fallbackId: createTeamSetId(),
+            fallbackName: createDefaultTeamSetName(1),
+        });
+    }, [createDefaultTeamSetName, state.activeTeamSetIndex, state.teamSets.length]);
+
+    const handleTeamSetSelect = useCallback((index: number) => {
+        dispatch({ type: 'selectTeamSet', index });
     }, []);
 
     const handleOpenTimeSlotSettings = useCallback(() => {
@@ -870,6 +974,38 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'setCookingSettings', settings });
     }, []);
 
+    const handleFieldIndexChange = useCallback((fieldIndex: number) => {
+        handleBonusSettingsChange(normalizeTimelineBonusSettings({
+            ...state.bonusSettings,
+            fieldIndex,
+        }));
+    }, [handleBonusSettingsChange, state.bonusSettings]);
+
+    const handleGoodCampTicketChange = useCallback((enabled: boolean) => {
+        handleBonusSettingsChange(normalizeTimelineBonusSettings({
+            ...state.bonusSettings,
+            isGoodCampTicketSet: enabled,
+        }));
+    }, [handleBonusSettingsChange, state.bonusSettings]);
+
+    const handleCookingSimEnabledChange = useCallback((enabled: boolean) => {
+        handleCookingSettingsChange({
+            ...state.cookingSettings,
+            enabled,
+        });
+    }, [handleCookingSettingsChange, state.cookingSettings]);
+
+    const handleCookingCategoryChange = useCallback((category: CookingSimulationSettings['category']) => {
+        handleCookingSettingsChange({
+            ...state.cookingSettings,
+            category,
+        });
+    }, [handleCookingSettingsChange, state.cookingSettings]);
+
+    const handleOpenSettingsTab = useCallback(() => {
+        dispatch({ type: 'selectTab', tab: 'settings' });
+    }, []);
+
     const handleSyncWithIvParameterChange = useCallback((enabled: boolean) => {
         dispatch({ type: 'setSyncWithIvParameter', enabled });
         if (enabled) {
@@ -883,6 +1019,10 @@ export default function TeamTimelineApp() {
     // ポケモン入れ替えハンドラー
     const handleSwapClick = useCallback((slotId: string, teamIndex: number, dayIndex: number) => {
         dispatch({ type: 'openSwapDialog', slotId, teamIndex, dayIndex });
+    }, []);
+
+    const handleNoCollectToggle = useCallback((slotId: string, teamIndex: number, dayIndex: number) => {
+        dispatch({ type: 'toggleNoCollectCell', slotId, teamIndex, dayIndex });
     }, []);
 
     const handleSwapSeriesMove = useCallback((
@@ -965,17 +1105,21 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'clearSwaps' });
     }, []);
 
+    const handleClearNoCollectCells = useCallback(() => {
+        dispatch({ type: 'loadNoCollectCells', noCollectCells: [] });
+    }, []);
+
     // ヘルパー関数: 入れ替え対象ポケモンの名前を取得
     const getPendingPokemonName = useCallback((): string => {
-        if (!state.pendingSwapPokemonId || !boxRef.current) return '';
-        const pokemon = boxRef.current.items.find(item => item.id === state.pendingSwapPokemonId);
+        if (!state.pendingSwapPokemonId) return '';
+        const pokemon = userBoxRef.current?.items.find(item => item.id === state.pendingSwapPokemonId);
         return pokemon?.filledNickname(t) || '';
     }, [state.pendingSwapPokemonId, t]);
 
     // ヘルパー関数: 入れ替え対象ポケモンのidFormを取得
     const getPendingPokemonIdForm = useCallback((): number | undefined => {
-        if (!state.pendingSwapPokemonId || !boxRef.current) return undefined;
-        const pokemon = boxRef.current.items.find((item: PokemonBoxItem) => item.id === state.pendingSwapPokemonId);
+        if (!state.pendingSwapPokemonId) return undefined;
+        const pokemon = userBoxRef.current?.items.find((item: PokemonBoxItem) => item.id === state.pendingSwapPokemonId);
         if (!pokemon) return undefined;
         return pokemon.iv.idForm;
     }, [state.pendingSwapPokemonId]);
@@ -1003,10 +1147,10 @@ export default function TeamTimelineApp() {
     const hasConfiguredSwap = state.swaps.length > 0;
 
     const appearingTimelineMembers = useMemo(() => {
-        if (!boxRef.current) {
+        if (!timelineRuntimeBoxRef.current) {
             return [];
         }
-        return collectAppearingTimelineMembers(state.team, state.swaps, boxRef.current);
+        return collectAppearingTimelineMembers(state.team, state.swaps, timelineRuntimeBoxRef.current);
     }, [state.team, state.swaps]);
 
     const timelineDurationSummary = useMemo(
@@ -1015,7 +1159,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1030,13 +1174,33 @@ export default function TeamTimelineApp() {
             swaps: state.swaps,
             timeSlots: state.timeSlots,
             durationSummary: timelineDurationSummary,
-            box: boxRef.current ?? undefined,
+            box: timelineRuntimeBoxRef.current ?? undefined,
         })
     ), [
         state.team,
         state.swaps,
         state.timeSlots,
         timelineDurationSummary,
+    ]);
+    const activeNoCollectCount = useMemo(
+        () => countActiveNoCollectCells(state.noCollectCells, state.swaps),
+        [state.noCollectCells, state.swaps],
+    );
+    const noCollectSupplementEntries = useMemo(() => (
+        buildNoCollectSupplementEntries({
+            team: state.team,
+            swaps: state.swaps,
+            noCollectCells: state.noCollectCells,
+            timeSlots: state.timeSlots,
+            simulationDays: state.simulationConfig.simulationDays,
+            box: timelineRuntimeBoxRef.current ?? undefined,
+        })
+    ), [
+        state.team,
+        state.swaps,
+        state.noCollectCells,
+        state.timeSlots,
+        state.simulationConfig.simulationDays,
     ]);
 
     const baseSortedSeeds = useMemo(() => {
@@ -1068,7 +1232,7 @@ export default function TeamTimelineApp() {
                 timeSlots: state.timeSlots,
                 simulationDays: state.simulationConfig.simulationDays,
                 swaps: state.swaps,
-                box: boxRef.current ?? undefined,
+                box: timelineRuntimeBoxRef.current ?? undefined,
             }
         ).map((target) => ({
             ...target,
@@ -1104,7 +1268,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1120,7 +1284,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1136,7 +1300,7 @@ export default function TeamTimelineApp() {
             state.timeSlots,
             state.simulationConfig.simulationDays,
             state.swaps,
-            boxRef.current ?? undefined
+            timelineRuntimeBoxRef.current ?? undefined
         ),
         [
             state.team,
@@ -1235,7 +1399,8 @@ export default function TeamTimelineApp() {
                 },
                 bonusSettings: state.bonusSettings,
                 swaps: state.swaps,
-                box: boxRef.current || undefined,
+                noCollectCells: state.noCollectCells,
+                box: timelineRuntimeBoxRef.current || undefined,
                 cookingSettings: state.cookingSettings,
                 analysisOptions: {
                     disabledPokemonIds: options.disabledPokemonIds,
@@ -1294,6 +1459,8 @@ export default function TeamTimelineApp() {
         state.simulationConfig.simulationDays,
         state.bonusSettings,
         state.swaps,
+        state.noCollectCells,
+        state.cookingSettings,
     ]);
 
     const resolveBaseAverageMetrics = useCallback(async (
@@ -2130,13 +2297,12 @@ export default function TeamTimelineApp() {
         previousActiveTabRef.current,
         state.activeTab
     );
-    const showSimulationDetails = state.simulationResult !== null && boxRef.current !== null;
-    const showPreSimulationTimeline = state.simulationResult === null && boxRef.current !== null;
+    const showSimulationDetails = state.simulationResult !== null;
+    const showPreSimulationTimeline = state.simulationResult === null;
     const showAverageSection = useMemo(
         () => (
             state.multiTrialResults !== null
             && state.multiTrialResults.length > 1
-            && boxRef.current !== null
             && state.multiTrialAverageDailySummaries !== null
             && state.multiTrialAverageTeamSummary !== null
         ),
@@ -2153,9 +2319,9 @@ export default function TeamTimelineApp() {
             {/* タブUI */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                 <Tabs value={state.activeTab} onChange={handleTabChange}>
-                    <Tab label={t('TeamTimeline.tab team', 'チーム')} value="team" />
-                    <Tab label={t('TeamTimeline.tab settings', '設定')} value="settings" />
-                    <Tab label={t('TeamTimeline.tab cooking', '料理')} value="cooking" />
+                    <Tab label={t('TeamTimeline.tab simulation', 'シミュレーション')} value="team" />
+                    <Tab label={t('TeamTimeline.tab basic settings', '基本設定')} value="settings" />
+                    <Tab label={t('TeamTimeline.tab cooking settings', '料理設定')} value="cooking" />
                 </Tabs>
             </Box>
 
@@ -2163,16 +2329,27 @@ export default function TeamTimelineApp() {
             {state.activeTab === 'team' && (
                 <Box
                     sx={{
-                        maxWidth: isDesktop ? '960px' : '600px',
+                        width: '100%',
+                        maxWidth: `${TEAM_TIMELINE_CONTENT_WIDTH_PX}px`,
                     }}
                 >
                     <Box
                         sx={{
                             transform: `scale(${teamScale})`,
                             transformOrigin: 'top left',
-                            width: isDesktop ? 'max-content' : '100%',
+                            width: '100%',
                         }}
                     >
+                    <TeamSetToolbar
+                        teamSets={state.teamSets}
+                        activeTeamSetIndex={state.activeTeamSetIndex}
+                        currentSimulationContextHash={currentSimulationContextHash}
+                        onNameChange={handleTeamSetNameChange}
+                        onCreate={handleTeamSetCreate}
+                        onDuplicateAt={handleTeamSetDuplicateAt}
+                        onDeleteAt={handleTeamSetDeleteAt}
+                        onSelect={handleTeamSetSelect}
+                    />
                     <TimelineHeader
                         team={state.team}
                         onSlotClick={handleSlotClick}
@@ -2184,9 +2361,20 @@ export default function TeamTimelineApp() {
                         swapSequences={swapSupplementSequences}
                         onClear={handleClearSwaps}
                     />
+                    <NoCollectSupplementBar
+                        noCollectCount={activeNoCollectCount}
+                        entries={noCollectSupplementEntries}
+                        onClear={handleClearNoCollectCells}
+                    />
 
                     {/* シミュレーション実行コントロール */}
                     <SimulationControls
+                        bonusSettings={state.bonusSettings}
+                        fieldIndex={state.bonusSettings.fieldIndex}
+                        isGoodCampTicketSet={state.bonusSettings.isGoodCampTicketSet}
+                        cookingSimEnabled={state.cookingSettings.enabled}
+                        cookingCategory={state.cookingSettings.category}
+                        eventName={state.bonusSettings.event}
                         seedMode={state.seedMode}
                         seed={state.simulationConfig.seed}
                         simulationDays={state.simulationConfig.simulationDays}
@@ -2194,6 +2382,11 @@ export default function TeamTimelineApp() {
                         simulationLoading={state.simulationLoading}
                         simulationProgress={simulationProgress}
                         isTeamEmpty={state.team.every(p => p === null)}
+                        onFieldIndexChange={handleFieldIndexChange}
+                        onGoodCampTicketChange={handleGoodCampTicketChange}
+                        onCookingSimEnabledChange={handleCookingSimEnabledChange}
+                        onCookingCategoryChange={handleCookingCategoryChange}
+                        onOpenSettingsTab={handleOpenSettingsTab}
                         onSeedModeChange={handleSeedModeChange}
                         onSeedChange={handleSeedChange}
                         onSimulationDaysChange={handleSimulationDaysChange}
@@ -2217,7 +2410,7 @@ export default function TeamTimelineApp() {
                         testId="team-timeline-post-simulation-wipe"
                     >
                         <>
-                            {showAverageSection && boxRef.current && (
+                            {showAverageSection && (
                                 <Box sx={{ mt: '18px' }}>
                                     <Box
                                         sx={{
@@ -2257,7 +2450,7 @@ export default function TeamTimelineApp() {
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.multiTrialAverageDailySummaries!}
-                                        box={boxRef.current}
+                                        box={timelineRuntimeBox}
                                         layoutMode="average"
                                         simulationDays={state.simulationConfig.simulationDays}
                                         valueMode={summaryValueMode}
@@ -2317,10 +2510,12 @@ export default function TeamTimelineApp() {
                     {showPreSimulationTimeline && (
                         <Box sx={{ mt: '18px' }} data-testid="team-timeline-pre-simulation-table">
                             <Box
+                                data-testid="team-timeline-pre-simulation-scroll-container"
+                                data-scroll-overflow-x="hidden"
                                 sx={{
                                     width: '100%',
                                     maxWidth: '100%',
-                                    overflowX: 'auto',
+                                    overflowX: 'hidden',
                                     overflowY: 'hidden',
                                     WebkitOverflowScrolling: 'touch',
                                 }}
@@ -2331,9 +2526,11 @@ export default function TeamTimelineApp() {
                                     simulationDays={state.simulationConfig.simulationDays}
                                     result={EMPTY_SIMULATION_RESULT}
                                     swaps={state.swaps}
-                                    box={boxRef.current!}
+                                    noCollectCells={state.noCollectCells}
+                                    box={timelineRuntimeBox}
                                     bonusSettings={state.bonusSettings}
                                     onSwapClick={handleSwapClick}
+                                    onNoCollectToggle={handleNoCollectToggle}
                                     onSwapSeriesMove={handleSwapSeriesMove}
                                     onSwapRemoveClick={handleSwapRemoveRequest}
                                     onHeaderSlotClick={handleSlotClick}
@@ -2397,10 +2594,12 @@ export default function TeamTimelineApp() {
                                         )}
                                     />
                                     <Box
+                                        data-testid="team-timeline-post-simulation-scroll-container"
+                                        data-scroll-overflow-x={timelineDisplayMode === 'detailed' ? 'auto' : 'hidden'}
                                         sx={{
                                             width: '100%',
                                             maxWidth: '100%',
-                                            overflowX: 'auto',
+                                            overflowX: timelineDisplayMode === 'detailed' ? 'auto' : 'hidden',
                                             overflowY: 'hidden',
                                             WebkitOverflowScrolling: 'touch',
                                         }}
@@ -2411,9 +2610,11 @@ export default function TeamTimelineApp() {
                                             simulationDays={state.simulationConfig.simulationDays}
                                             result={state.simulationResult!}
                                             swaps={state.swaps}
-                                            box={boxRef.current!}
+                                            noCollectCells={state.noCollectCells}
+                                            box={timelineRuntimeBox}
                                             bonusSettings={state.bonusSettings}
                                             onSwapClick={handleSwapClick}
+                                            onNoCollectToggle={handleNoCollectToggle}
                                             onSwapSeriesMove={handleSwapSeriesMove}
                                             onSwapRemoveClick={handleSwapRemoveRequest}
                                             onHeaderSlotClick={handleSlotClick}
@@ -2433,7 +2634,7 @@ export default function TeamTimelineApp() {
                                     />
                                     <DailySummaryRow
                                         dailySummaries={state.simulationResult!.dailySummaries}
-                                        box={boxRef.current!}
+                                        box={timelineRuntimeBox}
                                         layoutMode="details"
                                         simulationDays={state.simulationConfig.simulationDays}
                                         valueMode={summaryValueMode}
@@ -2454,7 +2655,7 @@ export default function TeamTimelineApp() {
                 <Box
                     sx={{
                         width: '100%',
-                        maxWidth: isDesktop ? '960px' : '100%',
+                        maxWidth: `${TEAM_TIMELINE_CONTENT_WIDTH_PX}px`,
                     }}
                 >
                     <TimelineBonusSettingsPanel
@@ -2469,13 +2670,23 @@ export default function TeamTimelineApp() {
                         <Typography variant="subtitle2" gutterBottom>
                             {t('TeamTimeline.sleep energy', '就寝時げんき')}
                         </Typography>
-                        <Slider
-                            value={state.simulationConfig.initialEnergy}
-                            onChange={(_, value) => handleConfigChange({ initialEnergy: value as number })}
-                            min={0}
-                            max={100}
-                            valueLabelDisplay="auto"
-                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Slider
+                                value={state.simulationConfig.initialEnergy}
+                                onChange={(_, value) => handleConfigChange({ initialEnergy: value as number })}
+                                min={0}
+                                max={100}
+                                valueLabelDisplay="auto"
+                                sx={{ flexGrow: 1 }}
+                            />
+                            <Typography
+                                data-testid="team-timeline-sleep-energy-value"
+                                variant="body2"
+                                sx={{ minWidth: '32px', textAlign: 'right', fontWeight: 700 }}
+                            >
+                                {state.simulationConfig.initialEnergy}
+                            </Typography>
+                        </Box>
                     </Box>
                     <Box id={TIME_SLOT_SETTINGS_SECTION_ID}>
                         <TimeSlotEditor
@@ -2494,7 +2705,7 @@ export default function TeamTimelineApp() {
                 <Box
                     sx={{
                         width: '100%',
-                        maxWidth: isDesktop ? '960px' : '100%',
+                        maxWidth: `${TEAM_TIMELINE_CONTENT_WIDTH_PX}px`,
                     }}
                 >
                     <CookingSettingsPanel
@@ -2507,21 +2718,19 @@ export default function TeamTimelineApp() {
             {/* 既存: ボックス選択ダイアログ（チーム編成用） */}
             <BoxSelectDialog
                 open={state.boxSelectDialogOpen}
-                box={box}
+                box={userBox}
                 onSelect={handlePokemonSelect}
                 onClose={handleDialogClose}
             />
 
             {/* 入れ替え用ポケモン選択ダイアログ */}
-            {boxRef.current && (
-                <BoxSelectDialog
-                    open={state.swapDialogOpen}
-                    box={boxRef.current}
-                    onSelect={handleSwapPokemonSelect}
-                    onClose={() => dispatch({ type: 'closeSwapDialog' })}
-                    onSelectNone={handleSwapSelectNone}
-                />
-            )}
+            <BoxSelectDialog
+                open={state.swapDialogOpen}
+                box={userBox}
+                onSelect={handleSwapPokemonSelect}
+                onClose={() => dispatch({ type: 'closeSwapDialog' })}
+                onSelectNone={handleSwapSelectNone}
+            />
 
             {/* げんき設定ダイアログ */}
             <SwapEnergyDialog

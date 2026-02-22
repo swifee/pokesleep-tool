@@ -108,21 +108,19 @@ const TeamSummaryRow = React.memo(({
   );
 
   return (
-    <Wrapper data-layout={layoutMode} data-has-toggle={canShowToggle}>
+    <Wrapper data-layout={layoutMode}>
       {layoutMode === 'details' && (
-        <LabelCell>
-          <span className="label-text">{label ?? defaultLabel}</span>
+        <SummaryHeadingRow>
+          <SummaryHeadingLabel>{label ?? defaultLabel}</SummaryHeadingLabel>
           {canShowToggle && (
-            <span className="toggle-wrap">
-              <SummaryValueModeToggle
-                value={resolvedValueMode}
-                onChange={onValueModeChange}
-                simulationDays={simulationDays}
-                orientation="responsive"
-              />
-            </span>
+            <SummaryValueModeToggle
+              value={resolvedValueMode}
+              onChange={onValueModeChange}
+              simulationDays={simulationDays}
+              orientation="horizontal"
+            />
           )}
-        </LabelCell>
+        </SummaryHeadingRow>
       )}
       <ContentCell>
         <EPPanel>
@@ -280,49 +278,31 @@ const TeamSummaryRow = React.memo(({
 });
 
 const Wrapper = styled('div')({
-  display: 'grid',
-  gridTemplateColumns: '40px minmax(0, 1fr)',
-  columnGap: 0,
-  rowGap: '4px',
-  alignItems: 'start',
+  width: '100%',
   marginTop: '5px',
-  '&[data-layout="average"]': {
-    gridTemplateColumns: 'minmax(0, 1fr)',
-  },
-  '&[data-has-toggle="true"]': {
-    gridTemplateColumns: '132px minmax(0, 1fr)',
-  },
-  '@media (max-width: 540px)': {
-    gridTemplateColumns: 'minmax(0, 1fr)',
-    '&[data-has-toggle="true"]': {
-      gridTemplateColumns: 'minmax(0, 1fr)',
-    },
-  },
 });
 
-const LabelCell = styled('div')({
-  width: '100%',
-  padding: '3px',
-  fontSize: '10px',
-  lineHeight: '13px',
-  letterSpacing: '-0.5px',
-  color: '#000',
+const SummaryHeadingRow = styled('div')({
   display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-  '& .label-text': {
-    whiteSpace: 'pre-wrap',
-  },
-  '& .toggle-wrap': {
-    display: 'inline-flex',
-  },
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+  gap: '8px',
+  flexWrap: 'nowrap',
+  marginBottom: '5px',
+});
+
+const SummaryHeadingLabel = styled('span')({
+  fontSize: '14px',
+  fontWeight: 700,
+  lineHeight: '18px',
+  letterSpacing: '0.4px',
+  whiteSpace: 'nowrap',
+  color: '#000',
 });
 
 const ContentCell = styled('div')({
-  width: 'calc(100% - 4px)',
-  maxWidth: '496px',
+  width: '100%',
   minWidth: 0,
-  marginRight: '4px',
   boxSizing: 'border-box',
   borderRadius: '6px',
   backgroundColor: '#fff',
