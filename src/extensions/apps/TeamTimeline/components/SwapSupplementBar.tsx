@@ -56,8 +56,9 @@ const SwapSupplementBar = React.memo(({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '8px',
+          justifyContent: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '4px',
         }}
       >
         <Typography
@@ -71,7 +72,7 @@ const SwapSupplementBar = React.memo(({
           {t('TeamTimeline.swap configured notice', '途中でのポケモン入れ替えが設定されています。')}
         </Typography>
         <Button
-          variant="contained"
+          variant="outlined"
           data-testid="swap-supplement-delete-button"
           onClick={onClear}
           sx={{
@@ -79,12 +80,18 @@ const SwapSupplementBar = React.memo(({
             height: '22px',
             borderRadius: '8px',
             px: '10px',
-            background: 'linear-gradient(180deg, #4e8ce8 0%, #176eee 100%)',
+            borderColor: '#1976d2',
+            backgroundColor: '#fff',
+            color: '#1976d2',
             fontSize: '12px',
             lineHeight: '15px',
             letterSpacing: '-0.48px',
             fontWeight: 400,
             flexShrink: 0,
+            '&:hover': {
+              borderColor: '#1976d2',
+              backgroundColor: '#f4f8ff',
+            },
           }}
         >
           {t('TeamTimeline.reset', 'リセット')}

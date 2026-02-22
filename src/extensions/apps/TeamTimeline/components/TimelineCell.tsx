@@ -96,6 +96,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     const showNoCollectButton = !disableSwapUi && !hasSwapInfo && !hasSwap && Boolean(onNoCollectToggle);
     const isSimpleMode = displayMode === 'simple';
     const shouldAlwaysShowSwapButton = alwaysShowSwapButton || isSimpleMode;
+    const shouldAlwaysShowNoCollectButton = shouldAlwaysShowSwapButton;
     const isCompactEmptyCell = compactEmpty && result === null;
     const isCompactLayout = isCompactEmptyCell || compactFirstSlot || isSimpleMode;
     const isNarrowSwapInfoLayout = fitToViewport;
@@ -291,6 +292,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             <NoCollectIconButton
                 type="button"
                 className="no-collect-trigger"
+                data-always-visible={shouldAlwaysShowNoCollectButton ? 'true' : 'false'}
                 data-enabled={noCollectEnabled ? 'true' : 'false'}
                 data-testid="timeline-cell-no-collect-toggle"
                 onClick={handleNoCollectButtonClick}
@@ -931,14 +933,22 @@ const StyledCell = styled('div')<{
         opacity: $alwaysShowSwapButton ? 1 : 0,
         pointerEvents: $alwaysShowSwapButton ? 'auto' : 'none',
     },
+    '& .no-collect-trigger': {
+        opacity: $alwaysShowSwapButton ? 1 : 0,
+        pointerEvents: $alwaysShowSwapButton ? 'auto' : 'none',
+    },
     ...(!$alwaysShowSwapButton ? {
-        '&:hover .swap-trigger, &:focus-within .swap-trigger': {
+        '&:hover .swap-trigger, &:focus-within .swap-trigger, &:hover .no-collect-trigger, &:focus-within .no-collect-trigger': {
             opacity: 1,
             pointerEvents: 'auto',
         },
     } : {}),
     '@media (hover: none), (pointer: coarse)': {
         '& .swap-trigger': {
+            opacity: 1,
+            pointerEvents: 'auto',
+        },
+        '& .no-collect-trigger': {
             opacity: 1,
             pointerEvents: 'auto',
         },
@@ -1258,7 +1268,7 @@ const SwapIconButton = styled(IconButton)({
 
 const SwapInfoContainer = styled('div')<{ $dragState: SwapDragState }>(({ $dragState }) => ({
     border: '1px solid #62d540',
-    marginTop: '2px',
+    marginTop: 'auto',
     marginLeft: '0',
     marginRight: '0',
     width: '100%',
