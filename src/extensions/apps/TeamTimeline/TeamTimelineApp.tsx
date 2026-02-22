@@ -41,6 +41,7 @@ import TimelineTable from './components/TimelineTable';
 import DailySummaryRow from './components/DailySummaryRow';
 import TeamSummaryRow from './components/TeamSummaryRow';
 import SwapSupplementBar from './components/SwapSupplementBar';
+import NoCollectSupplementBar from './components/NoCollectSupplementBar';
 import TrialResultSelector from './components/TrialResultSelector';
 import { SwapEnergyDialog } from './components/SwapEnergyDialog';
 import SwapRemoveConfirmDialog from './components/SwapRemoveConfirmDialog';
@@ -101,7 +102,12 @@ import {
 import { isSwapReassignment } from './utils/SwapReassignmentUtils';
 import { buildSwapSupplementSequences } from './utils/SwapSupplementUtils';
 import {
+    buildNoCollectSupplementEntries,
+    countActiveNoCollectCells,
+} from './utils/NoCollectSupplementUtils';
+import {
     loadTimelineBonusSettingsFromIvStorage,
+    normalizeTimelineBonusSettings,
     saveTimelineBonusSettingsToIvStorage,
     IV_PARAMETER_STORAGE_KEY,
 } from './utils/TimelineBonusSettingsBridge';
@@ -967,6 +973,38 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'setCookingSettings', settings });
     }, []);
 
+    const handleFieldIndexChange = useCallback((fieldIndex: number) => {
+        handleBonusSettingsChange(normalizeTimelineBonusSettings({
+            ...state.bonusSettings,
+            fieldIndex,
+        }));
+    }, [handleBonusSettingsChange, state.bonusSettings]);
+
+    const handleGoodCampTicketChange = useCallback((enabled: boolean) => {
+        handleBonusSettingsChange(normalizeTimelineBonusSettings({
+            ...state.bonusSettings,
+            isGoodCampTicketSet: enabled,
+        }));
+    }, [handleBonusSettingsChange, state.bonusSettings]);
+
+    const handleCookingSimEnabledChange = useCallback((enabled: boolean) => {
+        handleCookingSettingsChange({
+            ...state.cookingSettings,
+            enabled,
+        });
+    }, [handleCookingSettingsChange, state.cookingSettings]);
+
+    const handleCookingCategoryChange = useCallback((category: CookingSimulationSettings['category']) => {
+        handleCookingSettingsChange({
+            ...state.cookingSettings,
+            category,
+        });
+    }, [handleCookingSettingsChange, state.cookingSettings]);
+
+    const handleOpenSettingsTab = useCallback(() => {
+        dispatch({ type: 'selectTab', tab: 'settings' });
+    }, []);
+
     const handleSyncWithIvParameterChange = useCallback((enabled: boolean) => {
         dispatch({ type: 'setSyncWithIvParameter', enabled });
         if (enabled) {
@@ -1066,6 +1104,10 @@ export default function TeamTimelineApp() {
         dispatch({ type: 'clearSwaps' });
     }, []);
 
+    const handleClearNoCollectCells = useCallback(() => {
+        dispatch({ type: 'loadNoCollectCells', noCollectCells: [] });
+    }, []);
+
     // ヘルパー関数: 入れ替え対象ポケモンの名前を取得
     const getPendingPokemonName = useCallback((): string => {
         if (!state.pendingSwapPokemonId) return '';
@@ -1138,6 +1180,26 @@ export default function TeamTimelineApp() {
         state.swaps,
         state.timeSlots,
         timelineDurationSummary,
+    ]);
+    const activeNoCollectCount = useMemo(
+        () => countActiveNoCollectCells(state.noCollectCells, state.swaps),
+        [state.noCollectCells, state.swaps],
+    );
+    const noCollectSupplementEntries = useMemo(() => (
+        buildNoCollectSupplementEntries({
+            team: state.team,
+            swaps: state.swaps,
+            noCollectCells: state.noCollectCells,
+            timeSlots: state.timeSlots,
+            simulationDays: state.simulationConfig.simulationDays,
+            box: timelineRuntimeBoxRef.current ?? undefined,
+        })
+    ), [
+        state.team,
+        state.swaps,
+        state.noCollectCells,
+        state.timeSlots,
+        state.simulationConfig.simulationDays,
     ]);
 
     const baseSortedSeeds = useMemo(() => {
@@ -2256,9 +2318,9 @@ export default function TeamTimelineApp() {
             {/* タブUI */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                 <Tabs value={state.activeTab} onChange={handleTabChange}>
-                    <Tab label={t('TeamTimeline.tab team', 'チーム')} value="team" />
-                    <Tab label={t('TeamTimeline.tab settings', '設定')} value="settings" />
-                    <Tab label={t('TeamTimeline.tab cooking', '料理')} value="cooking" />
+                    <Tab label={t('TeamTimeline.tab simulation', 'シミュレーション')} value="team" />
+                    <Tab label={t('TeamTimeline.tab basic settings', '基本設定')} value="settings" />
+                    <Tab label={t('TeamTimeline.tab cooking settings', '料理設定')} value="cooking" />
                 </Tabs>
             </Box>
 
@@ -2297,9 +2359,19 @@ export default function TeamTimelineApp() {
                         swapSequences={swapSupplementSequences}
                         onClear={handleClearSwaps}
                     />
+                    <NoCollectSupplementBar
+                        noCollectCount={activeNoCollectCount}
+                        entries={noCollectSupplementEntries}
+                        onClear={handleClearNoCollectCells}
+                    />
 
                     {/* シミュレーション実行コントロール */}
                     <SimulationControls
+                        fieldIndex={state.bonusSettings.fieldIndex}
+                        isGoodCampTicketSet={state.bonusSettings.isGoodCampTicketSet}
+                        cookingSimEnabled={state.cookingSettings.enabled}
+                        cookingCategory={state.cookingSettings.category}
+                        eventName={state.bonusSettings.event}
                         seedMode={state.seedMode}
                         seed={state.simulationConfig.seed}
                         simulationDays={state.simulationConfig.simulationDays}
@@ -2307,6 +2379,11 @@ export default function TeamTimelineApp() {
                         simulationLoading={state.simulationLoading}
                         simulationProgress={simulationProgress}
                         isTeamEmpty={state.team.every(p => p === null)}
+                        onFieldIndexChange={handleFieldIndexChange}
+                        onGoodCampTicketChange={handleGoodCampTicketChange}
+                        onCookingSimEnabledChange={handleCookingSimEnabledChange}
+                        onCookingCategoryChange={handleCookingCategoryChange}
+                        onOpenSettingsTab={handleOpenSettingsTab}
                         onSeedModeChange={handleSeedModeChange}
                         onSeedChange={handleSeedChange}
                         onSimulationDaysChange={handleSimulationDaysChange}

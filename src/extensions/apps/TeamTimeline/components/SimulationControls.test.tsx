@@ -14,12 +14,15 @@ interface ButtonProps extends ChildrenProps {
     ['aria-valuenow']?: number;
     ['aria-valuemin']?: number;
     ['aria-valuemax']?: number;
+    ['data-testid']?: string;
 }
 
 interface CheckboxProps {
     checked?: boolean;
     onChange?: React.ChangeEventHandler<HTMLInputElement>;
     disabled?: boolean;
+    ['aria-label']?: string;
+    inputProps?: Record<string, string>;
 }
 
 interface FormControlLabelProps {
@@ -37,6 +40,9 @@ interface TextFieldProps {
 interface SelectProps extends ChildrenProps {
     value?: string | number;
     onChange?: React.ChangeEventHandler<HTMLSelectElement>;
+    renderValue?: (value: unknown) => React.ReactNode;
+    disabled?: boolean;
+    ['data-testid']?: string;
 }
 
 interface MenuItemProps extends ChildrenProps {
@@ -57,8 +63,28 @@ vi.mock('@mui/material', () => ({
             {children}
         </button>
     ),
+    IconButton: ({ children, onClick, disabled, ...rest }: ButtonProps) => (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            {...rest}
+        >
+            {children}
+        </button>
+    ),
     Checkbox: ({ checked, onChange, disabled }: CheckboxProps) => (
         <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} aria-label="seed-checkbox" />
+    ),
+    Switch: ({ checked, onChange, disabled, inputProps, ...rest }: CheckboxProps) => (
+        <input
+            type="checkbox"
+            checked={checked}
+            onChange={onChange}
+            disabled={disabled}
+            aria-label={inputProps?.['aria-label']}
+            {...rest}
+        />
     ),
     FormControlLabel: ({ control, label }: FormControlLabelProps) => (
         <label>{control}{label}</label>
@@ -66,12 +92,24 @@ vi.mock('@mui/material', () => ({
     TextField: ({ type, value, onChange, disabled }: TextFieldProps) => (
         <input type={type ?? 'text'} value={value} onChange={onChange} disabled={disabled} aria-label="seed-input" />
     ),
-    Select: ({ value, onChange, children }: SelectProps) => (
-        <select value={value} onChange={onChange}>{children}</select>
-    ),
+    Select: ({ value, onChange, children, renderValue, disabled, ...rest }: SelectProps) => {
+        void renderValue;
+        return <select value={value} onChange={onChange} disabled={disabled} {...rest}>{children}</select>;
+    },
     MenuItem: ({ value, children }: MenuItemProps) => (
         <option value={value}>{children}</option>
     ),
+}));
+
+vi.mock('@mui/icons-material/Settings', () => ({
+    default: () => <span>settings</span>,
+}));
+
+vi.mock('../../../../data/fields', () => ({
+    default: [
+        { index: 0, name: 'Greengrass Isle', emoji: '🏝️' },
+        { index: 1, name: 'Cyan Beach', emoji: '🏖️' },
+    ],
 }));
 
 vi.mock('react-i18next', () => ({
@@ -87,6 +125,11 @@ vi.mock('react-i18next', () => ({
 
 function renderControls(overrides?: Partial<React.ComponentProps<typeof SimulationControls>>) {
     const props: React.ComponentProps<typeof SimulationControls> = {
+        fieldIndex: 0,
+        isGoodCampTicketSet: false,
+        cookingSimEnabled: false,
+        cookingCategory: 'curry',
+        eventName: 'none',
         seedMode: 'random',
         seed: 123,
         simulationDays: 1,
@@ -94,6 +137,11 @@ function renderControls(overrides?: Partial<React.ComponentProps<typeof Simulati
         simulationLoading: false,
         simulationProgress: 0,
         isTeamEmpty: false,
+        onFieldIndexChange: vi.fn(),
+        onGoodCampTicketChange: vi.fn(),
+        onCookingSimEnabledChange: vi.fn(),
+        onCookingCategoryChange: vi.fn(),
+        onOpenSettingsTab: vi.fn(),
         onSeedModeChange: vi.fn(),
         onSeedChange: vi.fn(),
         onSimulationDaysChange: vi.fn(),
@@ -107,6 +155,55 @@ function renderControls(overrides?: Partial<React.ComponentProps<typeof Simulati
 }
 
 describe('SimulationControls', () => {
+    it('disables cooking category select when cooking simulation is off', () => {
+        const { rerender } = renderControls({ cookingSimEnabled: false });
+        expect((screen.getByTestId('cooking-category-select') as HTMLSelectElement).disabled).toBe(true);
+
+        rerender(
+            <SimulationControls
+                fieldIndex={0}
+                isGoodCampTicketSet={false}
+                cookingSimEnabled
+                cookingCategory="curry"
+                eventName="none"
+                seedMode="random"
+                seed={123}
+                simulationDays={1}
+                multiTrialCount={100}
+                simulationLoading={false}
+                simulationProgress={0}
+                isTeamEmpty={false}
+                onFieldIndexChange={vi.fn()}
+                onGoodCampTicketChange={vi.fn()}
+                onCookingSimEnabledChange={vi.fn()}
+                onCookingCategoryChange={vi.fn()}
+                onOpenSettingsTab={vi.fn()}
+                onSeedModeChange={vi.fn()}
+                onSeedChange={vi.fn()}
+                onSimulationDaysChange={vi.fn()}
+                onTrialCountChange={vi.fn()}
+                onRunSimulation={vi.fn()}
+            />
+        );
+        expect((screen.getByTestId('cooking-category-select') as HTMLSelectElement).disabled).toBe(false);
+    });
+
+    it('updates field/camp/cooking settings and opens settings tab', () => {
+        const { props } = renderControls({ cookingSimEnabled: true });
+
+        fireEvent.change(screen.getByTestId('field-select'), { target: { value: '1' } });
+        fireEvent.click(screen.getByLabelText('キャンプチケット'));
+        fireEvent.click(screen.getByLabelText('料理'));
+        fireEvent.change(screen.getByTestId('cooking-category-select'), { target: { value: 'salad' } });
+        fireEvent.click(screen.getByTestId('event-settings-button'));
+
+        expect(props.onFieldIndexChange).toHaveBeenCalledWith(1);
+        expect(props.onGoodCampTicketChange).toHaveBeenCalledWith(true);
+        expect(props.onCookingSimEnabledChange).toHaveBeenCalledWith(false);
+        expect(props.onCookingCategoryChange).toHaveBeenCalledWith('salad');
+        expect(props.onOpenSettingsTab).toHaveBeenCalledTimes(1);
+    });
+
     it('toggles seed mode to fixed', () => {
         const { props } = renderControls();
 
@@ -119,10 +216,8 @@ describe('SimulationControls', () => {
         const { props } = renderControls();
 
         fireEvent.change(screen.getByLabelText('seed-input'), { target: { value: '999' } });
-
-        const selects = screen.getAllByRole('combobox');
-        fireEvent.change(selects[0], { target: { value: '3' } });
-        fireEvent.change(selects[1], { target: { value: '1000' } });
+        fireEvent.change(screen.getByTestId('simulation-days-select'), { target: { value: '3' } });
+        fireEvent.change(screen.getByTestId('trial-count-select'), { target: { value: '1000' } });
 
         expect(props.onSeedChange).toHaveBeenCalledWith(999);
         expect(props.onSimulationDaysChange).toHaveBeenCalledWith(3);
@@ -132,6 +227,11 @@ describe('SimulationControls', () => {
     it('keeps run button enabled while loading and disables only when team is empty', () => {
         const { rerender } = render(
             <SimulationControls
+                fieldIndex={0}
+                isGoodCampTicketSet={false}
+                cookingSimEnabled={false}
+                cookingCategory="curry"
+                eventName="none"
                 seedMode="random"
                 seed={123}
                 simulationDays={1}
@@ -139,6 +239,11 @@ describe('SimulationControls', () => {
                 simulationLoading={false}
                 simulationProgress={0}
                 isTeamEmpty={false}
+                onFieldIndexChange={vi.fn()}
+                onGoodCampTicketChange={vi.fn()}
+                onCookingSimEnabledChange={vi.fn()}
+                onCookingCategoryChange={vi.fn()}
+                onOpenSettingsTab={vi.fn()}
                 onSeedModeChange={vi.fn()}
                 onSeedChange={vi.fn()}
                 onSimulationDaysChange={vi.fn()}
@@ -151,6 +256,11 @@ describe('SimulationControls', () => {
 
         rerender(
             <SimulationControls
+                fieldIndex={0}
+                isGoodCampTicketSet={false}
+                cookingSimEnabled={false}
+                cookingCategory="curry"
+                eventName="none"
                 seedMode="random"
                 seed={123}
                 simulationDays={1}
@@ -158,6 +268,11 @@ describe('SimulationControls', () => {
                 simulationLoading
                 simulationProgress={40}
                 isTeamEmpty={false}
+                onFieldIndexChange={vi.fn()}
+                onGoodCampTicketChange={vi.fn()}
+                onCookingSimEnabledChange={vi.fn()}
+                onCookingCategoryChange={vi.fn()}
+                onOpenSettingsTab={vi.fn()}
                 onSeedModeChange={vi.fn()}
                 onSeedChange={vi.fn()}
                 onSimulationDaysChange={vi.fn()}
@@ -169,6 +284,11 @@ describe('SimulationControls', () => {
 
         rerender(
             <SimulationControls
+                fieldIndex={0}
+                isGoodCampTicketSet={false}
+                cookingSimEnabled={false}
+                cookingCategory="curry"
+                eventName="none"
                 seedMode="random"
                 seed={123}
                 simulationDays={1}
@@ -176,6 +296,11 @@ describe('SimulationControls', () => {
                 simulationLoading={false}
                 simulationProgress={100}
                 isTeamEmpty
+                onFieldIndexChange={vi.fn()}
+                onGoodCampTicketChange={vi.fn()}
+                onCookingSimEnabledChange={vi.fn()}
+                onCookingCategoryChange={vi.fn()}
+                onOpenSettingsTab={vi.fn()}
                 onSeedModeChange={vi.fn()}
                 onSeedChange={vi.fn()}
                 onSimulationDaysChange={vi.fn()}
