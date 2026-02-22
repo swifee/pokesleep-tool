@@ -235,6 +235,28 @@ describe('TimelineCell ingredient ordering', () => {
         expect(screen.getByTestId('timeline-cell-pokemon-icon').textContent).toBe('25-14');
     });
 
+    it('renders pokemon icon in a circular frame with thin outline', () => {
+        const result = createTimeSlotResult({
+            energyEnd: 60,
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                pokemonIdForm={25}
+            />
+        );
+
+        const iconFrame = screen.getByTestId('timeline-cell-pokemon-icon');
+        const frameStyle = getComputedStyle(iconFrame);
+        expect(frameStyle.borderRadius).toBe('50%');
+        expect(frameStyle.borderTopWidth).toBe('0.5px');
+        expect(frameStyle.borderTopColor).toBe('rgb(200, 200, 200)');
+    });
+
     it('keeps pokemon icon visible for pre-simulation empty cell', () => {
         render(
             <TimelineCell

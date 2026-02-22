@@ -449,9 +449,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             return null;
         }
         return (
-            <PokemonIconAnchor data-testid="timeline-cell-pokemon-icon">
+            <PokemonIconFrame data-testid="timeline-cell-pokemon-icon">
                 <PokemonIcon idForm={pokemonIdForm} size={14} />
-            </PokemonIconAnchor>
+            </PokemonIconFrame>
         );
     };
 
@@ -971,13 +971,35 @@ const TopEnergyArea = styled('div')({
     gap: '3px',
 });
 
-const PokemonIconAnchor = styled('span')({
+const PokemonIconFrame = styled('span')({
     width: '14px',
     height: '14px',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
+    boxSizing: 'border-box',
+    border: '0.5px solid #c8c8c8',
+    borderRadius: '50%',
+    overflow: 'hidden',
     flexShrink: 0,
+    '& > *': {
+        width: '100%',
+        height: '100%',
+        flexShrink: 0,
+    },
+    '& > div': {
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
+        border: 'none',
+        borderRadius: '0',
+        overflow: 'hidden',
+    },
+    '& img, & svg': {
+        width: '100%',
+        height: '100%',
+        display: 'block',
+    },
 });
 
 const EnergySummary = styled('div')({
