@@ -146,11 +146,15 @@ function createAggregationState(): AggregationState {
     };
 }
 
-function createSeed(initialSeed: number | undefined, index: number): number {
+function resolveBaseSeed(initialSeed: number | undefined): number {
     if (initialSeed !== undefined) {
-        return initialSeed + index;
+        return initialSeed;
     }
     return Math.floor(Math.random() * 1_000_000);
+}
+
+function createSeed(baseSeed: number, index: number): number {
+    return baseSeed + index;
 }
 
 function accumulateDailySummary(state: AggregationState, dailySummary: DailySummary): void {
@@ -416,9 +420,10 @@ export function runMultiTrialSimulation(input: MultiTrialInput): MultiTrialResul
     }
     const trials: TrialSummary[] = [];
     const state = createAggregationState();
+    const baseSeed = resolveBaseSeed(input.initialSeed);
 
     for (let i = 0; i < trialCount; i++) {
-        const seed = createSeed(input.initialSeed, i);
+        const seed = createSeed(baseSeed, i);
         const result = runSimulation({
             team,
             timeSlots,
@@ -480,6 +485,7 @@ export async function runMultiTrialSimulationWithProgress(
     }
     const trials: TrialSummary[] = [];
     const state = createAggregationState();
+    const baseSeed = resolveBaseSeed(input.initialSeed);
     let lastProgressUpdateAt = Date.now();
     let lastEmittedProgress = 0;
 
@@ -508,7 +514,7 @@ export async function runMultiTrialSimulationWithProgress(
         if (i > 0 && shouldAbort?.()) {
             break;
         }
-        const seed = createSeed(input.initialSeed, i);
+        const seed = createSeed(baseSeed, i);
         const result = runSimulation({
             team,
             timeSlots,

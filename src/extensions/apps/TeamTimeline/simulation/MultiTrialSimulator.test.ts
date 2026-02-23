@@ -195,6 +195,28 @@ describe('runMultiTrialSimulation', () => {
         });
     });
 
+    it('uses sequential seeds from one random base when initialSeed is omitted', () => {
+        const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.12345);
+        runSimulationMock.mockReturnValue(createSimulationResult(
+            [createDailySummary(1, 1, 100)],
+            createTeamSummary(1000),
+        ));
+
+        runMultiTrialSimulation({
+            team: [],
+            timeSlots: [],
+            config: { initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            trialCount: 3,
+        });
+
+        const seeds = runSimulationMock.mock.calls.map((call) => (
+            (call[0] as { config: { seed: number } }).config.seed
+        ));
+        expect(seeds).toEqual([123450, 123451, 123452]);
+        randomSpy.mockRestore();
+    });
+
     it('reports progress until 100 in async simulation', async () => {
         runSimulationMock
             .mockReturnValue(createSimulationResult(

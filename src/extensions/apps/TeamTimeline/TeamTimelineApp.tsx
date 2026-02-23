@@ -740,7 +740,6 @@ export default function TeamTimelineApp() {
                 settingsHash: currentSimulationContextHash,
             },
         });
-        dispatch({ type: 'updateSimulationConfig', config: { seed: selectedSeed } });
     }, [
         state.team,
         state.timeSlots,
@@ -847,7 +846,6 @@ export default function TeamTimelineApp() {
                 cookingSettings: state.cookingSettings,
             });
             dispatch({ type: 'setSimulationResult', result });
-            dispatch({ type: 'updateSimulationConfig', config: { seed: trial.seed } });
         } catch (e) {
             dispatch({ type: 'setSimulationError', error: String(e) });
         }

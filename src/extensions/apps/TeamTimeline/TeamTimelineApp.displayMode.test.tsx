@@ -3,10 +3,32 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TeamTimelineApp from './TeamTimelineApp';
 
+const { runSimulationMock } = vi.hoisted(() => ({
+    runSimulationMock: vi.fn(() => ({
+        slotResults: new Map(),
+        dailySummaries: [],
+        teamSummary: {
+            totalIngredients: [],
+            totalBerryEP: 0,
+            totalIngredientEP: 0,
+            totalSkillEP: 0,
+            grandTotalEP: 0,
+            totalPresentCandyCount: 0,
+            totalCookingPotCapacityIncrease: 0,
+            totalTastyChanceIncreasePercent: 0,
+            totalDreamShardCount: 0,
+        },
+    })),
+}));
+
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (_key: string, defaultValue?: string) => defaultValue ?? _key,
     }),
+}));
+
+vi.mock('./simulation/TimelineSimulator', () => ({
+    runSimulation: runSimulationMock,
 }));
 
 vi.mock('./TeamTimelineState', async () => {
@@ -36,6 +58,7 @@ vi.mock('./TeamTimelineState', async () => {
                 { seed: 1, grandTotalEP: 0 },
                 { seed: 2, grandTotalEP: 0 },
             ],
+            multiTrialSelectedIndex: 0,
             multiTrialAverageDailySummaries: [],
             multiTrialAverageTeamSummary: teamSummary,
             multiTrialAverageCookingSummary: {
@@ -59,7 +82,9 @@ vi.mock('./components/SwapSupplementBar', () => ({
 }));
 
 vi.mock('./components/SimulationControls', () => ({
-    default: () => null,
+    default: ({ seed }: { seed: number }) => (
+        <div data-testid="simulation-controls-seed">{seed}</div>
+    ),
 }));
 
 vi.mock('./components/TimeSlotEditor', () => ({
@@ -71,7 +96,19 @@ vi.mock('./components/TimelineBonusSettingsPanel', () => ({
 }));
 
 vi.mock('./components/TrialResultSelector', () => ({
-    default: () => null,
+    default: ({
+        onSelect,
+    }: {
+        onSelect?: (index: number) => void;
+    }) => (
+        <button
+            type="button"
+            data-testid="trial-result-select-second"
+            onClick={() => onSelect?.(1)}
+        >
+            select-second-trial
+        </button>
+    ),
 }));
 
 vi.mock('./components/AdditionalAnalysisPanel', () => ({
@@ -201,6 +238,7 @@ describe('TeamTimelineApp timeline display mode', () => {
     beforeEach(() => {
         localStorage.clear();
         localStorage.setItem('PstTeamTimelinePresetAppliedV1', '1');
+        runSimulationMock.mockClear();
     });
 
     it('uses detailed mode by default and toggles to simple mode', () => {
@@ -296,5 +334,16 @@ describe('TeamTimelineApp timeline display mode', () => {
 
         expect(screen.getByTestId('leftover-toggle-state-average').textContent).toBe('on');
         expect(screen.getByTestId('leftover-toggle-state-details').textContent).toBe('on');
+    });
+
+    it('keeps simulation seed unchanged when selecting trial from simulation details slider', () => {
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('simulation-controls-seed').textContent).toBe('123456');
+
+        fireEvent.click(screen.getByTestId('trial-result-select-second'));
+
+        expect(runSimulationMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('simulation-controls-seed').textContent).toBe('123456');
     });
 });
