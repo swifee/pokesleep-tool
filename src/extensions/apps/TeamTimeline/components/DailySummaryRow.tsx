@@ -300,7 +300,7 @@ const DailySummaryRow = React.memo(({
                                 <OptionLine style={{ visibility: hasOptionLine ? 'visible' : 'hidden' }}>
                                     {totalPresentCandyCount > 0 && <span>🍬{formatSummaryNumber(totalPresentCandyCount)}</span>}
                                     {totalCookingPotCapacityIncrease > 0 && <span>鍋+{formatSummaryNumber(totalCookingPotCapacityIncrease)}</span>}
-                                    {totalTastyChanceIncreasePercent > 0 && <span>料理チャンス+{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</span>}
+                                    {totalTastyChanceIncreasePercent > 0 && <span>料理大成功+{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</span>}
                                     {totalDreamShardCount > 0 && (
                                         <span>
                                             <TeamTimelineIcon name="dream" data-testid={`daily-summary-option-icon-dream-${summary.pokemonId}`} />

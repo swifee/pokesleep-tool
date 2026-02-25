@@ -222,7 +222,7 @@ const TeamSummaryRow = React.memo(({
               +{formatSummaryNumber(totalDreamShardCount)}
             </MetaItem>
           )}
-          {totalTastyChanceIncreasePercent > 0 && <MetaItem>料理チャンス : +{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</MetaItem>}
+          {totalTastyChanceIncreasePercent > 0 && <MetaItem>料理大成功 : +{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</MetaItem>}
         </IngredientSection>
         {layoutMode === 'details' && cookingResult && (
             <CookingSection>

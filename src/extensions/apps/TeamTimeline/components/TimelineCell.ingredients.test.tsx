@@ -352,4 +352,30 @@ describe('TimelineCell ingredient ordering', () => {
         expect(screen.queryByTestId('timeline-cell-simple-skill')).toBeNull();
         expect(screen.queryByTestId('timeline-cell-simple-skill-none')).toBeNull();
     });
+
+    it('does not add skill prefix icons before 料理大成功 line in aggregate view', () => {
+        const result = createTimeSlotResult({
+            skillTriggerCount: 2,
+            skillIngredients: [
+                { name: 'apple', count: 8 },
+                { name: 'egg', count: 8 },
+            ],
+            tastyChanceIncreasePercent: 10,
+        });
+
+        const { container } = render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
+        );
+
+        const ingredientPrefix = screen.getByTestId('timeline-cell-skill-prefix-ingredients');
+        expect(ingredientPrefix.getAttribute('data-skill-prefix-count')).toBe('2');
+        expect(screen.queryByTestId('timeline-cell-skill-prefix-aggregate')).toBeNull();
+        expect(container.textContent).toContain('料理大成功+10%');
+        expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(2);
+    });
 });

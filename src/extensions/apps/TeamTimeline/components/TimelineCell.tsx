@@ -450,7 +450,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             parts.push(`鍋容量+${Math.round(event.cookingPotCapacityIncrease ?? 0)}`);
         }
         if ((event.tastyChanceIncreasePercent ?? 0) > 0) {
-            parts.push(`料理チャンス+${Math.round(event.tastyChanceIncreasePercent ?? 0)}%`);
+            parts.push(`料理大成功+${Math.round(event.tastyChanceIncreasePercent ?? 0)}%`);
         }
         if ((event.dreamShardCount ?? 0) > 0) {
             parts.push(`ゆめのかけら+${Math.round(event.dreamShardCount ?? 0).toLocaleString()}`);
@@ -612,9 +612,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     if ((result.cookingPotCapacityIncrease ?? 0) > 0) {
         aggregateDetailParts.push(`鍋容量+${Math.round(result.cookingPotCapacityIncrease ?? 0)}`);
     }
-    if ((result.tastyChanceIncreasePercent ?? 0) > 0) {
-        aggregateDetailParts.push(`料理チャンス+${Math.round(result.tastyChanceIncreasePercent ?? 0)}%`);
-    }
+    const tastyChanceDetail = (result.tastyChanceIncreasePercent ?? 0) > 0
+        ? `料理大成功+${Math.round(result.tastyChanceIncreasePercent ?? 0)}%`
+        : null;
     if ((result.dreamShardCount ?? 0) > 0) {
         aggregateDetailParts.push(`ゆめのかけら+${Math.round(result.dreamShardCount ?? 0).toLocaleString()}`);
     }
@@ -722,7 +722,14 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 </SkillDetailLine>
             );
         }
-    } else if (result.skillTriggerCount > 0 || aggregateDetailParts.length > 0) {
+        if (tastyChanceDetail && !hasProxyEventStyle) {
+            skillDetailLines.push(
+                <SkillDetailLine key="tasty-chance-extra">
+                    {renderTextWithHealIcon(tastyChanceDetail, 'tasty-chance-extra')}
+                </SkillDetailLine>
+            );
+        }
+    } else if (result.skillTriggerCount > 0 || aggregateDetailParts.length > 0 || tastyChanceDetail) {
         if (isHelperBoostOnlySupportEvents) {
             const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
             skillDetailLines.push(
@@ -741,6 +748,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     ))}
                 </SkillDetailLine>
             );
+            if (tastyChanceDetail) {
+                skillDetailLines.push(
+                    <SkillDetailLine key="helper-boost-tasty-chance">
+                        {renderTextWithHealIcon(tastyChanceDetail, 'helper-boost-tasty-chance')}
+                    </SkillDetailLine>
+                );
+            }
         } else {
             if (skillIngredients.length > 0) {
                 const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
@@ -770,6 +784,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 </SkillDetailLine>
             );
         }
+            if (tastyChanceDetail) {
+                skillDetailLines.push(
+                    <SkillDetailLine key="aggregate-tasty-chance">
+                        {renderTextWithHealIcon(tastyChanceDetail, 'aggregate-tasty-chance')}
+                    </SkillDetailLine>
+                );
+            }
         }
     }
 

@@ -235,7 +235,7 @@ describe('DailySummaryRow', () => {
         expect(screen.getByText('honey')).toBeDefined();
     });
 
-    it('uses 料理チャンス label (not abbreviated) in individual option line', () => {
+    it('uses 料理大成功 label (not abbreviated) in individual option line', () => {
         const items = [createPokemon('Pikachu', 20, 'Chef')];
         const box = new PokemonBox(items);
         const summary = createDailySummary(items[0].id, 1);
@@ -243,7 +243,7 @@ describe('DailySummaryRow', () => {
 
         render(<DailySummaryRow dailySummaries={[summary]} box={box} layoutMode="details" />);
 
-        expect(screen.getByText('料理チャンス+12.5%')).toBeDefined();
+        expect(screen.getByText('料理大成功+12.5%')).toBeDefined();
         expect(screen.queryByText('料理+12.5%')).toBeNull();
     });
 
