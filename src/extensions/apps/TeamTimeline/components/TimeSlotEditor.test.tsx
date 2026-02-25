@@ -226,16 +226,18 @@ describe('TimeSlotEditor toggle buttons', () => {
 
 describe('TimeSlotEditor row move animation', () => {
     let originalGetBoundingClientRect: typeof HTMLElement.prototype.getBoundingClientRect;
+    let viewportOffset = 0;
 
     beforeEach(() => {
         vi.useFakeTimers();
+        viewportOffset = 0;
         originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
         vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function mockRect(this: HTMLElement) {
             if (this.dataset.rowKey) {
                 const parent = this.parentElement;
                 const rows = parent ? Array.from(parent.querySelectorAll('[data-row-key]')) : [];
                 const index = rows.indexOf(this);
-                const top = index >= 0 ? index * 40 : 0;
+                const top = index >= 0 ? viewportOffset + (index * 40) : viewportOffset;
                 return {
                     x: 0,
                     y: top,
@@ -301,5 +303,42 @@ describe('TimeSlotEditor row move animation', () => {
         expect(
             rowsAfterHighlight.some((row) => hasColorStyle(row.getAttribute('style'), '#f5f5f5', '245, 245, 245'))
         ).toBe(true);
+    });
+
+    it('does not animate all rows on sleep-state change even when viewport position shifts', () => {
+        function StatefulEditor() {
+            const [slots, setSlots] = React.useState<TimeSlot[]>([
+                createSlot('slot-1', '07:00', 'none'),
+                createSlot('slot-2', '12:00', 'none'),
+            ]);
+
+            return (
+                <TimeSlotEditor
+                    timeSlots={slots}
+                    onAdd={vi.fn()}
+                    onUpdate={(index, slot) => {
+                        setSlots((prev) => {
+                            const next = [...prev];
+                            next[index] = slot;
+                            return next;
+                        });
+                    }}
+                    onRemove={vi.fn()}
+                    onReset={vi.fn()}
+                />
+            );
+        }
+
+        render(<StatefulEditor />);
+
+        viewportOffset = 180;
+        const firstRow = screen.getAllByTestId('time-slot-row-saved')[0];
+        fireEvent.click(within(firstRow).getByRole('button', { name: '-' }));
+
+        const rowsAfter = screen.getAllByTestId('time-slot-row-saved');
+        rowsAfter.forEach((row) => {
+            expect(row.style.transform).toBe('');
+            expect(row.style.transition).toBe('');
+        });
     });
 });

@@ -145,6 +145,9 @@ export default function TimeSlotEditor({
     React.useLayoutEffect(() => {
         const currentTopByRowKey = new Map<string, number>();
         const movedKeys: string[] = [];
+        const pendingHighlightRowKey = pendingHighlightRowKeyRef.current;
+        pendingHighlightRowKeyRef.current = null;
+        const shouldAnimateRowMove = pendingHighlightRowKey !== null;
 
         displayRows.forEach(({ rowKey }) => {
             const element = rowElementsRef.current.get(rowKey);
@@ -153,6 +156,9 @@ export default function TimeSlotEditor({
             }
             const currentTop = element.getBoundingClientRect().top;
             currentTopByRowKey.set(rowKey, currentTop);
+            if (!shouldAnimateRowMove) {
+                return;
+            }
 
             const previousTop = previousTopByRowKeyRef.current.get(rowKey);
             if (previousTop === undefined) {
@@ -173,13 +179,11 @@ export default function TimeSlotEditor({
         });
 
         previousTopByRowKeyRef.current = currentTopByRowKey;
-        const pendingHighlightRowKey = pendingHighlightRowKeyRef.current;
-        pendingHighlightRowKeyRef.current = null;
-        if (movedKeys.length === 0) {
+        if (!shouldAnimateRowMove || movedKeys.length === 0) {
             return;
         }
 
-        const targetHighlightRowKey = pendingHighlightRowKey !== null && movedKeys.includes(pendingHighlightRowKey)
+        const targetHighlightRowKey = movedKeys.includes(pendingHighlightRowKey)
             ? pendingHighlightRowKey
             : null;
         if (targetHighlightRowKey === null) {
