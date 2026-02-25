@@ -1,9 +1,6 @@
 import React from 'react';
 import { styled } from '@mui/system';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CloseIcon from '@mui/icons-material/Close';
-import BlockIcon from '@mui/icons-material/Block';
-import { IconButton } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { TimeSlotResult } from '../types/TimeSlotTypes';
 import IngredientIcon from '../../../../ui/IvCalc/IngredientIcon';
@@ -275,10 +272,16 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 type="button"
                 className="swap-trigger"
                 data-always-visible={shouldAlwaysShowSwapButton ? 'true' : 'false'}
+                data-testid="timeline-cell-swap-toggle"
                 onClick={handleSwapButtonClick}
                 title={swapButtonTitle}
             >
-                <SwapHorizIcon className="swap-icon" sx={{ fontSize: 16 }} />
+                <TeamTimelineIcon
+                    name="change"
+                    className="swap-icon"
+                    data-testid="timeline-cell-swap-icon"
+                    data-icon-name="change"
+                />
             </SwapIconButton>
         );
     };
@@ -302,7 +305,12 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     right: showSwapButton ? '24px' : '2px',
                 }}
             >
-                <BlockIcon className="no-collect-icon" sx={{ fontSize: 14 }} />
+                <TeamTimelineIcon
+                    name={noCollectEnabled ? 'pickup_none' : 'pickup'}
+                    className="no-collect-icon"
+                    data-testid="timeline-cell-no-collect-icon"
+                    data-icon-name={noCollectEnabled ? 'pickup_none' : 'pickup'}
+                />
             </NoCollectIconButton>
         );
     };
@@ -329,7 +337,12 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     title={swapButtonTitle}
                 >
                     {!isNarrowSwapInfoLayout && (
-                        <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
+                        <TeamTimelineIcon
+                            name="change"
+                            className="swap-icon"
+                            data-testid="timeline-cell-swap-info-icon"
+                            data-icon-name="change"
+                        />
                     )}
                     <span
                         className="swap-name"
@@ -449,9 +462,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             return null;
         }
         return (
-            <PokemonIconAnchor data-testid="timeline-cell-pokemon-icon">
+            <PokemonIconFrame data-testid="timeline-cell-pokemon-icon">
                 <PokemonIcon idForm={pokemonIdForm} size={14} />
-            </PokemonIconAnchor>
+            </PokemonIconFrame>
         );
     };
 
@@ -550,7 +563,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                                         </SimpleSkillIconItem>
                                     )}
                                     {result.skillOverflowCount > 0 && (
-                                        <SimpleSkillIconItem data-testid="timeline-cell-simple-skill-none">
+                                        <SimpleSkillIconItem
+                                            data-testid="timeline-cell-simple-skill-none"
+                                            data-skill-overflow="true"
+                                        >
                                             <TeamTimelineIcon name="skill_none" data-simple-skill-icon="true" />
                                         </SimpleSkillIconItem>
                                     )}
@@ -968,13 +984,35 @@ const TopEnergyArea = styled('div')({
     gap: '3px',
 });
 
-const PokemonIconAnchor = styled('span')({
+const PokemonIconFrame = styled('span')({
     width: '14px',
     height: '14px',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
+    boxSizing: 'border-box',
+    border: '0.5px solid #c8c8c8',
+    borderRadius: '50%',
+    overflow: 'hidden',
     flexShrink: 0,
+    '& > *': {
+        width: '100%',
+        height: '100%',
+        flexShrink: 0,
+    },
+    '& > div': {
+        width: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
+        border: 'none',
+        borderRadius: '0',
+        overflow: 'hidden',
+    },
+    '& img, & svg': {
+        width: '100%',
+        height: '100%',
+        display: 'block',
+    },
 });
 
 const EnergySummary = styled('div')({
@@ -1158,7 +1196,6 @@ const SkillOverflowLine = styled('div')({
     display: 'inline-flex',
     alignItems: 'center',
     fontSize: '10px',
-    color: '#9e9e9e',
     fontWeight: 600,
     '& svg': {
         width: '10px',
@@ -1216,53 +1253,53 @@ const RecoveryInfoLine = styled('div')({
     },
 });
 
-const NoCollectIconButton = styled(IconButton)({
+const NoCollectIconButton = styled('button')({
     position: 'absolute',
     bottom: '2px',
     width: '20px',
     height: '20px',
-    padding: '0',
-    border: '1px solid #b8bcc3',
-    backgroundColor: '#fff',
-    color: '#9aa0aa',
-    borderRadius: '999px',
+    padding: 0,
+    margin: 0,
+    border: 'none',
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
     zIndex: 2,
     '&:hover': {
-        backgroundColor: '#f5f6f8',
+        backgroundColor: 'transparent',
     },
     '& .no-collect-icon': {
-        color: '#9aa0aa',
-    },
-    '&[data-enabled="true"]': {
-        borderColor: '#1e64d6',
-        color: '#1e64d6',
-        '&:hover': {
-            backgroundColor: '#edf4ff',
-        },
-        '& .no-collect-icon': {
-            color: '#1e64d6',
-        },
+        width: '20px',
+        height: '20px',
     },
 });
 
-const SwapIconButton = styled(IconButton)({
+const SwapIconButton = styled('button')({
     position: 'absolute',
     right: '2px',
     bottom: '2px',
     width: '20px',
     height: '20px',
-    padding: '0',
-    border: '1px solid #62d540',
-    backgroundColor: '#fff',
-    color: '#62d540',
-    borderRadius: '999px',
+    padding: 0,
+    margin: 0,
+    border: 'none',
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
     zIndex: 2,
     transition: 'opacity 120ms ease',
     '&:hover': {
-        backgroundColor: '#f7fff3',
+        backgroundColor: 'transparent',
     },
     '& .swap-icon': {
-        color: '#62d540',
+        width: '20px',
+        height: '20px',
     },
 });
 
@@ -1316,7 +1353,8 @@ const SwapInfoMainButton = styled('button')<{
         backgroundColor: '#edffe0',
     },
     '& .swap-icon': {
-        color: '#62d540',
+        width: '12px',
+        height: '12px',
         flexShrink: 0,
     },
     '& .swap-name': {

@@ -3,6 +3,7 @@ import { Box, IconButton, Link, Slider, Tooltip, Typography } from '@mui/materia
 import type { SliderValueLabelProps } from '@mui/material/Slider';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useTranslation } from 'react-i18next';
 import { TrialSummary } from '../types/MultiTrialTypes';
 import EpValue from './EpValue';
@@ -23,6 +24,7 @@ const DISTRIBUTION_VISIBILITY_STORAGE_KEY = 'PstTeamTimelineDistributionVisible'
 const EDGE_AWARE_TOOLTIP_PADDING_PX = 8;
 const EDGE_AWARE_TOOLTIP_OFFSET_Y_PX = 8;
 const SLIDER_ARROW_ICON_VERTICAL_OFFSET_PX = -2;
+const COPY_SEED_ICON_SIZE_PX = 12;
 
 const EdgeAwareSliderValueLabel = React.memo(({ children, open, value }: SliderValueLabelProps) => (
   <Tooltip
@@ -135,6 +137,7 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
     () => resolveDisplaySliderValue(selectedIndex, maxIndex)
   );
   const [showDistribution, setShowDistribution] = useState<boolean>(() => loadDistributionVisibilityFromStorage());
+  const trialSeedLabel = t('TeamTimeline.trial seed label', 'シード');
 
   useEffect(() => {
     setLocalSliderValue(resolveDisplaySliderValue(selectedIndex, maxIndex));
@@ -143,6 +146,7 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
   const clampedSliderValue = Math.max(0, Math.min(localSliderValue, maxIndex));
   const selectedTrialIndex = resolveSelectedIndexFromSliderValue(clampedSliderValue, maxIndex);
   const selectedRank = selectedIndex + 1;
+  const selectedSeed = results[selectedIndex]?.seed;
 
   const histogram = useMemo(() => {
     if (results.length === 0) {
@@ -221,6 +225,13 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
     });
   };
 
+  const handleCopySeed = () => {
+    if (selectedSeed === undefined || !navigator.clipboard?.writeText) {
+      return;
+    }
+    void navigator.clipboard.writeText(String(selectedSeed)).catch(() => undefined);
+  };
+
   return (
     <Box sx={{ mb: '10px', width: '100%' }}>
       <Box
@@ -259,6 +270,26 @@ const TrialResultSelector = React.memo(({ results, selectedIndex, onSelect }: Tr
         <Typography component="span" sx={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
           {t('TeamTimeline.trial rank suffix', 'の結果を表示中')}
         </Typography>
+        {selectedSeed !== undefined && (
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', ml: '6px' }}>
+            <Typography component="span" sx={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
+              {`(${trialSeedLabel}: ${selectedSeed}`}
+            </Typography>
+            <Tooltip title={t('TeamTimeline.copy trial seed', 'シードをコピー')}>
+              <IconButton
+                size="small"
+                aria-label={t('TeamTimeline.copy trial seed', 'シードをコピー')}
+                onClick={handleCopySeed}
+                sx={{ p: 0, ml: '2px', transform: 'translateY(-1px)' }}
+              >
+                <ContentCopyIcon sx={{ fontSize: `${COPY_SEED_ICON_SIZE_PX}px` }} />
+              </IconButton>
+            </Tooltip>
+            <Typography component="span" sx={{ fontSize: 'inherit', lineHeight: 'inherit' }}>
+              )
+            </Typography>
+          </Box>
+        )}
         <Link
           component="button"
           type="button"

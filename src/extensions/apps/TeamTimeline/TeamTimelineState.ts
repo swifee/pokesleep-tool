@@ -32,6 +32,7 @@ import { createDefaultCookingSettings } from './types/CookingTypes';
 export const STORAGE_KEY_BONUS_SETTINGS = 'PstTeamTimelineBonusSettings';
 export const STORAGE_KEY_SYNC_IV_PARAMETER = 'PstTeamTimelineSyncIvParam';
 export const STORAGE_KEY_SUMMARY_VALUE_MODE = 'PstTeamTimelineSummaryValueMode';
+export const STORAGE_KEY_LEFTOVER_INCLUDE_EXTRA_USAGE = 'PstTeamTimelineLeftoverIncludeExtraUsage';
 export const STORAGE_KEY_SEED_MODE = 'PstTeamTimelineSeedMode';
 export const STORAGE_KEY_TRIAL_COUNT = 'PstTeamTimelineTrialCount';
 export const STORAGE_KEY_TEAM_SETS = 'PstTeamTimelineTeamSetsV1';
@@ -1136,6 +1137,24 @@ export function saveSummaryValueModeToStorage(mode: SummaryValueMode): void {
 export function loadSummaryValueModeFromStorage(): SummaryValueMode {
     const raw = localStorage.getItem(STORAGE_KEY_SUMMARY_VALUE_MODE);
     return raw === 'dailyAverage' ? 'dailyAverage' : 'periodTotal';
+}
+
+/**
+ * あまり食材表示に追加食材使用分を含めるかを localStorage に保存
+ */
+export function saveLeftoverIncludeExtraUsageToStorage(enabled: boolean): void {
+    localStorage.setItem(STORAGE_KEY_LEFTOVER_INCLUDE_EXTRA_USAGE, enabled ? '1' : '0');
+}
+
+/**
+ * あまり食材表示に追加食材使用分を含めるかを localStorage から読み込み
+ */
+export function loadLeftoverIncludeExtraUsageFromStorage(): boolean {
+    const raw = localStorage.getItem(STORAGE_KEY_LEFTOVER_INCLUDE_EXTRA_USAGE);
+    if (raw === null) {
+        return false;
+    }
+    return raw === '1';
 }
 
 /**

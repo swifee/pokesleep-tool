@@ -163,6 +163,8 @@ export interface AverageCookingSummary {
     readonly recipes: readonly AverageCookingRecipeSummary[];
     /** 期間終了時の余り食材平均 */
     readonly leftoverIngredients: readonly { readonly name: IngredientName; readonly count: number }[];
+    /** 追加食材配分後の期間終了時あまり食材平均 */
+    readonly leftoverIngredientsAfterExtra?: readonly { readonly name: IngredientName; readonly count: number }[];
     /** 初期食材由来EP合計の試行平均 */
     readonly averageInitialIngredientEP?: number;
 }

@@ -117,6 +117,62 @@ const AVERAGE_COOKING_SUMMARY: AverageCookingSummary = {
     averageInitialIngredientEP: 789,
 };
 
+function createIngredientUsage(name: 'apple' | 'milk' | 'honey', count: number) {
+    return {
+        name,
+        count,
+        pokemonAttribution: new Map<number, number>(),
+        fromInitial: count,
+    };
+}
+
+const COOKING_RESULT_WITH_EXTRA_LEFTOVER: CookingSimulationResult = {
+    events: [
+        {
+            mealSlotId: 'breakfast',
+            mealType: 'breakfast',
+            recipeName: 'specialAppleCurry',
+            isGreatSuccess: false,
+            cookingEP: 1000,
+            eBase: 0,
+            eDisplay: 0,
+            eFinal: 0,
+            ingredientsUsed: [],
+            extraIngredientsUsed: [
+                createIngredientUsage('apple', 3),
+                createIngredientUsage('milk', 1),
+            ],
+            remainingPotCapacity: 0,
+            effectivePotCapacity: 15,
+            tastyChancePercent: 10,
+            cookingPowerUpBonusUsed: 0,
+        },
+    ],
+    dailySummaries: [],
+    pokemonAttributions: [],
+    leftoverIngredients: {
+        byPokemon: new Map(),
+        initialRemaining: {},
+        total: {
+            apple: 10,
+            milk: 4,
+        },
+    },
+    totalCookingEP: 1000,
+};
+
+const AVERAGE_COOKING_SUMMARY_WITH_AFTER_EXTRA: AverageCookingSummary = {
+    recipes: [],
+    leftoverIngredients: [
+        { name: 'apple', count: 7 },
+        { name: 'milk', count: 3 },
+    ],
+    leftoverIngredientsAfterExtra: [
+        { name: 'apple', count: 4 },
+        { name: 'milk', count: 1 },
+    ],
+};
+
 describe('TeamSummaryRow', () => {
     it('shows label in details mode', () => {
         render(<TeamSummaryRow teamSummary={TEAM_SUMMARY} layoutMode="details" />);
@@ -273,6 +329,35 @@ describe('TeamSummaryRow', () => {
         expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 321 EP');
     });
 
+    it('renders remaining pot capacity in cooking details as integer when floating-point noise exists', () => {
+        const cookingResultWithFloatingPot: CookingSimulationResult = {
+            ...COOKING_RESULT,
+            dailySummaries: [
+                {
+                    events: [
+                        {
+                            ...COOKING_RESULT.dailySummaries[0]!.events[0]!,
+                            remainingPotCapacity: Number.parseFloat('76.0000000000003'),
+                        },
+                    ],
+                    totalCookingEP: 1000,
+                    greatSuccessCount: 0,
+                },
+            ],
+        };
+
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={cookingResultWithFloatingPot}
+            />
+        );
+
+        expect((document.body.textContent ?? '')).toContain('鍋空き76');
+        expect((document.body.textContent ?? '')).not.toContain('76.0000000000003');
+    });
+
     it('renders average cooking summary in requested format and groups recipes below 1.0 count', () => {
         const { container } = render(
             <TeamSummaryRow
@@ -311,5 +396,91 @@ describe('TeamSummaryRow', () => {
         );
 
         expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 263 EP');
+    });
+
+    it('shows leftover include toggle after leftover ingredient block when enabled', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={COOKING_RESULT_WITH_EXTRA_LEFTOVER}
+                showLeftoverIncludeExtraUsageToggle
+                leftoverIncludeExtraUsage={false}
+            />
+        );
+
+        const toggle = screen.getByTestId('leftover-extra-usage-toggle-details') as HTMLInputElement;
+        expect(toggle.checked).toBe(false);
+        const content = document.body.textContent ?? '';
+        expect(content).toContain('追加食材使用分を含む');
+        expect(content.indexOf('あまり食材')).toBeLessThan(content.indexOf('追加食材使用分を含む'));
+    });
+
+    it('uses fixed leftover totals when include-extra toggle is ON in details mode', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={COOKING_RESULT_WITH_EXTRA_LEFTOVER}
+                showLeftoverIncludeExtraUsageToggle
+                leftoverIncludeExtraUsage
+            />
+        );
+
+        const content = document.body.textContent ?? '';
+        expect(content).toContain('apple10');
+        expect(content).toContain('milk4');
+        expect(content).not.toContain('apple7');
+    });
+
+    it('uses post-extra leftover totals when include-extra toggle is OFF in details mode', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={COOKING_RESULT_WITH_EXTRA_LEFTOVER}
+                showLeftoverIncludeExtraUsageToggle
+                leftoverIncludeExtraUsage={false}
+            />
+        );
+
+        const content = document.body.textContent ?? '';
+        expect(content).toContain('apple7');
+        expect(content).toContain('milk3');
+        expect(content).not.toContain('apple10');
+    });
+
+    it('uses after-extra average leftovers when include-extra toggle is OFF', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY_WITH_COOKING}
+                layoutMode="average"
+                averageCookingSummary={AVERAGE_COOKING_SUMMARY_WITH_AFTER_EXTRA}
+                showLeftoverIncludeExtraUsageToggle
+                leftoverIncludeExtraUsage={false}
+            />
+        );
+
+        const content = document.body.textContent ?? '';
+        expect(content).toContain('apple4');
+        expect(content).toContain('milk1');
+        expect(content).not.toContain('apple7');
+    });
+
+    it('calls leftover include toggle callback', () => {
+        const onChange = vi.fn();
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={COOKING_RESULT}
+                showLeftoverIncludeExtraUsageToggle
+                leftoverIncludeExtraUsage={false}
+                onLeftoverIncludeExtraUsageChange={onChange}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('leftover-extra-usage-toggle-details'));
+        expect(onChange).toHaveBeenCalledWith(true);
     });
 });

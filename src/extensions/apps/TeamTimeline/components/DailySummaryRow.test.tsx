@@ -151,6 +151,25 @@ describe('DailySummaryRow', () => {
         expect(berryEpLine.compareDocumentPosition(helpCountLine) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     });
 
+    it('matches lower metrics left margin to EP box inset without changing right margin', () => {
+        const items = [createPokemon('Pikachu', 12, 'MarginMon')];
+        const box = new PokemonBox(items);
+        const summaries = [createDailySummary(items[0].id, 1)];
+
+        render(<DailySummaryRow dailySummaries={summaries} box={box} layoutMode="details" />);
+
+        const metricsArea = screen.getByTestId(`daily-summary-metrics-${items[0].id}`);
+        const berryEpLine = screen.getByTestId(`daily-summary-ep-berry-${items[0].id}`);
+        const epBox = berryEpLine.parentElement;
+
+        expect(epBox).not.toBeNull();
+        expect(getComputedStyle(metricsArea).marginLeft).toBe('4px');
+        if (!epBox) {
+            throw new Error('EP box is not found');
+        }
+        expect(getComputedStyle(epBox).marginLeft).toBe('4px');
+    });
+
     it('renders overflow ingredients in timeline-style format without +溢', () => {
         const items = [createPokemon('Pikachu', 20, 'OverflowMon')];
         const box = new PokemonBox(items);
@@ -281,6 +300,35 @@ describe('DailySummaryRow', () => {
 
         expect(berryEpLine.compareDocumentPosition(skillEpLine) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
         expect(berryCountLine.compareDocumentPosition(skillCountLine) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    });
+
+    it('renders skill_none overflow icon with same size as skill icon and keeps overflow count text style', () => {
+        const items = [createPokemon('Pikachu', 20, 'OverflowSkillMon')];
+        const box = new PokemonBox(items);
+        const summary = createDailySummary(items[0].id, 1);
+        summary.totalSkillOverflowCount = 16;
+
+        render(
+            <DailySummaryRow
+                dailySummaries={[summary]}
+                box={box}
+                layoutMode="details"
+            />
+        );
+
+        const skillLine = screen.getByTestId(`daily-summary-count-skill-${items[0].id}`);
+        const skillNoneIcon = screen.getByTestId(`daily-summary-count-icon-skill-overflow-${items[0].id}`);
+        const overflow = screen.getByTestId(`daily-summary-count-skill-overflow-${items[0].id}`);
+
+        const skillLineStyle = getComputedStyle(skillLine);
+        const skillNoneIconStyle = getComputedStyle(skillNoneIcon);
+        const overflowStyle = getComputedStyle(overflow);
+
+        expect(skillNoneIconStyle.width).toBe('12px');
+        expect(skillNoneIconStyle.height).toBe('12px');
+        expect(overflowStyle.fontSize).toBe(skillLineStyle.fontSize);
+        expect(overflowStyle.fontWeight).toBe('400');
+        expect(overflowStyle.color).toBe('rgb(158, 158, 158)');
     });
 
     it('opens skill ingredient popover by clicking the skill count number', () => {

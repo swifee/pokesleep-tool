@@ -3,6 +3,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TrialResultSelector from './TrialResultSelector';
 
+const writeTextMock = vi.fn(() => Promise.resolve());
+
 interface SliderMockProps {
     value: number;
     min: number;
@@ -130,6 +132,13 @@ function createResults(trialCount: number) {
 describe('TrialResultSelector', () => {
     beforeEach(() => {
         localStorage.clear();
+        writeTextMock.mockClear();
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: {
+                writeText: writeTextMock,
+            },
+        });
     });
 
     it('shows distribution by default when storage is empty', () => {
@@ -145,6 +154,7 @@ describe('TrialResultSelector', () => {
 
         expect(screen.getByText('3回中、')).toBeDefined();
         expect(screen.getByText('の結果を表示中')).toBeDefined();
+        expect(screen.getByTestId('trial-status-row').textContent).toContain('(シード: 2)');
 
         const statusRow = screen.getByTestId('trial-status-row');
         expect(within(statusRow).queryByRole('button', { name: 'previous-trial' })).toBeNull();
@@ -204,6 +214,14 @@ describe('TrialResultSelector', () => {
         expect(screen.getByTestId('trial-distribution-chart')).toBeDefined();
     });
 
+    it('copies selected trial seed to clipboard', () => {
+        render(<TrialResultSelector results={RESULTS} selectedIndex={1} onSelect={vi.fn()} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'シードをコピー' }));
+
+        expect(writeTextMock).toHaveBeenCalledWith('2');
+    });
+
     it('updates highlighted histogram bin while slider is moving', () => {
         render(<TrialResultSelector results={RESULTS} selectedIndex={1} onSelect={vi.fn()} />);
 
@@ -243,7 +261,13 @@ describe('TrialResultSelector', () => {
     it('configures value label tooltip with overflow-safe popper modifiers', () => {
         render(<TrialResultSelector results={RESULTS} selectedIndex={1} onSelect={vi.fn()} />);
 
-        const tooltip = screen.getByTestId('mock-tooltip');
+        const tooltips = screen.getAllByTestId('mock-tooltip');
+        const tooltip = tooltips.find((candidate) => (
+            (candidate.getAttribute('data-title') ?? '').includes('2位:')
+        ));
+        if (!tooltip) {
+            throw new Error('value-label tooltip not found');
+        }
         expect(tooltip.getAttribute('data-open')).toBe('true');
         expect(tooltip.getAttribute('data-modifiers')).toContain('preventOverflow');
         expect(tooltip.getAttribute('data-modifiers')).toContain('flip');

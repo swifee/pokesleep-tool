@@ -86,6 +86,10 @@ function sumIngredientCounts(ingredients: readonly { count: number }[]): number 
     return ingredients.reduce((sum, ingredient) => sum + ingredient.count, 0);
 }
 
+function normalizeDiscreteCount(value: number): number {
+    return Math.max(0, Math.round(value));
+}
+
 export interface SimulationAnalysisOptions {
     disabledPokemonIds?: readonly number[];
     keepDisabledPokemonTargetable?: boolean;
@@ -324,7 +328,7 @@ function applyExtraIngredientsToBaselineEvents(
         );
 
         const plannedExtras = planByEvent[mealIndex] ?? [];
-        let remainingPotCapacity = baselineEvent.remainingPotCapacity;
+        let remainingPotCapacity = normalizeDiscreteCount(baselineEvent.remainingPotCapacity);
         const appliedExtraCounts: { name: IngredientName; count: number }[] = [];
 
         for (const planned of plannedExtras) {
@@ -393,7 +397,9 @@ function applyExtraIngredientsToBaselineEvents(
             extraIngredientsUsed: replayedExtraIngredientsUsed,
             bagIngredientsBeforeCooking,
             bagIngredientsBeforeCookingWithoutExtra: baselineEvent.bagIngredientsBeforeCooking,
-            remainingPotCapacity: Math.max(0, baselineEvent.remainingPotCapacity - extraIngredientCount),
+            remainingPotCapacity: normalizeDiscreteCount(
+                baselineEvent.remainingPotCapacity - extraIngredientCount,
+            ),
         });
 
         mealIndex += 1;

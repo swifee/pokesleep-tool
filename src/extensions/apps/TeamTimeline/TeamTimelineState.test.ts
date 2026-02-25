@@ -8,6 +8,9 @@ import {
     loadSummaryValueModeFromStorage,
     saveSummaryValueModeToStorage,
     STORAGE_KEY_SUMMARY_VALUE_MODE,
+    loadLeftoverIncludeExtraUsageFromStorage,
+    saveLeftoverIncludeExtraUsageToStorage,
+    STORAGE_KEY_LEFTOVER_INCLUDE_EXTRA_USAGE,
     loadSeedModeFromStorage,
     saveSeedModeToStorage,
     STORAGE_KEY_SEED_MODE,
@@ -686,6 +689,26 @@ describe('summary value mode storage', () => {
 
         localStorage.setItem(STORAGE_KEY_SUMMARY_VALUE_MODE, 'unexpected');
         expect(loadSummaryValueModeFromStorage()).toBe('periodTotal');
+    });
+});
+
+describe('leftover include extra usage storage', () => {
+    it('saves and loads enabled state', () => {
+        saveLeftoverIncludeExtraUsageToStorage(true);
+        expect(loadLeftoverIncludeExtraUsageFromStorage()).toBe(true);
+    });
+
+    it('falls back to false for missing or invalid value', () => {
+        localStorage.removeItem(STORAGE_KEY_LEFTOVER_INCLUDE_EXTRA_USAGE);
+        expect(loadLeftoverIncludeExtraUsageFromStorage()).toBe(false);
+
+        localStorage.setItem(STORAGE_KEY_LEFTOVER_INCLUDE_EXTRA_USAGE, 'unexpected');
+        expect(loadLeftoverIncludeExtraUsageFromStorage()).toBe(false);
+    });
+
+    it('loads disabled state explicitly', () => {
+        saveLeftoverIncludeExtraUsageToStorage(false);
+        expect(loadLeftoverIncludeExtraUsageFromStorage()).toBe(false);
     });
 });
 

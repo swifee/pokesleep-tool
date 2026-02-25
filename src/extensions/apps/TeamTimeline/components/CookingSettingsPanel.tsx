@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Box,
@@ -136,14 +136,19 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
     const { t } = useTranslation();
     const [batchLevel, setBatchLevel] = useState<number>(DEFAULT_RECIPE_LEVEL);
     const [recipeLevelDrafts, setRecipeLevelDrafts] = useState<Record<string, string>>({});
+    const [activeCategory, setActiveCategory] = useState<CookingCategory>(settings.category);
+
+    useEffect(() => {
+        setActiveCategory(settings.category);
+    }, [settings.category]);
 
     const handleEnabledChange = useCallback((_: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
         onChange({ ...settings, enabled: checked });
     }, [settings, onChange]);
 
     const handleCategoryChange = useCallback((_: React.SyntheticEvent, value: CookingCategory) => {
-        onChange({ ...settings, category: value });
-    }, [settings, onChange]);
+        setActiveCategory(value);
+    }, []);
 
     const handlePotCapacityChange = useCallback((event: { target: { value: unknown } }) => {
         const value = parseInt(String(event.target.value), 10);
@@ -212,13 +217,13 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
     }, [handleRecipeLevelChange, recipeLevelDrafts, settings.recipeLevels]);
 
     const handleBatchSet = useCallback(() => {
-        const recipes = getRecipesByCategory(settings.category);
+        const recipes = getRecipesByCategory(activeCategory);
         const newLevels = { ...settings.recipeLevels };
         for (const recipe of recipes) {
             newLevels[recipe.name] = Math.max(MIN_RECIPE_LEVEL, Math.min(MAX_RECIPE_LEVEL, batchLevel));
         }
         onChange({ ...settings, recipeLevels: newLevels });
-    }, [settings, onChange, batchLevel]);
+    }, [activeCategory, settings, onChange, batchLevel]);
 
     const handleIngredientChange = useCallback((ingredientName: IngredientName, count: number) => {
         const clamped = Math.max(0, Math.floor(count));
@@ -256,14 +261,14 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
     }, [settings, onChange]);
 
     const recipes = useMemo(() => {
-        return [...getRecipesByCategory(settings.category)].sort((a, b) => {
+        return [...getRecipesByCategory(activeCategory)].sort((a, b) => {
             const baseEnergyDiff = getRecipeLevel1BaseEnergy(b) - getRecipeLevel1BaseEnergy(a);
             if (baseEnergyDiff !== 0) {
                 return baseEnergyDiff;
             }
             return a.name.localeCompare(b.name);
         });
-    }, [settings.category]);
+    }, [activeCategory]);
     const initialIngredientTotal = IngredientNames.reduce((sum, ingredientName) => {
         return sum + (settings.initialIngredients[ingredientName] ?? 0);
     }, 0);
@@ -314,7 +319,7 @@ const CookingSettingsPanel = React.memo(({ settings, onChange }: CookingSettings
                     {/* 3. Cooking category selector */}
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5, fontSize: '0.9rem' }}>
                         <Tabs
-                            value={settings.category}
+                            value={activeCategory}
                             onChange={handleCategoryChange}
                             sx={{ minHeight: '32px' }}
                             data-testid="cooking-category-tabs"

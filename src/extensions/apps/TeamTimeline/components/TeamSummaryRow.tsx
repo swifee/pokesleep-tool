@@ -32,6 +32,35 @@ import {
 
 const MEALS_PER_DAY = 3;
 
+function buildExtraIngredientUsageTotals(
+  events: readonly NonNullable<CookingSimulationResult['events'][number]>[],
+): Partial<Record<IngredientName, number>> {
+  const totals: Partial<Record<IngredientName, number>> = {};
+  for (const event of events) {
+    for (const usage of event.extraIngredientsUsed ?? []) {
+      totals[usage.name] = (totals[usage.name] ?? 0) + usage.count;
+    }
+  }
+  return totals;
+}
+
+function computePostExtraLeftoverTotals(
+  fixedTotals: Readonly<Partial<Record<IngredientName, number>>>,
+  events: readonly NonNullable<CookingSimulationResult['events'][number]>[],
+): Partial<Record<IngredientName, number>> {
+  const extraUsageTotals = buildExtraIngredientUsageTotals(events);
+  const result: Partial<Record<IngredientName, number>> = {};
+  for (const [name, fixedCount] of Object.entries(fixedTotals)) {
+    const ingredientName = name as IngredientName;
+    const baseCount = fixedCount ?? 0;
+    if (baseCount <= 0) {
+      continue;
+    }
+    result[ingredientName] = Math.max(0, baseCount - (extraUsageTotals[ingredientName] ?? 0));
+  }
+  return result;
+}
+
 interface TeamSummaryRowProps {
   teamSummary: TeamSummary;
   label?: string;
@@ -42,6 +71,9 @@ interface TeamSummaryRowProps {
   onValueModeChange?: (value: SummaryValueMode) => void;
   cookingResult?: CookingSimulationResult;
   averageCookingSummary?: AverageCookingSummary | null;
+  leftoverIncludeExtraUsage?: boolean;
+  onLeftoverIncludeExtraUsageChange?: (checked: boolean) => void;
+  showLeftoverIncludeExtraUsageToggle?: boolean;
 }
 
 const TeamSummaryRow = React.memo(({
@@ -54,6 +86,9 @@ const TeamSummaryRow = React.memo(({
   onValueModeChange,
   cookingResult,
   averageCookingSummary,
+  leftoverIncludeExtraUsage,
+  onLeftoverIncludeExtraUsageChange,
+  showLeftoverIncludeExtraUsageToggle = false,
 }: TeamSummaryRowProps) => {
   const { t } = useTranslation();
   const defaultLabel = layoutMode === 'average'
@@ -106,6 +141,21 @@ const TeamSummaryRow = React.memo(({
       ? convertByMode(teamSummary.totalCookingEP)
       : totalIngredientEP
   );
+  const includeExtraUsage = leftoverIncludeExtraUsage ?? true;
+  const detailsLeftoverTotals = cookingResult
+    ? (includeExtraUsage
+      ? cookingResult.leftoverIngredients.total
+      : computePostExtraLeftoverTotals(cookingResult.leftoverIngredients.total, cookingResult.events))
+    : {};
+  const hasDetailsLeftoverIngredients = Object.values(detailsLeftoverTotals)
+    .some((count) => (count ?? 0) > 0);
+  const averageLeftoverIngredients = averageCookingSummary
+    ? (includeExtraUsage
+      ? averageCookingSummary.leftoverIngredients
+      : (averageCookingSummary.leftoverIngredientsAfterExtra ?? averageCookingSummary.leftoverIngredients))
+    : [];
+  const shouldShowLeftoverToggle = showLeftoverIncludeExtraUsageToggle
+    && (layoutMode === 'details' ? Boolean(cookingResult) : Boolean(averageCookingSummary));
 
   return (
     <Wrapper data-layout={layoutMode}>
@@ -183,7 +233,9 @@ const TeamSummaryRow = React.memo(({
                         {cookingResult.dailySummaries.length > 1 && (
                             <DayCookingLabel>{dayIndex + 1}日目</DayCookingLabel>
                         )}
-                        {daySummary.events.map((event, eventIndex) => (
+                        {daySummary.events.map((event, eventIndex) => {
+                            const remainingPotCapacity = Math.max(0, Math.round(event.remainingPotCapacity));
+                            return (
                             <CookingEventLine key={`${dayIndex}-${eventIndex}`}>
                                 {event.isGreatSuccess && <GreatSuccessMark>&#x2757;</GreatSuccessMark>}
                                 <span className="recipe-name">
@@ -194,21 +246,22 @@ const TeamSummaryRow = React.memo(({
                                 <span className="cooking-ep">
                                     {event.cookingEP > 0 ? <EpValue value={Math.round(event.cookingEP).toLocaleString()} /> : '-'}
                                 </span>
-                                {event.remainingPotCapacity > 0 && (
+                                {remainingPotCapacity > 0 && (
                                     <span className="pot-remaining">
-                                        鍋空き{event.remainingPotCapacity}
+                                        鍋空き{remainingPotCapacity}
                                     </span>
                                 )}
                             </CookingEventLine>
-                        ))}
+                            );
+                        })}
                     </DayCookingGroup>
                 ))}
                 {/* あまり食材 */}
-                {Object.keys(cookingResult.leftoverIngredients.total).length > 0 && (
+                {hasDetailsLeftoverIngredients && (
                     <LeftoverSection>
                         <LeftoverLabel>あまり食材</LeftoverLabel>
                         <LeftoverIngredientList>
-                            {Object.entries(cookingResult.leftoverIngredients.total)
+                            {Object.entries(detailsLeftoverTotals)
                                 .filter(([, count]) => count != null && count > 0)
                                 .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
                                 .map(([name, count]) => (
@@ -219,6 +272,20 @@ const TeamSummaryRow = React.memo(({
                                 ))}
                         </LeftoverIngredientList>
                     </LeftoverSection>
+                )}
+                {shouldShowLeftoverToggle && (
+                    <LeftoverToggleLabel>
+                        <LeftoverToggleInput
+                            type="checkbox"
+                            checked={includeExtraUsage}
+                            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                                onLeftoverIncludeExtraUsageChange?.(event.target.checked);
+                            }}
+                            aria-label={t('TeamTimeline.cooking include extra usage in leftover', '追加食材使用分を含む')}
+                            data-testid={`leftover-extra-usage-toggle-${layoutMode}`}
+                        />
+                        <span>{t('TeamTimeline.cooking include extra usage in leftover', '追加食材使用分を含む')}</span>
+                    </LeftoverToggleLabel>
                 )}
                 <InitialIngredientEpLine>
                     {t('TeamTimeline.cooking initial ingredient ep total', '初期食材由来EP合計')}
@@ -232,7 +299,7 @@ const TeamSummaryRow = React.memo(({
             && (
               groupedAverageCookingRecipes.visibleRecipes.length > 0
               || groupedAverageCookingRecipes.groupedRecipes.length > 0
-              || averageCookingSummary.leftoverIngredients.length > 0
+              || averageLeftoverIngredients.length > 0
             ) && (
             <CookingSection>
                 <MetaLineBreak aria-hidden />
@@ -252,11 +319,11 @@ const TeamSummaryRow = React.memo(({
                         totalCount={groupedAverageCookingRecipes.groupedCount}
                     />
                 </AverageCookingRecipeLine>
-                {averageCookingSummary.leftoverIngredients.length > 0 && (
+                {averageLeftoverIngredients.length > 0 && (
                     <LeftoverSection>
                         <LeftoverLabel>あまり食材平均</LeftoverLabel>
                         <LeftoverIngredientList>
-                            {averageCookingSummary.leftoverIngredients.map((ingredient) => (
+                            {averageLeftoverIngredients.map((ingredient) => (
                                 <IngredientItem key={ingredient.name}>
                                     <IngredientIcon name={ingredient.name} />
                                     <span>{formatIngredientCount(ingredient.count)}</span>
@@ -264,6 +331,20 @@ const TeamSummaryRow = React.memo(({
                             ))}
                         </LeftoverIngredientList>
                     </LeftoverSection>
+                )}
+                {shouldShowLeftoverToggle && (
+                    <LeftoverToggleLabel>
+                        <LeftoverToggleInput
+                            type="checkbox"
+                            checked={includeExtraUsage}
+                            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                                onLeftoverIncludeExtraUsageChange?.(event.target.checked);
+                            }}
+                            aria-label={t('TeamTimeline.cooking include extra usage in leftover', '追加食材使用分を含む')}
+                            data-testid={`leftover-extra-usage-toggle-${layoutMode}`}
+                        />
+                        <span>{t('TeamTimeline.cooking include extra usage in leftover', '追加食材使用分を含む')}</span>
+                    </LeftoverToggleLabel>
                 )}
                 <InitialIngredientEpLine>
                     {t('TeamTimeline.cooking initial ingredient ep total', '初期食材由来EP合計')}
@@ -346,6 +427,23 @@ const MetaItem = styled('span')({
   '& .value': {
     fontWeight: 700,
   },
+});
+
+const LeftoverToggleLabel = styled('label')({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  fontSize: '12px',
+  lineHeight: '15px',
+  letterSpacing: '-0.48px',
+  cursor: 'pointer',
+});
+
+const LeftoverToggleInput = styled('input')({
+  margin: 0,
+  width: '12px',
+  height: '12px',
+  cursor: 'pointer',
 });
 
 const MetaLineBreak = styled('span')({

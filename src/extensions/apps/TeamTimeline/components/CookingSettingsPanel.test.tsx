@@ -224,7 +224,7 @@ describe('CookingSettingsPanel', () => {
         expect(defaults.disabledExtraIngredients).toEqual({});
     });
 
-    it('renders pot capacity as 12-99 / step 3 select and changes category via tabs', () => {
+    it('renders pot capacity as 12-99 / step 3 select and changes tab display only', () => {
         const onChange = vi.fn();
         render(<CookingSettingsPanel settings={createSettings()} onChange={onChange} />);
 
@@ -237,8 +237,18 @@ describe('CookingSettingsPanel', () => {
         fireEvent.change(potSelect, { target: { value: '30' } });
         expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ basePotCapacity: 30 }));
 
+        onChange.mockClear();
         fireEvent.click(screen.getByTestId('cooking-category-tab-salad'));
-        expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'salad' }));
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByTestId('recipe-row-lightSalad')).toBeDefined();
+        expect(screen.queryByTestId('recipe-row-megaStew')).toBeNull();
+    });
+
+    it('uses simulation-selected category as initial active tab', () => {
+        render(<CookingSettingsPanel settings={createSettings({ category: 'dessert' })} onChange={vi.fn()} />);
+
+        expect(screen.getByTestId('recipe-row-sweetDrink')).toBeDefined();
+        expect(screen.queryByTestId('recipe-row-megaStew')).toBeNull();
     });
 
     it('sorts recipes by level-1 base energy in descending order', () => {

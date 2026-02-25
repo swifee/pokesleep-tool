@@ -235,6 +235,28 @@ describe('TimelineCell ingredient ordering', () => {
         expect(screen.getByTestId('timeline-cell-pokemon-icon').textContent).toBe('25-14');
     });
 
+    it('renders pokemon icon in a circular frame with thin outline', () => {
+        const result = createTimeSlotResult({
+            energyEnd: 60,
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                pokemonIdForm={25}
+            />
+        );
+
+        const iconFrame = screen.getByTestId('timeline-cell-pokemon-icon');
+        const frameStyle = getComputedStyle(iconFrame);
+        expect(frameStyle.borderRadius).toBe('50%');
+        expect(frameStyle.borderTopWidth).toBe('0.5px');
+        expect(frameStyle.borderTopColor).toBe('rgb(200, 200, 200)');
+    });
+
     it('keeps pokemon icon visible for pre-simulation empty cell', () => {
         render(
             <TimelineCell
@@ -280,7 +302,8 @@ describe('TimelineCell ingredient ordering', () => {
         expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).toContain('5');
         expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).not.toContain('14');
         expect(screen.getByTestId('timeline-cell-simple-skill')).toBeDefined();
-        expect(screen.getByTestId('timeline-cell-simple-skill-none')).toBeDefined();
+        const simpleSkillOverflowIcon = screen.getByTestId('timeline-cell-simple-skill-none');
+        expect(simpleSkillOverflowIcon).toBeDefined();
         expect(screen.queryByTestId('timeline-cell-help-icon-work')).toBeNull();
     });
 
