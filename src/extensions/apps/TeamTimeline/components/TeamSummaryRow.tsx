@@ -233,7 +233,9 @@ const TeamSummaryRow = React.memo(({
                         {cookingResult.dailySummaries.length > 1 && (
                             <DayCookingLabel>{dayIndex + 1}日目</DayCookingLabel>
                         )}
-                        {daySummary.events.map((event, eventIndex) => (
+                        {daySummary.events.map((event, eventIndex) => {
+                            const remainingPotCapacity = Math.max(0, Math.round(event.remainingPotCapacity));
+                            return (
                             <CookingEventLine key={`${dayIndex}-${eventIndex}`}>
                                 {event.isGreatSuccess && <GreatSuccessMark>&#x2757;</GreatSuccessMark>}
                                 <span className="recipe-name">
@@ -244,13 +246,14 @@ const TeamSummaryRow = React.memo(({
                                 <span className="cooking-ep">
                                     {event.cookingEP > 0 ? <EpValue value={Math.round(event.cookingEP).toLocaleString()} /> : '-'}
                                 </span>
-                                {event.remainingPotCapacity > 0 && (
+                                {remainingPotCapacity > 0 && (
                                     <span className="pot-remaining">
-                                        鍋空き{event.remainingPotCapacity}
+                                        鍋空き{remainingPotCapacity}
                                     </span>
                                 )}
                             </CookingEventLine>
-                        ))}
+                            );
+                        })}
                     </DayCookingGroup>
                 ))}
                 {/* あまり食材 */}

@@ -22,6 +22,7 @@ const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed'
     const [helpAnchorElement, setHelpAnchorElement] = React.useState<HTMLButtonElement | null>(null);
 
     const BAG_COUNT_EPSILON = 1e-9;
+    const remainingPotCapacity = Math.max(0, Math.round(event.remainingPotCapacity));
 
     if (event.recipeName == null && event.cookingEP === 0) {
         return null; // Skip display if no recipe was cooked
@@ -203,7 +204,7 @@ const CookingResultRow = React.memo(({ event, teamSize, displayMode = 'detailed'
                                 <span>)</span>
                             </ExtraIngredientsGroup>
                         )}
-                        <PotInfo>{'\u934B\u7A7A\u304D'}{event.remainingPotCapacity}</PotInfo>
+                        <PotInfo>{'\u934B\u7A7A\u304D'}{remainingPotCapacity}</PotInfo>
                     </IngredientInfo>
                 )}
             </ContentCell>

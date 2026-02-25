@@ -329,6 +329,35 @@ describe('TeamSummaryRow', () => {
         expect((document.body.textContent ?? '')).toContain('初期食材由来EP合計 : 321 EP');
     });
 
+    it('renders remaining pot capacity in cooking details as integer when floating-point noise exists', () => {
+        const cookingResultWithFloatingPot: CookingSimulationResult = {
+            ...COOKING_RESULT,
+            dailySummaries: [
+                {
+                    events: [
+                        {
+                            ...COOKING_RESULT.dailySummaries[0]!.events[0]!,
+                            remainingPotCapacity: Number.parseFloat('76.0000000000003'),
+                        },
+                    ],
+                    totalCookingEP: 1000,
+                    greatSuccessCount: 0,
+                },
+            ],
+        };
+
+        render(
+            <TeamSummaryRow
+                teamSummary={TEAM_SUMMARY}
+                layoutMode="details"
+                cookingResult={cookingResultWithFloatingPot}
+            />
+        );
+
+        expect((document.body.textContent ?? '')).toContain('鍋空き76');
+        expect((document.body.textContent ?? '')).not.toContain('76.0000000000003');
+    });
+
     it('renders average cooking summary in requested format and groups recipes below 1.0 count', () => {
         const { container } = render(
             <TeamSummaryRow

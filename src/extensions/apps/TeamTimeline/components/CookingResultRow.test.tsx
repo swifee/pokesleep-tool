@@ -207,4 +207,16 @@ describe('CookingResultRow', () => {
         expect(screen.queryByText('+')).toBeNull();
         expect(screen.queryByText(/\u934B\u7A7A\u304D/)).toBeNull();
     });
+
+    it('renders remaining pot capacity as integer when floating-point noise exists', () => {
+        const event: CookingEventResult = {
+            ...EVENT,
+            remainingPotCapacity: Number.parseFloat('34.999999999999997'),
+        };
+
+        render(<CookingResultRow event={event} teamSize={5} />);
+
+        expect((document.body.textContent ?? '')).toContain('鍋空き35');
+        expect((document.body.textContent ?? '')).not.toContain('34.999999999999997');
+    });
 });
