@@ -304,7 +304,6 @@ describe('TimelineCell ingredient ordering', () => {
         expect(screen.getByTestId('timeline-cell-simple-skill')).toBeDefined();
         const simpleSkillOverflowIcon = screen.getByTestId('timeline-cell-simple-skill-none');
         expect(simpleSkillOverflowIcon).toBeDefined();
-        expect(getComputedStyle(simpleSkillOverflowIcon).color).toBe('rgb(158, 158, 158)');
         expect(screen.queryByTestId('timeline-cell-help-icon-work')).toBeNull();
     });
 

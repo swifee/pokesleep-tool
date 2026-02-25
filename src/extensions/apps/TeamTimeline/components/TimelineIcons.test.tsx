@@ -6,9 +6,12 @@ import TeamTimelineIcon, { TeamTimelineIconName } from './TimelineIcons';
 const ICON_NAMES: readonly TeamTimelineIconName[] = [
     'bag',
     'berry',
+    'change',
     'cooking',
     'dream',
     'heal',
+    'pickup',
+    'pickup_none',
     'skill',
     'skill_none',
     'sleep',
@@ -24,5 +27,12 @@ describe('TeamTimelineIcon', () => {
             expect(icon.tagName.toLowerCase()).toBe('svg');
             expect(icon.querySelector('path, circle, rect')).not.toBeNull();
         });
+    });
+
+    it('renders skill_none with transparent interior', () => {
+        render(<TeamTimelineIcon name="skill_none" data-testid="timeline-icon-skill-none-transparent" />);
+        const icon = screen.getByTestId('timeline-icon-skill-none-transparent');
+        expect(icon.querySelector('path')?.getAttribute('fill')).toBe('none');
+        expect(icon.querySelector('circle')?.getAttribute('fill')).toBe('none');
     });
 });

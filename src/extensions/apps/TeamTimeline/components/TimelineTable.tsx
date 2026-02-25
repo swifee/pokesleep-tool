@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { styled } from '@mui/system';
 import SettingsIcon from '@mui/icons-material/Settings';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +20,7 @@ import EpValue from './EpValue';
 import CookingResultRow from './CookingResultRow';
 import DailySummaryRow from './DailySummaryRow';
 import TeamSummaryRow from './TeamSummaryRow';
+import TeamTimelineIcon from './TimelineIcons';
 import { buildExpandedTimeline } from '../utils/TimelineDayExpansion';
 import { buildStrengthParameterFromTimelineBonusSettings } from '../utils/TimelineBonusSettingsBridge';
 import { calculateBerryEP, calculateIngredientEP, DailySummaryBonusContext } from '../simulation/EnergyPointCalculator';
@@ -636,7 +636,12 @@ const TimelineTable = React.memo(({
             }px, 0) scale(${swapDragLifted ? 1 : 0.96})`,
           }}
         >
-          <SwapHorizIcon className="swap-icon" sx={{ fontSize: 14 }} />
+          <TeamTimelineIcon
+            name="change"
+            className="swap-icon"
+            data-testid="timeline-swap-drag-ghost-icon"
+            data-icon-name="change"
+          />
           <span className="swap-name">{swapDragPreview.label}</span>
           <span className="swap-remove" aria-hidden="true">
             <CloseIcon className="swap-remove-icon" sx={{ fontSize: 14 }} />
@@ -894,7 +899,8 @@ const SwapDragGhost = styled('div')({
   fontFamily: '"M PLUS 1p", sans-serif',
   willChange: 'transform',
   '& .swap-icon': {
-    color: '#62d540',
+    width: '12px',
+    height: '12px',
     flexShrink: 0,
   },
   '& .swap-name': {

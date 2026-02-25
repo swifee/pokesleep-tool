@@ -68,6 +68,25 @@ describe('TimelineCell swap ui', () => {
         expect(container.querySelector('.swap-info')).toBeNull();
     });
 
+    it('uses the change icon for swap button and removes circular outer styling', () => {
+        render(
+            <TimelineCell
+                result={null}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                onSwapClick={vi.fn()}
+            />
+        );
+
+        const swapButton = screen.getByTestId('timeline-cell-swap-toggle');
+        const swapIcon = screen.getByTestId('timeline-cell-swap-icon');
+        const style = getComputedStyle(swapButton);
+        expect(swapIcon.getAttribute('data-icon-name')).toBe('change');
+        expect(style.borderTopStyle).toBe('none');
+        expect(Number.parseFloat(style.borderRadius)).toBe(0);
+    });
+
     it('shows no-collect button in off state by default and calls toggle handler', () => {
         const onNoCollectToggle = vi.fn();
 
@@ -77,13 +96,26 @@ describe('TimelineCell swap ui', () => {
                 isSleeping={false}
                 slotId="slot-1"
                 teamIndex={0}
+                onSwapClick={vi.fn()}
                 onNoCollectToggle={onNoCollectToggle}
             />
         );
 
         const button = screen.getByTestId('timeline-cell-no-collect-toggle');
+        const icon = screen.getByTestId('timeline-cell-no-collect-icon');
+        const swapIcon = screen.getByTestId('timeline-cell-swap-icon');
+        const style = getComputedStyle(button);
+        const iconStyle = getComputedStyle(icon);
+        const swapIconStyle = getComputedStyle(swapIcon);
         expect(button.getAttribute('data-enabled')).toBe('false');
         expect(button.getAttribute('data-always-visible')).toBe('false');
+        expect(icon.getAttribute('data-icon-name')).toBe('pickup');
+        expect(iconStyle.width).toBe('20px');
+        expect(iconStyle.height).toBe('20px');
+        expect(iconStyle.width).toBe(swapIconStyle.width);
+        expect(iconStyle.height).toBe(swapIconStyle.height);
+        expect(style.borderTopStyle).toBe('none');
+        expect(Number.parseFloat(style.borderRadius)).toBe(0);
         fireEvent.click(button);
         expect(onNoCollectToggle).toHaveBeenCalledTimes(1);
     });
@@ -96,11 +128,21 @@ describe('TimelineCell swap ui', () => {
                 slotId="slot-1"
                 teamIndex={0}
                 noCollectEnabled
+                onSwapClick={vi.fn()}
                 onNoCollectToggle={vi.fn()}
             />
         );
 
         expect(screen.getByTestId('timeline-cell-no-collect-toggle').getAttribute('data-enabled')).toBe('true');
+        const icon = screen.getByTestId('timeline-cell-no-collect-icon');
+        const swapIcon = screen.getByTestId('timeline-cell-swap-icon');
+        const iconStyle = getComputedStyle(icon);
+        const swapIconStyle = getComputedStyle(swapIcon);
+        expect(icon.getAttribute('data-icon-name')).toBe('pickup_none');
+        expect(iconStyle.width).toBe('20px');
+        expect(iconStyle.height).toBe('20px');
+        expect(iconStyle.width).toBe(swapIconStyle.width);
+        expect(iconStyle.height).toBe(swapIconStyle.height);
     });
 
     it('keeps no-collect button always visible when alwaysShowSwapButton is enabled', () => {

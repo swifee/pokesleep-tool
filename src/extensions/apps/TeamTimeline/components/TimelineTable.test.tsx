@@ -606,6 +606,7 @@ describe('TimelineTable', () => {
 
         fireEvent.click(screen.getByTestId('swap-longpress-0-wake'));
         expect(screen.getByTestId('timeline-swap-drag-ghost')).toBeDefined();
+        expect(screen.getByTestId('timeline-swap-drag-ghost-icon').getAttribute('data-icon-name')).toBe('change');
 
         fireEvent.pointerUp(window, { pointerId: 7, clientX: 10, clientY: 10 });
         expect(screen.queryByTestId('timeline-swap-drag-ghost')).toBeNull();

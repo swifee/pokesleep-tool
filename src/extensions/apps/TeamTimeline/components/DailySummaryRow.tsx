@@ -245,68 +245,70 @@ const DailySummaryRow = React.memo(({
                                 <TotalLine><EpValue value={formatSummaryEp(totalEP)} /></TotalLine>
                             </EPBox>
 
-                            <Line data-testid={`daily-summary-count-help-${summary.pokemonId}`}>
-                                <TeamTimelineIcon name="work" data-testid={`daily-summary-count-icon-work-${summary.pokemonId}`} />
-                                {formatSummaryNumber(totalHelpCount)}
-                            </Line>
-                            <Line data-testid={`daily-summary-count-berry-${summary.pokemonId}`}>
-                                <TeamTimelineIcon name="berry" data-testid={`daily-summary-count-icon-berry-${summary.pokemonId}`} />
-                                {formatSummaryNumber(totalBerryCount)}
-                            </Line>
-                            <Line data-testid={`daily-summary-count-skill-${summary.pokemonId}`}>
-                                <TeamTimelineIcon name="skill" data-testid={`daily-summary-count-icon-skill-${summary.pokemonId}`} />
-                                <SkillIngredientPopoverTrigger
-                                    countLabel={formatSummaryNumber(totalSkillCount)}
-                                    ingredients={sortedSkillIngredients}
-                                    triggerTestId={`skill-ingredient-trigger-${summary.pokemonId}`}
-                                />
-                                {totalSkillOverflowCount > 0 && (
-                                    <SkillOverflowIcon>
-                                        <TeamTimelineIcon name="skill_none" data-testid={`daily-summary-count-icon-skill-overflow-${summary.pokemonId}`} />
-                                        {formatSummaryNumber(totalSkillOverflowCount)}
-                                    </SkillOverflowIcon>
-                                )}
-                            </Line>
-                            <IngredientLine>
-                                <IngredientTotalItem>
-                                    食材合計: <span className="value">{formatSummaryInteger(ingredientTotalCount)}</span>
-                                </IngredientTotalItem>
-                                {displayIngredients.map((ing) => (
-                                    <IngredientItem key={`${summary.pokemonId}-${ing.name}`}>
-                                        <IngredientIcon name={ing.name} />
-                                        {formatIngredientCount(ing.count)}
-                                    </IngredientItem>
-                                ))}
-                                {layoutMode === 'average' && (
-                                    <IngredientOthersPopover
-                                        ingredients={groupedAverageIngredients.groupedIngredients}
-                                        totalCount={groupedAverageIngredients.groupedCount}
-                                        withLeadingSpace
+                            <MetricsArea data-testid={`daily-summary-metrics-${summary.pokemonId}`}>
+                                <Line data-testid={`daily-summary-count-help-${summary.pokemonId}`}>
+                                    <TeamTimelineIcon name="work" data-testid={`daily-summary-count-icon-work-${summary.pokemonId}`} />
+                                    {formatSummaryNumber(totalHelpCount)}
+                                </Line>
+                                <Line data-testid={`daily-summary-count-berry-${summary.pokemonId}`}>
+                                    <TeamTimelineIcon name="berry" data-testid={`daily-summary-count-icon-berry-${summary.pokemonId}`} />
+                                    {formatSummaryNumber(totalBerryCount)}
+                                </Line>
+                                <Line data-testid={`daily-summary-count-skill-${summary.pokemonId}`}>
+                                    <TeamTimelineIcon name="skill" data-testid={`daily-summary-count-icon-skill-${summary.pokemonId}`} />
+                                    <SkillIngredientPopoverTrigger
+                                        countLabel={formatSummaryNumber(totalSkillCount)}
+                                        ingredients={sortedSkillIngredients}
+                                        triggerTestId={`skill-ingredient-trigger-${summary.pokemonId}`}
                                     />
-                                )}
-                            </IngredientLine>
-                            <OverflowContainer style={{ visibility: overflowIngredients.length > 0 ? 'visible' : 'hidden' }}>
-                                <OverflowBracket>(</OverflowBracket>
-                                {overflowIngredients.map((ing) => (
-                                    <OverflowIngredientItem key={`overflow-${summary.pokemonId}-${ing.name}`}>
-                                        <IngredientIcon name={ing.name} />
-                                        <span>{formatIngredientCount(ing.count)}</span>
-                                    </OverflowIngredientItem>
-                                ))}
-                                <OverflowBracket>)</OverflowBracket>
-                            </OverflowContainer>
+                                    {totalSkillOverflowCount > 0 && (
+                                        <SkillOverflowIcon data-testid={`daily-summary-count-skill-overflow-${summary.pokemonId}`}>
+                                            <TeamTimelineIcon name="skill_none" data-testid={`daily-summary-count-icon-skill-overflow-${summary.pokemonId}`} />
+                                            {formatSummaryNumber(totalSkillOverflowCount)}
+                                        </SkillOverflowIcon>
+                                    )}
+                                </Line>
+                                <IngredientLine>
+                                    <IngredientTotalItem>
+                                        食材合計: <span className="value">{formatSummaryInteger(ingredientTotalCount)}</span>
+                                    </IngredientTotalItem>
+                                    {displayIngredients.map((ing) => (
+                                        <IngredientItem key={`${summary.pokemonId}-${ing.name}`}>
+                                            <IngredientIcon name={ing.name} />
+                                            {formatIngredientCount(ing.count)}
+                                        </IngredientItem>
+                                    ))}
+                                    {layoutMode === 'average' && (
+                                        <IngredientOthersPopover
+                                            ingredients={groupedAverageIngredients.groupedIngredients}
+                                            totalCount={groupedAverageIngredients.groupedCount}
+                                            withLeadingSpace
+                                        />
+                                    )}
+                                </IngredientLine>
+                                <OverflowContainer style={{ visibility: overflowIngredients.length > 0 ? 'visible' : 'hidden' }}>
+                                    <OverflowBracket>(</OverflowBracket>
+                                    {overflowIngredients.map((ing) => (
+                                        <OverflowIngredientItem key={`overflow-${summary.pokemonId}-${ing.name}`}>
+                                            <IngredientIcon name={ing.name} />
+                                            <span>{formatIngredientCount(ing.count)}</span>
+                                        </OverflowIngredientItem>
+                                    ))}
+                                    <OverflowBracket>)</OverflowBracket>
+                                </OverflowContainer>
 
-                            <OptionLine style={{ visibility: hasOptionLine ? 'visible' : 'hidden' }}>
-                                {totalPresentCandyCount > 0 && <span>🍬{formatSummaryNumber(totalPresentCandyCount)}</span>}
-                                {totalCookingPotCapacityIncrease > 0 && <span>鍋+{formatSummaryNumber(totalCookingPotCapacityIncrease)}</span>}
-                                {totalTastyChanceIncreasePercent > 0 && <span>料理チャンス+{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</span>}
-                                {totalDreamShardCount > 0 && (
-                                    <span>
-                                        <TeamTimelineIcon name="dream" data-testid={`daily-summary-option-icon-dream-${summary.pokemonId}`} />
-                                        +{formatSummaryNumber(totalDreamShardCount)}
-                                    </span>
-                                )}
-                            </OptionLine>
+                                <OptionLine style={{ visibility: hasOptionLine ? 'visible' : 'hidden' }}>
+                                    {totalPresentCandyCount > 0 && <span>🍬{formatSummaryNumber(totalPresentCandyCount)}</span>}
+                                    {totalCookingPotCapacityIncrease > 0 && <span>鍋+{formatSummaryNumber(totalCookingPotCapacityIncrease)}</span>}
+                                    {totalTastyChanceIncreasePercent > 0 && <span>料理チャンス+{formatSummaryNumber(totalTastyChanceIncreasePercent)}%</span>}
+                                    {totalDreamShardCount > 0 && (
+                                        <span>
+                                            <TeamTimelineIcon name="dream" data-testid={`daily-summary-option-icon-dream-${summary.pokemonId}`} />
+                                            +{formatSummaryNumber(totalDreamShardCount)}
+                                        </span>
+                                    )}
+                                </OptionLine>
+                            </MetricsArea>
                         </SummaryCard>
                     );
                 })}
@@ -400,6 +402,10 @@ const SummaryHeader = styled('div')({
     },
 });
 
+const MetricsArea = styled('div')({
+    marginLeft: '4px',
+});
+
 const Line = styled('div')({
     display: 'flex',
     alignItems: 'center',
@@ -417,13 +423,15 @@ const Line = styled('div')({
 const SkillOverflowIcon = styled('span')({
     display: 'inline-flex',
     alignItems: 'center',
-    fontSize: '10px',
+    fontSize: '12px',
+    lineHeight: '15px',
+    letterSpacing: '-0.48px',
+    fontWeight: 400,
     color: '#9e9e9e',
-    fontWeight: 600,
     marginLeft: '2px',
     '& svg': {
-        width: '10px',
-        height: '10px',
+        width: '12px',
+        height: '12px',
         marginRight: '1px',
     },
 });
