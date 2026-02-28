@@ -56,6 +56,29 @@ interface TimelineCellProps {
     onNoCollectToggle?: () => void;
 }
 
+const ENERGY_BAR_COLOR_HIGH = '#62d540';
+const ENERGY_BAR_COLOR_MID_HIGH = '#34cbbf';
+const ENERGY_BAR_COLOR_MID = '#4e9ff2';
+const ENERGY_BAR_COLOR_LOW = '#b792f2';
+const ENERGY_BAR_COLOR_CRITICAL = '#a9a9a9';
+const ENERGY_BAR_TRACK_COLOR = '#f3f4f6';
+
+function getEnergyBarColor(energy: number): string {
+    if (energy >= 80) {
+        return ENERGY_BAR_COLOR_HIGH;
+    }
+    if (energy >= 60) {
+        return ENERGY_BAR_COLOR_MID_HIGH;
+    }
+    if (energy >= 40) {
+        return ENERGY_BAR_COLOR_MID;
+    }
+    if (energy >= 20) {
+        return ENERGY_BAR_COLOR_LOW;
+    }
+    return ENERGY_BAR_COLOR_CRITICAL;
+}
+
 /**
  * Display simulation results for 1 Pokemon x 1 time slot
  */
@@ -499,6 +522,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     const totalSkillRecoveryInEnergyLine =
         Math.round(result.skillRecovery + result.selfSkillRecovery);
     const energyBarWidth = Math.max(0, Math.min(100, (result.energyEnd / 150) * 100));
+    const energyBarColor = getEnergyBarColor(result.energyEnd);
     const moonlightEvents = result.moonlightEvents ?? [];
     const cookingMinusEvents = result.cookingMinusEvents ?? [];
     const proxySkillEvents = result.proxySkillEvents ?? [];
@@ -544,7 +568,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     {renderPokemonIcon()}
                     <SimpleRightArea>
                         <SimpleEnergyBarTrack>
-                            <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                            <EnergyBarFill
+                                data-testid="timeline-cell-energy-bar-fill"
+                                style={{ width: `${energyBarWidth}%`, backgroundColor: energyBarColor }}
+                            />
                         </SimpleEnergyBarTrack>
                         <SimpleMetricsLine>
                             <SimpleMetricBadge data-testid="timeline-cell-simple-berry">
@@ -819,7 +846,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                         げんき{Math.round(result.energyEnd)}
                     </EnergyLine>
                     <EnergyBarTrack>
-                        <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                        <EnergyBarFill
+                            data-testid="timeline-cell-energy-bar-fill"
+                            style={{ width: `${energyBarWidth}%`, backgroundColor: energyBarColor }}
+                        />
                     </EnergyBarTrack>
                 </EnergySummary>
             </TopEnergyArea>
@@ -1416,13 +1446,12 @@ const EnergyBarTrack = styled('div')({
     height: '3px',
     marginTop: '-1px',
     borderRadius: '999px',
-    backgroundColor: '#d5ead0',
+    backgroundColor: ENERGY_BAR_TRACK_COLOR,
     overflow: 'hidden',
 });
 
 const EnergyBarFill = styled('div')({
     height: '100%',
-    backgroundColor: '#62d540',
     borderRadius: '999px',
 });
 

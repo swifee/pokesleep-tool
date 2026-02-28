@@ -332,6 +332,75 @@ describe('TimelineCell ingredient ordering', () => {
         expect(screen.queryByTestId('timeline-cell-help-icon-work')).toBeNull();
     });
 
+    it.each([
+        { energyEnd: 80, expectedColor: 'rgb(98, 213, 64)' },
+        { energyEnd: 79, expectedColor: 'rgb(52, 203, 191)' },
+        { energyEnd: 60, expectedColor: 'rgb(52, 203, 191)' },
+        { energyEnd: 59, expectedColor: 'rgb(78, 159, 242)' },
+        { energyEnd: 40, expectedColor: 'rgb(78, 159, 242)' },
+        { energyEnd: 39, expectedColor: 'rgb(183, 146, 242)' },
+        { energyEnd: 20, expectedColor: 'rgb(183, 146, 242)' },
+        { energyEnd: 19, expectedColor: 'rgb(169, 169, 169)' },
+        { energyEnd: 0, expectedColor: 'rgb(169, 169, 169)' },
+    ])('applies range color to detailed energy bar (energyEnd=$energyEnd)', ({ energyEnd, expectedColor }) => {
+        const result = createTimeSlotResult({
+            energyEnd,
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
+        );
+
+        expect(getComputedStyle(screen.getByTestId('timeline-cell-energy-bar-fill')).backgroundColor).toBe(expectedColor);
+    });
+
+    it.each([
+        { energyEnd: 79, expectedColor: 'rgb(52, 203, 191)' },
+        { energyEnd: 59, expectedColor: 'rgb(78, 159, 242)' },
+        { energyEnd: 39, expectedColor: 'rgb(183, 146, 242)' },
+        { energyEnd: 19, expectedColor: 'rgb(169, 169, 169)' },
+    ])('applies range color to simple energy bar (energyEnd=$energyEnd)', ({ energyEnd, expectedColor }) => {
+        const result = createTimeSlotResult({
+            energyEnd,
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+                displayMode="simple"
+            />
+        );
+
+        expect(getComputedStyle(screen.getByTestId('timeline-cell-energy-bar-fill')).backgroundColor).toBe(expectedColor);
+    });
+
+    it('uses very light gray color for energy bar track', () => {
+        const result = createTimeSlotResult({
+            energyEnd: 60,
+        });
+
+        render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
+        );
+
+        const fill = screen.getByTestId('timeline-cell-energy-bar-fill');
+        expect(fill.parentElement).not.toBeNull();
+        expect(getComputedStyle(fill.parentElement as HTMLElement).backgroundColor).toBe('rgb(243, 244, 246)');
+    });
+
     it('hides simple mode skill icons when trigger and overflow are zero', () => {
         const result = createTimeSlotResult({
             skillTriggerCount: 0,
