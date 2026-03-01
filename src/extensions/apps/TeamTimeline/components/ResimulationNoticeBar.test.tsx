@@ -26,4 +26,39 @@ describe('ResimulationNoticeBar', () => {
         fireEvent.click(screen.getByRole('button', { name: '再シミュレーション' }));
         expect(onResimulate).toHaveBeenCalledTimes(1);
     });
+
+    it('renders result summary and handles undo/close callbacks', () => {
+        const onUndo = vi.fn();
+        const onClose = vi.fn();
+        render(
+            <ResimulationNoticeBar
+                open
+                mode="result"
+                deltaSummary={{
+                    averageTotalEP: 100000,
+                    totalDeltaEP: 10000,
+                    berryDeltaEP: 2000,
+                    skillDeltaEP: 3000,
+                    cookingDeltaEP: 5000,
+                }}
+                onResimulate={vi.fn()}
+                onUndo={onUndo}
+                onClose={onClose}
+            />
+        );
+
+        expect(screen.getByTestId('resimulation-result-total').textContent).toContain('total 100,000EP (+10,000)');
+        expect(screen.getByTestId('resimulation-result-item-berry').textContent).toContain('+2,000');
+        expect(screen.getByTestId('resimulation-result-item-skill').textContent).toContain('+3,000');
+        expect(screen.getByTestId('resimulation-result-item-cooking').textContent).toContain('+5,000');
+        expect(screen.getByTestId('resimulation-result-icon-berry')).toBeDefined();
+        expect(screen.getByTestId('resimulation-result-icon-skill')).toBeDefined();
+        expect(screen.getByTestId('resimulation-result-icon-cooking')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: '元に戻す' }));
+        fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+        expect(onUndo).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
 });

@@ -54,6 +54,8 @@ import {
     SWAP_NONE_POKEMON_ID,
     SimulationResult,
     NoCollectCellSetting,
+    TeamSummary,
+    DailySummary,
 } from './types/TimeSlotTypes';
 import { runSimulation } from './simulation/TimelineSimulator';
 import SimulationControls from './components/SimulationControls';
@@ -66,11 +68,14 @@ import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
 import { CookingSimulationSettings } from './types/CookingTypes';
 import { saveCookingSettingsToStorage, loadCookingSettingsFromStorage } from './utils/CookingSettingsStorage';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
-import { TeamSetState } from './types/TeamTimelineTypes';
+import { TeamSetState, TeamSetSimulationSnapshot } from './types/TeamTimelineTypes';
 import SummaryValueModeToggle from './components/SummaryValueModeToggle';
+import type { ResimulationDeltaSummary } from './components/ResimulationNoticeBar';
 import ResimulationNoticeBar from './components/ResimulationNoticeBar';
 import AdditionalAnalysisPanel from './components/AdditionalAnalysisPanel';
 import WipeReveal from './components/WipeReveal';
+import type { TrialSummary } from './types/MultiTrialTypes';
+import type { AverageCookingSummary } from './types/CookingTypes';
 import {
     ContributionEpAnalysisResult,
     HelpingBonusContributionResult,
@@ -140,6 +145,32 @@ interface PendingSwapRemoval {
     hasFutureRepeat: boolean;
 }
 
+interface ResimulationMetricSummary {
+    totalEP: number;
+    berryEP: number;
+    skillEP: number;
+    cookingEP: number;
+}
+
+interface ResimulationUndoSnapshot {
+    team: (PokemonBoxItem | null)[];
+    swaps: PokemonSwap[];
+    noCollectCells: NoCollectCellSetting[];
+    simulationResult: SimulationResult;
+    multiTrialResults: TrialSummary[] | null;
+    multiTrialSelectedIndex: number | null;
+    multiTrialAverageDailySummaries: DailySummary[] | null;
+    multiTrialAverageTeamSummary: TeamSummary | null;
+    multiTrialAverageCookingSummary: AverageCookingSummary | null;
+    simulationSeed: number;
+    teamSetSimulationSnapshot: TeamSetSimulationSnapshot | null;
+}
+
+interface SimulationExecutionResult {
+    averageSummary: ResimulationMetricSummary;
+    undoSnapshot: ResimulationUndoSnapshot;
+}
+
 const ANALYSIS_PROGRESS_UPDATE_INTERVAL_MS = 200;
 const ABORT_ERROR_NAME = 'AbortError';
 const TIMELINE_WIPE_REVEAL_DURATION_MS = 800;
@@ -173,6 +204,37 @@ function createAbortError(): Error {
 
 function isAbortError(error: unknown): boolean {
     return error instanceof Error && error.name === ABORT_ERROR_NAME;
+}
+
+function toResimulationMetricSummary(teamSummary: TeamSummary): ResimulationMetricSummary {
+    return {
+        totalEP: teamSummary.grandTotalEP,
+        berryEP: teamSummary.totalBerryEP,
+        skillEP: teamSummary.totalSkillEP,
+        cookingEP: teamSummary.totalCookingEP ?? 0,
+    };
+}
+
+function toResimulationDeltaSummary(
+    baseline: ResimulationMetricSummary,
+    next: ResimulationMetricSummary,
+): ResimulationDeltaSummary {
+    return {
+        averageTotalEP: next.totalEP,
+        totalDeltaEP: next.totalEP - baseline.totalEP,
+        berryDeltaEP: next.berryEP - baseline.berryEP,
+        skillDeltaEP: next.skillEP - baseline.skillEP,
+        cookingDeltaEP: next.cookingEP - baseline.cookingEP,
+    };
+}
+
+function resolveResimulationSummaryFromSnapshot(
+    snapshot: ResimulationUndoSnapshot,
+): ResimulationMetricSummary {
+    if (snapshot.multiTrialAverageTeamSummary !== null) {
+        return toResimulationMetricSummary(snapshot.multiTrialAverageTeamSummary);
+    }
+    return toResimulationMetricSummary(snapshot.simulationResult.teamSummary);
 }
 
 function buildAverageMetricsFromSummaries(
@@ -290,6 +352,8 @@ export default function TeamTimelineApp() {
     const [leftoverIncludeExtraUsage, setLeftoverIncludeExtraUsage] = useState(false);
     const [simulationProgress, setSimulationProgress] = useState(0);
     const [showResimulationNotice, setShowResimulationNotice] = useState(false);
+    const [resimulationDeltaSummary, setResimulationDeltaSummary] = useState<ResimulationDeltaSummary | null>(null);
+    const [resimulationUndoSnapshot, setResimulationUndoSnapshot] = useState<ResimulationUndoSnapshot | null>(null);
     const [pendingSwapRemoval, setPendingSwapRemoval] = useState<PendingSwapRemoval | null>(null);
     const [removeFutureRepeatChecked, setRemoveFutureRepeatChecked] = useState(false);
     const [analysisQuickModeEnabled, setAnalysisQuickModeEnabled] = useState(true);
@@ -317,6 +381,8 @@ export default function TeamTimelineApp() {
     const [helpingBonusProgress, setHelpingBonusProgress] = useState(0);
     const [energyRecoveryBonusProgress, setEnergyRecoveryBonusProgress] = useState(0);
     const simulationAbortControllerRef = useRef<AbortController | null>(null);
+    const suppressResimulationNoticeRef = useRef(false);
+    const lastSimulatedSnapshotRef = useRef<ResimulationUndoSnapshot | null>(null);
     const analysisRunVersionRef = useRef(0);
     const previousActiveTabRef = useRef(state.activeTab);
 
@@ -501,9 +567,14 @@ export default function TeamTimelineApp() {
         if (previousSignature === null || previousSignature === signature) {
             return;
         }
+        if (suppressResimulationNoticeRef.current) {
+            return;
+        }
         if (state.simulationResult === null) {
             return;
         }
+        setResimulationDeltaSummary(null);
+        setResimulationUndoSnapshot(null);
         setShowResimulationNotice(true);
     }, [state.swaps, state.simulationResult, isInitialized]);
 
@@ -520,9 +591,14 @@ export default function TeamTimelineApp() {
         if (previousSignature === null || previousSignature === signature) {
             return;
         }
+        if (suppressResimulationNoticeRef.current) {
+            return;
+        }
         if (state.simulationResult === null) {
             return;
         }
+        setResimulationDeltaSummary(null);
+        setResimulationUndoSnapshot(null);
         setShowResimulationNotice(true);
     }, [state.noCollectCells, state.simulationResult, isInitialized]);
 
@@ -539,9 +615,14 @@ export default function TeamTimelineApp() {
         if (previousSignature === null || previousSignature === signature) {
             return;
         }
+        if (suppressResimulationNoticeRef.current) {
+            return;
+        }
         if (state.simulationResult === null) {
             return;
         }
+        setResimulationDeltaSummary(null);
+        setResimulationUndoSnapshot(null);
         setShowResimulationNotice(true);
     }, [state.team, state.simulationResult, isInitialized]);
 
@@ -623,7 +704,7 @@ export default function TeamTimelineApp() {
         }
     }, [selectedSlotIndex]);
 
-    const runSingleSimulationWithSeed = useCallback((seed: number) => {
+    const runSingleSimulationWithSeed = useCallback((seed: number): SimulationExecutionResult => {
         const result = runSimulation({
             team: state.team,
             timeSlots: state.timeSlots,
@@ -647,6 +728,26 @@ export default function TeamTimelineApp() {
             },
         });
         dispatch({ type: 'updateSimulationConfig', config: { seed } });
+        const teamSetSimulationSnapshot: TeamSetSimulationSnapshot = {
+            averageTotalEP: result.teamSummary.grandTotalEP,
+            settingsHash: currentSimulationContextHash,
+        };
+        return {
+            averageSummary: toResimulationMetricSummary(result.teamSummary),
+            undoSnapshot: {
+                team: [...state.team],
+                swaps: [...state.swaps],
+                noCollectCells: [...state.noCollectCells],
+                simulationResult: result,
+                multiTrialResults: null,
+                multiTrialSelectedIndex: null,
+                multiTrialAverageDailySummaries: null,
+                multiTrialAverageTeamSummary: null,
+                multiTrialAverageCookingSummary: null,
+                simulationSeed: seed,
+                teamSetSimulationSnapshot,
+            },
+        };
     }, [
         state.team,
         state.timeSlots,
@@ -663,7 +764,7 @@ export default function TeamTimelineApp() {
         initialSeed?: number,
         preferredSeed?: number,
         abortSignal?: AbortSignal
-    ) => {
+    ): Promise<SimulationExecutionResult> => {
         let hasShownFirstTrialPreview = false;
         const multiResult = await runMultiTrialSimulationWithProgress({
             team: state.team,
@@ -740,11 +841,32 @@ export default function TeamTimelineApp() {
                 settingsHash: currentSimulationContextHash,
             },
         });
+        const teamSetSimulationSnapshot: TeamSetSimulationSnapshot = {
+            averageTotalEP: multiResult.averageTeamSummary.grandTotalEP,
+            settingsHash: currentSimulationContextHash,
+        };
+        return {
+            averageSummary: toResimulationMetricSummary(multiResult.averageTeamSummary),
+            undoSnapshot: {
+                team: [...state.team],
+                swaps: [...state.swaps],
+                noCollectCells: [...state.noCollectCells],
+                simulationResult: fullResult,
+                multiTrialResults: [...multiResult.trials],
+                multiTrialSelectedIndex: selectedIndex,
+                multiTrialAverageDailySummaries: [...multiResult.averageDailySummaries],
+                multiTrialAverageTeamSummary: multiResult.averageTeamSummary,
+                multiTrialAverageCookingSummary: multiResult.averageCookingSummary,
+                simulationSeed: state.simulationConfig.seed,
+                teamSetSimulationSnapshot,
+            },
+        };
     }, [
         state.team,
         state.timeSlots,
         state.simulationConfig.initialEnergy,
         state.simulationConfig.simulationDays,
+        state.simulationConfig.seed,
         state.bonusSettings,
         state.swaps,
         state.noCollectCells,
@@ -758,7 +880,7 @@ export default function TeamTimelineApp() {
         preferredSeed?: number;
         forceMultiTrial?: boolean;
         abortSignal?: AbortSignal;
-    }) => {
+    }): Promise<SimulationExecutionResult | null> => {
         const validTeam = state.team.filter(p => p !== null);
         if (validTeam.length === 0) {
             throw new Error('チームにポケモンを追加してください');
@@ -767,12 +889,12 @@ export default function TeamTimelineApp() {
         const forceMultiTrial = options?.forceMultiTrial === true;
         if (!forceMultiTrial && state.seedMode === 'fixed' && state.multiTrialCount === 1) {
             if (options?.abortSignal?.aborted) {
-                return;
+                return null;
             }
             setSimulationProgress(30);
-            runSingleSimulationWithSeed(state.simulationConfig.seed);
+            const singleResult = runSingleSimulationWithSeed(state.simulationConfig.seed);
             setSimulationProgress(100);
-            return;
+            return singleResult;
         }
 
         const initialSeed = options?.forcedInitialSeed ?? (
@@ -780,8 +902,9 @@ export default function TeamTimelineApp() {
                 ? state.simulationConfig.seed
                 : undefined
         );
-        await runMultiTrialWithSeed(initialSeed, options?.preferredSeed, options?.abortSignal);
+        const multiResult = await runMultiTrialWithSeed(initialSeed, options?.preferredSeed, options?.abortSignal);
         setSimulationProgress(100);
+        return multiResult;
     }, [
         state.team,
         state.seedMode,
@@ -791,15 +914,69 @@ export default function TeamTimelineApp() {
         runMultiTrialWithSeed,
     ]);
 
+    const buildSnapshotFromCurrentState = useCallback((): ResimulationUndoSnapshot | null => {
+        if (state.simulationResult === null) {
+            return null;
+        }
+        return {
+            team: [...state.team],
+            swaps: [...state.swaps],
+            noCollectCells: [...state.noCollectCells],
+            simulationResult: state.simulationResult,
+            multiTrialResults: state.multiTrialResults ? [...state.multiTrialResults] : null,
+            multiTrialSelectedIndex: state.multiTrialSelectedIndex,
+            multiTrialAverageDailySummaries: state.multiTrialAverageDailySummaries
+                ? [...state.multiTrialAverageDailySummaries]
+                : null,
+            multiTrialAverageTeamSummary: state.multiTrialAverageTeamSummary,
+            multiTrialAverageCookingSummary: state.multiTrialAverageCookingSummary,
+            simulationSeed: state.simulationConfig.seed,
+            teamSetSimulationSnapshot: state.teamSets[state.activeTeamSetIndex]?.lastSimulationSnapshot ?? null,
+        };
+    }, [
+        state.activeTeamSetIndex,
+        state.multiTrialAverageCookingSummary,
+        state.multiTrialAverageDailySummaries,
+        state.multiTrialAverageTeamSummary,
+        state.multiTrialResults,
+        state.multiTrialSelectedIndex,
+        state.noCollectCells,
+        state.simulationConfig.seed,
+        state.simulationResult,
+        state.swaps,
+        state.team,
+        state.teamSets,
+    ]);
+
+    useEffect(() => {
+        if (lastSimulatedSnapshotRef.current !== null) {
+            return;
+        }
+        const currentSnapshot = buildSnapshotFromCurrentState();
+        if (currentSnapshot !== null) {
+            lastSimulatedSnapshotRef.current = currentSnapshot;
+        }
+    }, [buildSnapshotFromCurrentState]);
+
     // シミュレーション実行ハンドラー（統合）
-    const handleRunSimulation = useCallback(() => {
+    const handleRunSimulation = useCallback((options?: { showResimulationDelta?: boolean }) => {
         if (state.simulationLoading) {
             simulationAbortControllerRef.current?.abort();
             resetAdditionalAnalysisState();
             return;
         }
 
+        const shouldShowResimulationDelta = options?.showResimulationDelta === true;
+        const baselineUndoSnapshot = shouldShowResimulationDelta
+            ? (lastSimulatedSnapshotRef.current ?? buildSnapshotFromCurrentState())
+            : null;
+        const baselineSummary = baselineUndoSnapshot !== null
+            ? resolveResimulationSummaryFromSnapshot(baselineUndoSnapshot)
+            : null;
+
         setShowResimulationNotice(false);
+        setResimulationDeltaSummary(null);
+        setResimulationUndoSnapshot(null);
         resetAdditionalAnalysisState();
         setSimulationProgress(0);
         dispatch({ type: 'startSimulation' });
@@ -809,6 +986,27 @@ export default function TeamTimelineApp() {
         // Use setTimeout to allow React to render loading state before heavy computation
         setTimeout(() => {
             void executeSimulation({ abortSignal: abortController.signal })
+                .then((simulationExecutionResult) => {
+                    if (
+                        !shouldShowResimulationDelta
+                        || baselineSummary === null
+                        || baselineUndoSnapshot === null
+                        || simulationExecutionResult === null
+                    ) {
+                        if (simulationExecutionResult !== null) {
+                            lastSimulatedSnapshotRef.current = simulationExecutionResult.undoSnapshot;
+                        }
+                        return;
+                    }
+                    lastSimulatedSnapshotRef.current = simulationExecutionResult.undoSnapshot;
+                    setResimulationUndoSnapshot(baselineUndoSnapshot);
+                    setResimulationDeltaSummary(
+                        toResimulationDeltaSummary(
+                            baselineSummary,
+                            simulationExecutionResult.averageSummary
+                        )
+                    );
+                })
                 .catch((e) => {
                     if (isAbortError(e)) {
                         return;
@@ -822,7 +1020,80 @@ export default function TeamTimelineApp() {
                     }
                 });
         }, 0);
-    }, [executeSimulation, resetAdditionalAnalysisState, state.simulationLoading]);
+    }, [
+        executeSimulation,
+        buildSnapshotFromCurrentState,
+        resetAdditionalAnalysisState,
+        state.simulationLoading,
+    ]);
+
+    const handleRunResimulation = useCallback(() => {
+        handleRunSimulation({ showResimulationDelta: true });
+    }, [handleRunSimulation]);
+
+    const handleResimulationResultClose = useCallback(() => {
+        setResimulationDeltaSummary(null);
+        setResimulationUndoSnapshot(null);
+    }, []);
+
+    const handleResimulationUndo = useCallback(() => {
+        if (resimulationUndoSnapshot === null) {
+            setResimulationDeltaSummary(null);
+            return;
+        }
+
+        suppressResimulationNoticeRef.current = true;
+        dispatch({ type: 'loadTeam', team: [...resimulationUndoSnapshot.team] });
+        dispatch({ type: 'loadSwaps', swaps: [...resimulationUndoSnapshot.swaps] });
+        dispatch({
+            type: 'loadNoCollectCells',
+            noCollectCells: [...resimulationUndoSnapshot.noCollectCells],
+        });
+
+        const hasMultiTrialSnapshot = (
+            resimulationUndoSnapshot.multiTrialResults !== null
+            && resimulationUndoSnapshot.multiTrialAverageDailySummaries !== null
+            && resimulationUndoSnapshot.multiTrialAverageTeamSummary !== null
+        );
+
+        if (hasMultiTrialSnapshot) {
+            const restoredSelectedIndex = resimulationUndoSnapshot.multiTrialSelectedIndex
+                ?? Math.floor((resimulationUndoSnapshot.multiTrialResults!.length - 1) / 2);
+            dispatch({
+                type: 'setMultiTrialResults',
+                results: [...resimulationUndoSnapshot.multiTrialResults!],
+                medianIndex: restoredSelectedIndex,
+                averageDailySummaries: [...resimulationUndoSnapshot.multiTrialAverageDailySummaries!],
+                averageTeamSummary: resimulationUndoSnapshot.multiTrialAverageTeamSummary!,
+                averageCookingSummary: resimulationUndoSnapshot.multiTrialAverageCookingSummary,
+            });
+        } else {
+            dispatch({ type: 'clearMultiTrialResults' });
+        }
+
+        dispatch({
+            type: 'setSimulationResult',
+            result: resimulationUndoSnapshot.simulationResult,
+        });
+        dispatch({
+            type: 'updateSimulationConfig',
+            config: { seed: resimulationUndoSnapshot.simulationSeed },
+        });
+        if (resimulationUndoSnapshot.teamSetSimulationSnapshot) {
+            dispatch({
+                type: 'setActiveTeamSetSimulationSnapshot',
+                snapshot: { ...resimulationUndoSnapshot.teamSetSimulationSnapshot },
+            });
+        }
+
+        setShowResimulationNotice(false);
+        setResimulationDeltaSummary(null);
+        setResimulationUndoSnapshot(null);
+        lastSimulatedSnapshotRef.current = resimulationUndoSnapshot;
+        window.setTimeout(() => {
+            suppressResimulationNoticeRef.current = false;
+        }, 0);
+    }, [resimulationUndoSnapshot]);
 
     // スライダー変更ハンドラー（結果切り替え）
     const handleSliderChange = useCallback((index: number) => {
@@ -2764,8 +3035,12 @@ export default function TeamTimelineApp() {
                 onConfirm={handleSwapRemoveConfirm}
             />
             <ResimulationNoticeBar
-                open={showResimulationNotice}
-                onResimulate={handleRunSimulation}
+                open={showResimulationNotice || resimulationDeltaSummary !== null}
+                mode={resimulationDeltaSummary !== null ? 'result' : 'notice'}
+                deltaSummary={resimulationDeltaSummary}
+                onResimulate={handleRunResimulation}
+                onUndo={handleResimulationUndo}
+                onClose={handleResimulationResultClose}
             />
         </div>
     );
