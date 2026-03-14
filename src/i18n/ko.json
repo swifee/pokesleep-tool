@@ -15,6 +15,14 @@
             "notice detail1": "미래의 SP와 벌어들이는 에너지를 확인하고, 육성 계획에 활용하세요!",
             "notice detail2": "또한, 사용 방법 설명 동영상을 <YouTube>YouTube 채널</YouTube>에서 공개하고 있습니다. 꼭 확인해주세요.",
             "news": {
+                "add mew": {
+                    "headline": "$t(pokemons.Mew)의 데이터를 추가했습니다.",
+                    "detail": "$t(rp collection)"
+                },
+                "v3.3.0": {
+                    "headline": "v3.3.0의 밸런스 조정에 대응하였습니다.",
+                    "detail": "$t(rp)가 다르다면 알려주세요."
+                },
                 "add cutiefly": {
                     "headline": "$t(pokemons.Cutiefly)와 $t(pokemons.Ribombee)의 데이터를 추가했습니다.",
                     "detail": "$t(rp collection)"
@@ -484,6 +492,12 @@
         "estimated beyond level": "레벨 {{level}} 이후의 값은 추정값입니다.",
         "estimated value": "추정치",
         "rate is not fixed": "이 포켓몬의 재료 확률과 스킬 확률은 아직 확정되지 않았기 때문에 임시 값을 표시하고 있습니다.",
+        "rate is not fixed title": "{{name}}의 성능은 미확정입니다. 임시값을 변경하여 시뮬레이션할 수 있습니다.",
+        "low chance": "낮음",
+        "medium chance": "보통",
+        "high chance": "높음",
+        "additional candy": "추가 사탕 획득 확률",
+        "additional candy description": "추가 사탕을 획득하는 확률 ($t(skill level) 6 이후)",
 
         "box": "박스",
         "parameter": "매개변수",
@@ -550,6 +564,8 @@
             "none": "없음",
             "advanced": "고급 설정",
             "custom": "맞춤 설정",
+            "dream shard week 2": "꿈의조각 GET 위크 vol.2",
+            "pokemon day celebration vol1": "Pokémon Day 기념 캠페인 vol.1",
             "valentine 2026": "밸런타인 2026",
             "super skill week part 3": "$t(events.super skill week) vol.3",
             "new year 2026 2nd week": "뉴 이어 2026 (2주간)",
@@ -592,6 +608,7 @@
             "eevee week 2023": "이브이 위크 2023"
         },
         "target": "대상",
+        "dream shards from main skills": "메인 스킬의 꿈의조각 량",
         "ingredients from main skills": "메인 스킬의 식재료 량",
         "dish": "요리",
         "energy from dish": "요리로 회복하는 기력",
@@ -735,6 +752,8 @@
             "Ingredient Draw S": "스킬로 획득한 식재료는 $t(recipe bonus)를 적용하여 $t(strength2)를 계산하고 있습니다.",
             "Ingredient Draw S (Super Luck)": "$t(strength skill info.Ingredient Draw S)$t(dream shard)를 획득할 확률은 RaenonX의 집계 결과를 사용합니다.",
             "Ingredient Draw S (Hyper Cutter)": "$t(strength skill info.Ingredient Draw S)$t(additional ingredient rate)는 RaenonX의 집계 결과 (16.68%)를 사용합니다.",
+            "Cooking Assist S": "",
+            "Cooking Assist S (Bulk Up)": "$t(strength skill info.Ingredient Magnet S) 대성공 확률 증가 %는 총 강도량에 포함되지 않습니다.",
             "not triggered": "이 설정에서는 메인 스킬이 발동되지 않습니다.",
             "unknown": "메인 스킬은 아직 확정되지 않았습니다."
         },
@@ -804,6 +823,9 @@
             "Ingredient Draw S": "식재료 셀렉트S",
             "Ingredient Draw S (Super Luck)": "대운 (식재료 셀렉트S)",
             "Ingredient Draw S (Hyper Cutter)": "괴력집게 (식재료 셀렉트S)",
+            "Cooking Assist S": "요리 어시스트S",
+            "Cooking Assist S (Bulk Up)": "벌크업(요리 어시스트S)",
+            "Versatile": "올마이티",
             "unknown": "(알 수 없음)"
         },
 
@@ -981,6 +1003,7 @@
             "Dratini": "미뇽",
             "Dragonair": "신뇽",
             "Dragonite": "망나뇽",
+            "Mew": "뮤",
             "Chikorita": "치코리타",
             "Bayleef": "베이리프",
             "Meganium": "메가니움",
@@ -1101,6 +1124,8 @@
             "Gourgeist (Medium)": "펌킨인 (중과종)",
             "Gourgeist (Large)": "펌킨인 (대과종)",
             "Gourgeist (Jumbo)": "펌킨인 (특대과종)",
+            "Noibat": "음뱃",
+            "Noivern": "음번",
             "Grubbin": "턱지충이",
             "Charjabug": "전지충이",
             "Vikavolt": "투구뿌논",

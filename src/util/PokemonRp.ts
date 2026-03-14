@@ -466,8 +466,10 @@ class PokemonRp {
     get skillValue(): number {
         return this.getOrCache('skillValue', () => {
             if (this.iv.pokemon.skill === "Charge Strength S" ||
-                this.iv.pokemon.skill === "Charge Strength S (Random)" ||
-                this.iv.pokemon.skill === "Charge Energy S") {
+                this.iv.pokemon.skill === "Charge Strength S (Random)") {
+                return [400, 569, 785, 1083, 1496, 2066, 2842][this.iv.skillLevel - 1];
+            }
+            if (this.iv.pokemon.skill === "Charge Energy S") {
                 return [400, 569, 785, 1083, 1496, 2066, 2656][this.iv.skillLevel - 1];
             }
             if (this.iv.pokemon.skill === "Charge Energy S (Moonlight)") {
@@ -479,8 +481,14 @@ class PokemonRp {
             ) {
                 return [600, 853, 1177, 1625, 2243, 3099, 3984][this.iv.skillLevel - 1];
             }
+            if (this.iv.pokemon.skill === "Charge Strength M") {
+                return [880, 1251, 1726, 2383, 3290, 4546, 6252][this.iv.skillLevel - 1];
+            }
             if (this.iv.pokemon.skill === "Energy for Everyone S") {
                 return [1120, 1593, 2197, 3033, 4187, 5785][this.iv.skillLevel - 1];
+            }
+            if (this.iv.pokemon.skill === "Cooking Assist S (Bulk Up)") {
+                return [1144, 1627, 2244, 3098, 4277, 5910, 7596][this.iv.skillLevel - 1];
             }
             if (this.iv.pokemon.skill === "Energy for Everyone S (Berry Juice)") {
                 return [1220, 1735, 2392, 3303, 4559, 6299][this.iv.skillLevel - 1];
@@ -495,10 +503,13 @@ class PokemonRp {
                 return [1400, 1991, 2747, 3791, 5234, 7232][this.iv.skillLevel - 1];
             }
             if (this.iv.pokemon.skill === "Charge Strength M (Bad Dreams)") {
-                return [2400, 3313, 4643, 6441, 8864, 11878, 13140][this.iv.skillLevel - 1];
+                return [2400, 3313, 4643, 6441, 8864, 11878, 14072][this.iv.skillLevel - 1];
             }
             if (this.iv.pokemon.skill === "Energizing Cheer S") {
                 return [766, 1089, 1502, 2074, 2863, 3956][this.iv.skillLevel - 1];
+            }
+            if (this.iv.pokemon.skill === "Versatile") {
+                return [1280, 1651, 2126, 2783, 3690, 5056, 6463, 8033][this.iv.skillLevel - 1];
             }
             return [880, 1251, 1726, 2383, 3290, 4546, 5843, 7303][this.iv.skillLevel - 1];
         });

@@ -17,6 +17,7 @@ describe('MainSkill', () => {
             expect(getMaxSkillLevel('Extra Helpful S')).toBe(7);
             expect(getMaxSkillLevel('Cooking Power-Up S')).toBe(7);
             expect(getMaxSkillLevel('Metronome')).toBe(7);
+            expect(getMaxSkillLevel('Cooking Assist S (Bulk Up)')).toBe(7);
         });
 
         test('returns 6 for most skills', () => {
@@ -59,6 +60,19 @@ describe('MainSkill', () => {
             expect(matchMainSkillName(minun, 'Cooking Power-Up S')).toBe(true);
         });
 
+        test('special case: Cooking Assist S (Bulk Up) matches Tasty Chance S and Ingredient Magnet S', () => {
+            const heracross = pokemons.find(x => x.name === "Heracross");
+            if (heracross === undefined) {
+                throw new Error('Heracross not found in pokemons data');
+            }
+
+            expect(matchMainSkillName(heracross, 'Cooking Assist S')).toBe(true);
+            expect(matchMainSkillName(heracross, 'Tasty Chance S')).toBe(true);
+            expect(matchMainSkillName(heracross, 'Ingredient Magnet S')).toBe(true);
+            expect(matchMainSkillName(heracross, 'Berry Burst')).toBe(false);
+            expect(matchMainSkillName(heracross, 'Charge Strength S')).toBe(false);
+        });
+
         test('special case: Ingredient Draw S (Super Luck) matches Dream Shard Magnet S', () => {
             const murkrow = pokemons.find(x => x.name === 'Murkrow');
             if (murkrow === undefined) {
@@ -68,6 +82,34 @@ describe('MainSkill', () => {
             expect(matchMainSkillName(murkrow, 'Dream Shard Magnet S')).toBe(true);
             expect(matchMainSkillName(murkrow, 'Ingredient Draw S')).toBe(true);
             expect(matchMainSkillName(murkrow, 'Energy for Everyone S')).toBe(false);
+        });
+
+        describe('Mew versatile special cases', () => {
+            test('Mew with versatileSkill set matches that skill', () => {
+                const mew = pokemons.find(x => x.name === 'Mew');
+                if (mew === undefined) {
+                    throw new Error('Mew not found in pokemons data');
+                }
+                const iv = new PokemonIv({
+                    pokemonName: 'Mew',
+                    versatileSkill: 'Charge Strength M',
+                });
+
+                expect(matchMainSkillName(mew, 'Charge Strength M', false, iv)).toBe(true);
+                expect(matchMainSkillName(mew, 'Ingredient Magnet S', false, iv)).toBe(false);
+            });
+
+            test('Mew with no iv matches all VersatileCandidates', () => {
+                const mew = pokemons.find(x => x.name === 'Mew');
+                if (mew === undefined) {
+                    throw new Error('Mew not found in pokemons data');
+                }
+
+                expect(matchMainSkillName(mew, 'Metronome')).toBe(true);
+                expect(matchMainSkillName(mew, 'Charge Strength M')).toBe(true);
+                expect(matchMainSkillName(mew, 'Ingredient Magnet S')).toBe(true);
+                expect(matchMainSkillName(mew, 'Helper Boost')).toBe(false);
+            });
         });
 
         describe('Toxel evolution special cases', () => {
