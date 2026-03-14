@@ -9,12 +9,22 @@ import {
     NoCollectCellSetting,
 } from './TimeSlotTypes';
 import { TrialSummary } from './MultiTrialTypes';
-import { TimelineBonusSettings } from './TimelineBonusSettingsTypes';
-import { AverageCookingSummary, CookingSimulationSettings } from './CookingTypes';
+import { TimelineBonusSettings, TimelineFavoriteTypes } from './TimelineBonusSettingsTypes';
+import { AverageCookingSummary, CookingCategory, CookingSimulationSettings } from './CookingTypes';
 
 export interface TeamSetSimulationSnapshot {
     averageTotalEP: number;
     settingsHash: string;
+}
+
+export interface TeamSetSavedCookingSettings {
+    enabled: boolean;
+    category: CookingCategory;
+}
+
+export interface TeamSetSavedFieldSettings {
+    fieldIndex: number;
+    favoriteType: TimelineFavoriteTypes;
 }
 
 export interface TeamSetState {
@@ -24,6 +34,10 @@ export interface TeamSetState {
     swaps: PokemonSwap[];
     noCollectCells: NoCollectCellSetting[];
     lastSimulationSnapshot: TeamSetSimulationSnapshot | null;
+    saveCookingSettings: boolean;
+    saveFieldSettings: boolean;
+    savedCookingSettings: TeamSetSavedCookingSettings | null;
+    savedFieldSettings: TeamSetSavedFieldSettings | null;
 }
 
 /**
@@ -100,6 +114,7 @@ export interface TeamTimelineState {
  */
 export type TeamTimelineAction =
     | { type: 'renameActiveTeamSet'; name: string }
+    | { type: 'updateActiveTeamSetSaveSettings'; name: string; saveCookingSettings: boolean; saveFieldSettings: boolean }
     | { type: 'createTeamSet'; id: string; name: string }
     | { type: 'duplicateTeamSet'; id: string; name: string }
     | { type: 'deleteTeamSet'; fallbackId: string; fallbackName: string }

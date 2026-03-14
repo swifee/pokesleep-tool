@@ -23,6 +23,8 @@ import {
 import { SimulationResult, PokemonSwap } from './types/TimeSlotTypes';
 import type { PokemonBoxItem } from '../../../util/PokemonBox';
 import PokemonBox from '../../../util/PokemonBox';
+import { createDefaultTimelineBonusSettings } from './utils/TimelineBonusSettingsBridge';
+import type { TeamSetState } from './types/TeamTimelineTypes';
 
 function createSimulationResult(grandTotalEP: number): SimulationResult {
     return {
@@ -76,6 +78,10 @@ describe('teamTimelineReducer', () => {
         expect(state.teamSets[0].swaps).toEqual(state.swaps);
         expect(state.teamSets[0].noCollectCells).toEqual(state.noCollectCells);
         expect(state.teamSets[0].lastSimulationSnapshot).toBeNull();
+        expect(state.teamSets[0].saveCookingSettings).toBe(false);
+        expect(state.teamSets[0].saveFieldSettings).toBe(false);
+        expect(state.teamSets[0].savedCookingSettings).toBeNull();
+        expect(state.teamSets[0].savedFieldSettings).toBeNull();
         expect(state.syncWithIvParameter).toBe(true);
         expect(state.cookingSettings.basePotCapacity).toBe(81);
         expect(state.cookingSettings.recipeLevels).toEqual({});
@@ -283,11 +289,135 @@ describe('team set actions', () => {
         expect(next.team).toEqual([null, null, null, null, null]);
         expect(next.swaps).toEqual([]);
         expect(next.noCollectCells).toEqual([]);
+        expect(next.teamSets[1].saveCookingSettings).toBe(false);
+        expect(next.teamSets[1].saveFieldSettings).toBe(false);
+        expect(next.teamSets[1].savedCookingSettings).toBeNull();
+        expect(next.teamSets[1].savedFieldSettings).toBeNull();
+    });
+
+    it('updateActiveTeamSetSaveSettings updates name/flags and saves current cooking/field values', () => {
+        const base = createInitialState();
+        const withCooking = teamTimelineReducer(base, {
+            type: 'setCookingSettings',
+            settings: {
+                ...base.cookingSettings,
+                enabled: true,
+                category: 'dessert',
+            },
+        });
+        const withField = teamTimelineReducer(withCooking, {
+            type: 'setBonusSettings',
+            settings: {
+                ...withCooking.bonusSettings,
+                fieldIndex: 5,
+                favoriteType: ['fire', 'water', 'grass'],
+            },
+        });
+
+        const updated = teamTimelineReducer(withField, {
+            type: 'updateActiveTeamSetSaveSettings',
+            name: '保存テスト',
+            saveCookingSettings: true,
+            saveFieldSettings: true,
+        });
+
+        expect(updated.teamSets[0].name).toBe('保存テスト');
+        expect(updated.teamSets[0].saveCookingSettings).toBe(true);
+        expect(updated.teamSets[0].saveFieldSettings).toBe(true);
+        expect(updated.teamSets[0].savedCookingSettings).toEqual({
+            enabled: true,
+            category: 'dessert',
+        });
+        expect(updated.teamSets[0].savedFieldSettings).toEqual({
+            fieldIndex: 5,
+            favoriteType: ['fire', 'water', 'grass'],
+        });
+
+        const turnedOff = teamTimelineReducer(updated, {
+            type: 'updateActiveTeamSetSaveSettings',
+            name: '保存テスト',
+            saveCookingSettings: false,
+            saveFieldSettings: false,
+        });
+        expect(turnedOff.teamSets[0].savedCookingSettings).toBeNull();
+        expect(turnedOff.teamSets[0].savedFieldSettings).toBeNull();
+    });
+
+    it('setCookingSettings updates team set saved value only when cooking save is enabled', () => {
+        const base = createInitialState();
+        const withSaveEnabled = teamTimelineReducer(base, {
+            type: 'updateActiveTeamSetSaveSettings',
+            name: 'チーム1',
+            saveCookingSettings: true,
+            saveFieldSettings: false,
+        });
+
+        const updated = teamTimelineReducer(withSaveEnabled, {
+            type: 'setCookingSettings',
+            settings: {
+                ...withSaveEnabled.cookingSettings,
+                enabled: true,
+                category: 'salad',
+            },
+        });
+        expect(updated.teamSets[0].savedCookingSettings).toEqual({
+            enabled: true,
+            category: 'salad',
+        });
+
+        const withSaveDisabled = teamTimelineReducer(base, {
+            type: 'setCookingSettings',
+            settings: {
+                ...base.cookingSettings,
+                enabled: true,
+                category: 'dessert',
+            },
+        });
+        expect(withSaveDisabled.teamSets[0].savedCookingSettings).toBeNull();
+    });
+
+    it('setBonusSettings updates team set saved value only when field save is enabled', () => {
+        const base = createInitialState();
+        const withSaveEnabled = teamTimelineReducer(base, {
+            type: 'updateActiveTeamSetSaveSettings',
+            name: 'チーム1',
+            saveCookingSettings: false,
+            saveFieldSettings: true,
+        });
+
+        const updated = teamTimelineReducer(withSaveEnabled, {
+            type: 'setBonusSettings',
+            settings: {
+                ...withSaveEnabled.bonusSettings,
+                fieldIndex: 4,
+                favoriteType: ['rock', 'ground', 'steel'],
+            },
+        });
+        expect(updated.teamSets[0].savedFieldSettings).toEqual({
+            fieldIndex: 4,
+            favoriteType: ['rock', 'ground', 'steel'],
+        });
+
+        const withSaveDisabled = teamTimelineReducer(base, {
+            type: 'setBonusSettings',
+            settings: {
+                ...base.bonusSettings,
+                fieldIndex: 4,
+                favoriteType: ['rock', 'ground', 'steel'],
+            },
+        });
+        expect(withSaveDisabled.teamSets[0].savedFieldSettings).toBeNull();
     });
 
     it('duplicateTeamSet clones team/swaps/noCollect and selects duplicate', () => {
         const base = createInitialState();
-        const withSnapshot = teamTimelineReducer(base, {
+        const withSaveSettings = teamTimelineReducer(base, {
+            type: 'updateActiveTeamSetSaveSettings',
+            name: '保存元',
+            saveCookingSettings: true,
+            saveFieldSettings: true,
+        });
+        const withSnapshot = teamTimelineReducer(withSaveSettings, {
             type: 'setActiveTeamSetSimulationSnapshot',
             snapshot: { averageTotalEP: 4321, settingsHash: 'hash-a' },
         });
@@ -331,6 +461,10 @@ describe('team set actions', () => {
         expect(duplicated.teamSets[1].swaps).toEqual(withNoCollect.teamSets[0].swaps);
         expect(duplicated.teamSets[1].noCollectCells).toEqual(withNoCollect.teamSets[0].noCollectCells);
         expect(duplicated.teamSets[1].lastSimulationSnapshot).toBeNull();
+        expect(duplicated.teamSets[1].saveCookingSettings).toBe(true);
+        expect(duplicated.teamSets[1].saveFieldSettings).toBe(true);
+        expect(duplicated.teamSets[1].savedCookingSettings).toEqual(withNoCollect.teamSets[0].savedCookingSettings);
+        expect(duplicated.teamSets[1].savedFieldSettings).toEqual(withNoCollect.teamSets[0].savedFieldSettings);
     });
 
     it('deleteTeamSet keeps adjacent set selected', () => {
@@ -836,7 +970,7 @@ describe('simulation controls storage', () => {
 
 describe('team set storage', () => {
     it('saves and loads team set payload', () => {
-        const teamSets = [
+        const teamSets: TeamSetState[] = [
             {
                 id: 'set-1',
                 name: 'チーム1',
@@ -852,6 +986,16 @@ describe('team set storage', () => {
                 ],
                 noCollectCells: [{ dayIndex: 0, slotId: 'slot-1', teamSlotIndex: 0 }],
                 lastSimulationSnapshot: { averageTotalEP: 24680, settingsHash: 'ctx-storage' },
+                saveCookingSettings: true,
+                saveFieldSettings: true,
+                savedCookingSettings: {
+                    enabled: true,
+                    category: 'salad',
+                },
+                savedFieldSettings: {
+                    fieldIndex: 2,
+                    favoriteType: ['fire', 'water', 'grass'],
+                },
             },
             {
                 id: 'set-2',
@@ -860,6 +1004,10 @@ describe('team set storage', () => {
                 swaps: [],
                 noCollectCells: [],
                 lastSimulationSnapshot: null,
+                saveCookingSettings: false,
+                saveFieldSettings: false,
+                savedCookingSettings: null,
+                savedFieldSettings: null,
             },
         ];
 
@@ -875,6 +1023,16 @@ describe('team set storage', () => {
         expect(loaded!.teamSets[0].lastSimulationSnapshot).toEqual({
             averageTotalEP: 24680,
             settingsHash: 'ctx-storage',
+        });
+        expect(loaded!.teamSets[0].saveCookingSettings).toBe(true);
+        expect(loaded!.teamSets[0].saveFieldSettings).toBe(true);
+        expect(loaded!.teamSets[0].savedCookingSettings).toEqual({
+            enabled: true,
+            category: 'salad',
+        });
+        expect(loaded!.teamSets[0].savedFieldSettings).toEqual({
+            fieldIndex: 2,
+            favoriteType: ['fire', 'water', 'grass'],
         });
     });
 
@@ -907,5 +1065,71 @@ describe('team set storage', () => {
         const loaded = loadTeamSetsFromStorage(new PokemonBox());
         expect(loaded).not.toBeNull();
         expect(loaded!.teamSets[0].lastSimulationSnapshot).toBeNull();
+        expect(loaded!.teamSets[0].saveCookingSettings).toBe(false);
+        expect(loaded!.teamSets[0].saveFieldSettings).toBe(false);
+        expect(loaded!.teamSets[0].savedCookingSettings).toBeNull();
+        expect(loaded!.teamSets[0].savedFieldSettings).toBeNull();
+    });
+
+    it('falls back to disabled flags for legacy team set payload', () => {
+        localStorage.setItem(STORAGE_KEY_TEAM_SETS, JSON.stringify({
+            activeTeamSetIndex: 0,
+            teamSets: [
+                {
+                    id: 'set-legacy',
+                    name: 'Legacy',
+                    team: [null, null, null, null, null],
+                    swaps: [],
+                    noCollectCells: [],
+                    lastSimulationSnapshot: null,
+                },
+            ],
+        }));
+
+        const loaded = loadTeamSetsFromStorage(new PokemonBox());
+        expect(loaded).not.toBeNull();
+        expect(loaded!.teamSets[0].saveCookingSettings).toBe(false);
+        expect(loaded!.teamSets[0].saveFieldSettings).toBe(false);
+        expect(loaded!.teamSets[0].savedCookingSettings).toBeNull();
+        expect(loaded!.teamSets[0].savedFieldSettings).toBeNull();
+    });
+
+    it('falls back to default saved values when enabled flags are true but payload is invalid', () => {
+        const defaultBonusSettings = createDefaultTimelineBonusSettings();
+        localStorage.setItem(STORAGE_KEY_TEAM_SETS, JSON.stringify({
+            activeTeamSetIndex: 0,
+            teamSets: [
+                {
+                    id: 'set-invalid',
+                    name: 'Invalid',
+                    team: [null, null, null, null, null],
+                    swaps: [],
+                    noCollectCells: [],
+                    saveCookingSettings: true,
+                    saveFieldSettings: true,
+                    savedCookingSettings: {
+                        enabled: 'invalid',
+                        category: 'invalid',
+                    },
+                    savedFieldSettings: {
+                        fieldIndex: 'invalid',
+                        favoriteType: 'invalid',
+                    },
+                },
+            ],
+        }));
+
+        const loaded = loadTeamSetsFromStorage(new PokemonBox());
+        expect(loaded).not.toBeNull();
+        expect(loaded!.teamSets[0].saveCookingSettings).toBe(true);
+        expect(loaded!.teamSets[0].saveFieldSettings).toBe(true);
+        expect(loaded!.teamSets[0].savedCookingSettings).toEqual({
+            enabled: false,
+            category: 'curry',
+        });
+        expect(loaded!.teamSets[0].savedFieldSettings).toEqual({
+            fieldIndex: defaultBonusSettings.fieldIndex,
+            favoriteType: defaultBonusSettings.favoriteType,
+        });
     });
 });

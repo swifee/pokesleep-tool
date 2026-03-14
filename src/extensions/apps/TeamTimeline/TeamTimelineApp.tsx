@@ -332,6 +332,13 @@ function createTeamSignature(team: readonly (PokemonBoxItem | null)[]): string {
         .join('|');
 }
 
+function areFavoriteTypesEqual(
+    left: readonly string[],
+    right: readonly string[],
+): boolean {
+    return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 function createTeamSetId(): string {
     return `team-set-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -1169,8 +1176,13 @@ export default function TeamTimelineApp() {
         `${t('TeamTimeline.team set default name', 'チーム')}${index}`
     ), [t]);
 
-    const handleTeamSetNameChange = useCallback((name: string) => {
-        dispatch({ type: 'renameActiveTeamSet', name });
+    const handleTeamSetSaveSettings = useCallback((name: string, saveCookingSettings: boolean, saveFieldSettings: boolean) => {
+        dispatch({
+            type: 'updateActiveTeamSetSaveSettings',
+            name,
+            saveCookingSettings,
+            saveFieldSettings,
+        });
     }, []);
 
     const handleTeamSetCreate = useCallback(() => {
@@ -1211,6 +1223,56 @@ export default function TeamTimelineApp() {
     const handleTeamSetSelect = useCallback((index: number) => {
         dispatch({ type: 'selectTeamSet', index });
     }, []);
+
+    useEffect(() => {
+        if (!isInitialized) {
+            return;
+        }
+        const activeTeamSet = state.teamSets[state.activeTeamSetIndex];
+        if (!activeTeamSet) {
+            return;
+        }
+
+        if (activeTeamSet.saveCookingSettings && activeTeamSet.savedCookingSettings) {
+            const shouldRestoreCooking = (
+                state.cookingSettings.enabled !== activeTeamSet.savedCookingSettings.enabled
+                || state.cookingSettings.category !== activeTeamSet.savedCookingSettings.category
+            );
+            if (shouldRestoreCooking) {
+                dispatch({
+                    type: 'setCookingSettings',
+                    settings: {
+                        ...state.cookingSettings,
+                        enabled: activeTeamSet.savedCookingSettings.enabled,
+                        category: activeTeamSet.savedCookingSettings.category,
+                    },
+                });
+            }
+        }
+
+        if (activeTeamSet.saveFieldSettings && activeTeamSet.savedFieldSettings) {
+            const shouldRestoreField = (
+                state.bonusSettings.fieldIndex !== activeTeamSet.savedFieldSettings.fieldIndex
+                || !areFavoriteTypesEqual(state.bonusSettings.favoriteType, activeTeamSet.savedFieldSettings.favoriteType)
+            );
+            if (shouldRestoreField) {
+                dispatch({
+                    type: 'setBonusSettings',
+                    settings: normalizeTimelineBonusSettings({
+                        ...state.bonusSettings,
+                        fieldIndex: activeTeamSet.savedFieldSettings.fieldIndex,
+                        favoriteType: activeTeamSet.savedFieldSettings.favoriteType,
+                    }),
+                });
+            }
+        }
+    }, [
+        isInitialized,
+        state.activeTeamSetIndex,
+        state.bonusSettings,
+        state.cookingSettings,
+        state.teamSets,
+    ]);
 
     const handleOpenTimeSlotSettings = useCallback(() => {
         dispatch({ type: 'selectTab', tab: 'settings' });
@@ -2622,7 +2684,7 @@ export default function TeamTimelineApp() {
                         teamSets={state.teamSets}
                         activeTeamSetIndex={state.activeTeamSetIndex}
                         currentSimulationContextHash={currentSimulationContextHash}
-                        onNameChange={handleTeamSetNameChange}
+                        onSaveSettings={handleTeamSetSaveSettings}
                         onCreate={handleTeamSetCreate}
                         onDuplicateAt={handleTeamSetDuplicateAt}
                         onDeleteAt={handleTeamSetDeleteAt}
