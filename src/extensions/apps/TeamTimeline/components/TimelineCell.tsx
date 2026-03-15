@@ -431,6 +431,31 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             </React.Fragment>
         ));
     }, []);
+    const renderTargetPokemonIndicator = React.useCallback((
+        targetPokemonName: string,
+        targetPokemonIdForm: number | undefined,
+        testId: string,
+    ): React.ReactNode => {
+        if (targetPokemonIdForm === undefined) {
+            return (
+                <TargetPokemonNameFallback data-testid={testId}>
+                    {targetPokemonName}
+                </TargetPokemonNameFallback>
+            );
+        }
+
+        return (
+            <PokemonIconFrame
+                role="img"
+                aria-label={targetPokemonName}
+                title={targetPokemonName}
+                data-testid={testId}
+                data-target-pokemon-icon="true"
+            >
+                <PokemonIcon idForm={targetPokemonIdForm} size={14} />
+            </PokemonIconFrame>
+        );
+    }, []);
     const buildProxyDetailParts = (event: NonNullable<TimeSlotResult['proxySkillEvents']>[number]): string[] => {
         const parts: string[] = [];
         const isMetronomeStockpile =
@@ -653,7 +678,12 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`cheer-${index}-${event.targetPokemonId}`}>
                         <SkillPrefixIcons />
-                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `cheer-${index}`)}
+                        {renderTargetPokemonIndicator(
+                            event.targetPokemonName,
+                            event.targetPokemonIdForm,
+                            `timeline-cell-target-cheer-${index}`,
+                        )}{' '}
+                        {renderTextWithHealIcon(`❇️+${Math.round(event.recovery)}`, `cheer-${index}`)}
                     </SkillDetailLine>
                 );
             });
@@ -661,7 +691,12 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`moonlight-${index}-${event.targetPokemonId}`}>
                         <SkillPrefixIcons />
-                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `moonlight-${index}`)}
+                        {renderTargetPokemonIndicator(
+                            event.targetPokemonName,
+                            event.targetPokemonIdForm,
+                            `timeline-cell-target-moonlight-${index}`,
+                        )}{' '}
+                        {renderTextWithHealIcon(`❇️+${Math.round(event.recovery)}`, `moonlight-${index}`)}
                     </SkillDetailLine>
                 );
             });
@@ -670,7 +705,11 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`support-${eventIndex}-${event.targetPokemonId}`}>
                         <SkillPrefixIcons />
-                        →{event.targetPokemonName}{' '}
+                        {renderTargetPokemonIndicator(
+                            event.targetPokemonName,
+                            event.targetPokemonIdForm,
+                            `timeline-cell-target-support-${eventIndex}`,
+                        )}{' '}
                         <SupportBerryEPBadge>
                             <TeamTimelineIcon name="berry" />
                             <EpValue value={Math.round(event.berryEP).toLocaleString()} />
@@ -691,7 +730,12 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 skillDetailLines.push(
                     <SkillDetailLine key={`cooking-minus-${index}-${event.targetPokemonId}`}>
                         <SkillPrefixIcons />
-                        {renderTextWithHealIcon(`→${event.targetPokemonName}❇️+${Math.round(event.recovery)}`, `cooking-minus-${index}`)}
+                        {renderTargetPokemonIndicator(
+                            event.targetPokemonName,
+                            event.targetPokemonIdForm,
+                            `timeline-cell-target-cooking-minus-${index}`,
+                        )}{' '}
+                        {renderTextWithHealIcon(`❇️+${Math.round(event.recovery)}`, `cooking-minus-${index}`)}
                     </SkillDetailLine>
                 );
             });
@@ -1241,6 +1285,11 @@ const SkillDetailLine = styled('div')({
         height: '10px',
         marginInline: '1px',
     },
+});
+
+const TargetPokemonNameFallback = styled('span')({
+    display: 'inline-flex',
+    alignItems: 'center',
 });
 
 const SkillOverflowLine = styled('div')({

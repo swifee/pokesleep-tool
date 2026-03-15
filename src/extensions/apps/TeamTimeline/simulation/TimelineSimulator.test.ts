@@ -223,6 +223,85 @@ describe('TimelineSimulator', () => {
         expect(morningResults[0]?.ingredientDrawGreatSuccessCount).toBe(2);
     });
 
+    it('単体対象イベントに targetPokemonIdForm を反映する', () => {
+        const caster = createBerryBurstDisguisePokemon(3);
+        const target = createBerryBurstDisguisePokemon(4);
+
+        processSkillTriggersMock
+            .mockImplementationOnce(() => ({
+                ...createNeutralSkillEffectResult(50),
+                moonlightTargets: new Map([[target.id, 12]]),
+                energizingCheerTargets: new Map([[target.id, 18]]),
+                energizingCheerEvents: [
+                    { targetPokemonId: target.id, recovery: 18, source: 'cheer' as const },
+                ],
+                supportHelpEvents: [
+                    {
+                        source: 'extraHelpful' as const,
+                        targetPokemonId: target.id,
+                        helpCount: 1,
+                        berryCount: 2,
+                        berryEP: 240,
+                        ingredients: [],
+                    },
+                ],
+                cookingMinusTargets: new Map([[target.id, 9]]),
+                cookingMinusEvents: [
+                    { targetPokemonId: target.id, recovery: 9 },
+                ],
+            }))
+            .mockImplementation(() => createNeutralSkillEffectResult(50));
+
+        const result = runSimulation({
+            team: [caster, target, null, null, null],
+            timeSlots: [
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 34567, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+
+        const casterResult = result.slotResults.get('wake__day0')?.find(slotResult => slotResult.pokemonId === caster.id);
+        expect(casterResult).toBeDefined();
+        expect(casterResult?.moonlightEvents?.[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+        expect(casterResult?.energizingCheerEvents[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+        expect(casterResult?.supportHelpEvents[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+        expect(casterResult?.cookingMinusEvents?.[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+    });
+
+    it('単体対象イベントの対象がマップに無い場合は targetPokemonIdForm を undefined のまま返す', () => {
+        const caster = createBerryBurstDisguisePokemon(3);
+        const missingTargetId = 99999;
+
+        processSkillTriggersMock.mockImplementation(() => ({
+            ...createNeutralSkillEffectResult(50),
+            supportHelpEvents: [
+                {
+                    source: 'extraHelpful' as const,
+                    targetPokemonId: missingTargetId,
+                    helpCount: 1,
+                    berryCount: 1,
+                    berryEP: 120,
+                    ingredients: [],
+                },
+            ],
+        }));
+
+        const result = runSimulation({
+            team: [caster, null, null, null, null],
+            timeSlots: [
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 45678, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+
+        const casterResult = result.slotResults.get('wake__day0')?.find(slotResult => slotResult.pokemonId === caster.id);
+        expect(casterResult).toBeDefined();
+        expect(casterResult?.supportHelpEvents[0]?.targetPokemonName).toBe(String(missingTargetId));
+        expect(casterResult?.supportHelpEvents[0]?.targetPokemonIdForm).toBeUndefined();
+    });
+
     it('Mew をシミュレーション投入時に保存済み Mew rate で正規化する', () => {
         processSkillTriggersMock.mockImplementation((pokemon: PokemonBoxItem, ...args: unknown[]) => {
             const energy = typeof args[1] === 'number' ? args[1] : 50;

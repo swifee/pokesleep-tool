@@ -879,6 +879,12 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 member.nickname || i18next.t(`pokemons.${member.iv.pokemonName}`)
             ])
         );
+        const pokemonIdFormMap = new Map<number, number>(
+            currentTargetableTeam.map(member => [
+                member.id,
+                member.iv.idForm,
+            ])
+        );
 
         for (let idx = 0; idx < helpOutputs.length; idx++) {
             const { state, helpOutput } = helpOutputs[idx];
@@ -1058,6 +1064,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 moonlightEvents: Array.from(skillResult.moonlightTargets.entries()).map(([targetPokemonId, recovery]) => ({
                     targetPokemonId,
                     targetPokemonName: pokemonNameMap.get(targetPokemonId) ?? String(targetPokemonId),
+                    targetPokemonIdForm: pokemonIdFormMap.get(targetPokemonId),
                     recovery,
                 })),
                 moonlightReceivedRecovery: moonlightReceived,
@@ -1067,6 +1074,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 energizingCheerEvents: skillResult.energizingCheerEvents.map(event => ({
                     targetPokemonId: event.targetPokemonId,
                     targetPokemonName: pokemonNameMap.get(event.targetPokemonId) ?? String(event.targetPokemonId),
+                    targetPokemonIdForm: pokemonIdFormMap.get(event.targetPokemonId),
                     recovery: event.recovery,
                     source: event.source,
                 })),
@@ -1111,6 +1119,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                     source: event.source,
                     targetPokemonId: event.targetPokemonId,
                     targetPokemonName: pokemonNameMap.get(event.targetPokemonId) ?? String(event.targetPokemonId),
+                    targetPokemonIdForm: pokemonIdFormMap.get(event.targetPokemonId),
                     helpCount: event.helpCount,
                     berryCount: event.berryCount,
                     berryEP: event.berryEP,
@@ -1123,6 +1132,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 cookingMinusEvents: skillResult.cookingMinusEvents.map(event => ({
                     targetPokemonId: event.targetPokemonId,
                     targetPokemonName: pokemonNameMap.get(event.targetPokemonId) ?? String(event.targetPokemonId),
+                    targetPokemonIdForm: pokemonIdFormMap.get(event.targetPokemonId),
                     recovery: event.recovery,
                 })),
                 berryBurstGreatSuccessCount: skillResult.berryBurstGreatSuccessCount,
