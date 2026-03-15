@@ -82,9 +82,9 @@ const SkillHelpDialog = React.memo(({open, dispatch, onClose, strength, result}:
     }
 
     const iv = strength.pokemonIv;
-    const skill = iv.pokemon.skill.replace(" (Random)", "");
+    const skill = iv.versatileSkill.replace(" (Random)", "");
     const footnote = t(`strength skill info.${skill}`);
-    const skillName = iv.pokemon.skill;
+    const skillName = iv.versatileSkill;
     const isCountOnly = skillName === "Metronome" ||
         skillName.startsWith("Skill Copy");
 
@@ -96,9 +96,10 @@ const SkillHelpDialog = React.memo(({open, dispatch, onClose, strength, result}:
     ));
 
     const skillLevel = strength.getSkillLevel();
+    const versatileSkillLevel = Math.min(skillLevel, getMaxSkillLevel(skillName));
     const bonus = strength.bonusEffects;
     const [skillValueText, skillValueFooter] = getSkillValueText(strength,
-        skillLevel, t);
+        versatileSkillLevel, t);
     const [skillValueText2, skillValueFooter2] = getSkillValueText2(strength,
         skillLevel, t);
 
@@ -166,7 +167,8 @@ const SkillHelpDialog = React.memo(({open, dispatch, onClose, strength, result}:
                     <article>
                         {skillName === "Ingredient Magnet S (Plus)" ?
                             <IngredientIcon name={iv.pokemon.ing1.name}/> :
-                            <MainSkillIcon mainSkill={skillName} second/>}
+                            <MainSkillIcon second
+                                mainSkill={iv.pokemon.skill /* show candy icon for versatile */}/>}
                         {formatNice(result.skillValue2, t)}
                     </article>
                     <footer>
@@ -181,7 +183,7 @@ const SkillHelpDialog = React.memo(({open, dispatch, onClose, strength, result}:
                 </article>
             </>}
 
-            {!isCountOnly &&
+            {(!isCountOnly || iv.pokemon.skill === "Versatile") &&
                 <section style={{marginTop: '1.8rem'}}>
                     <label>{t('skill level')}:</label>
                     <FormControl size="small">
@@ -219,7 +221,7 @@ const SkillHelpDialog = React.memo(({open, dispatch, onClose, strength, result}:
 function getSkillValueText(strength: PokemonStrength, skillLevel: number,
     t: typeof i18next.t):
 [React.ReactNode, React.ReactNode]{
-    const skill: MainSkillName = strength.pokemonIv.pokemon.skill;
+    const skill: MainSkillName = strength.pokemonIv.versatileSkill;
 
     if (skill.startsWith('Charge Energy')) {
         return getChargeEnergyValueText(strength, skillLevel, t);
@@ -228,7 +230,8 @@ function getSkillValueText(strength: PokemonStrength, skillLevel: number,
         return getChargeStrengthValueText(strength, skillLevel, t);
     }
     if (skill.startsWith('Ingredient Magnet S') ||
-        skill.startsWith("Ingredient Draw S")
+        skill.startsWith("Ingredient Draw S") ||
+        skill.startsWith("Cooking Assist")
     ) {
         return getIngredientGetValueText(strength, skillLevel, t);
     }
@@ -258,7 +261,8 @@ function getSkillValueText(strength: PokemonStrength, skillLevel: number,
         return getNormalSkillValueText(t, t('help count per pokemon'));
     }
     if (skill.startsWith('Berry Burst')) {
-        return getBerryBurstValueText(strength, t, t('berry strength per berry burst'));
+        return getBerryBurstValueText(strength, skillLevel, t,
+            t('berry strength per berry burst'));
     }
     return [null, null];
 }
@@ -277,6 +281,9 @@ function getSkillValueText2(strength: PokemonStrength, skillLevel: number,
     if (skill === 'Ingredient Magnet S (Present)') {
         return getPresentValueText(strength, skillLevel, t);
     }
+    if (skill === 'Versatile') {
+        return getVersatileCandyValueText(t);
+    }
     if (skill === 'Cooking Power-Up S (Minus)') {
         const val = getSkillSubValue(skill, skillLevel);
         return getEnergyRecoveryValueText(val, skillLevel, t,
@@ -286,7 +293,10 @@ function getSkillValueText2(strength: PokemonStrength, skillLevel: number,
         return getNormalSkillValueText(t, t('expected berry juice'));
     }
     if (skill === 'Energy for Everyone S (Lunar Blessing)') {
-        return getBerryBurstValueText(strength, t, t('berry strength per berry burst'));
+        return getBerryBurstValueText(strength, skillLevel, t, t('berry strength per berry burst'));
+    }
+    if (skill === 'Cooking Assist S (Bulk Up)') {
+        return getNormalSkillValueText(t, t('tasty chance increase'));
     }
     return [null, null];
 }
@@ -295,7 +305,7 @@ function getChargeEnergyValueText(strength: PokemonStrength,
     skillLevel: number, t: typeof i18next.t):
 [React.ReactNode, React.ReactNode] {
     const iv = strength.pokemonIv;
-    const skill: MainSkillName = strength.pokemonIv.pokemon.skill;
+    const skill: MainSkillName = strength.pokemonIv.versatileSkill;
 
     const text = t('value per skill', { value: t('nature effect.Energy recovery')});
     const val = getSkillValue(skill, skillLevel);
@@ -325,7 +335,7 @@ function getChargeStrengthValueText(strength: PokemonStrength,
     skillLevel: number, t: typeof i18next.t):
 [React.ReactNode, React.ReactNode] {
     const param = strength.parameter;
-    const skill: MainSkillName = strength.pokemonIv.pokemon.skill;
+    const skill: MainSkillName = strength.pokemonIv.versatileSkill;
 
     const text = t('value per skill', { value: t('strength2')});
     let detail: React.ReactNode = null;
@@ -362,16 +372,16 @@ function getIngredientGetValueText(strength: PokemonStrength,
     skillLevel: number, t: typeof i18next.t):
 [React.ReactNode, React.ReactNode] {
     const param = strength.parameter;
-    const val = getSkillValue(strength.pokemonIv.pokemon.skill, skillLevel);
+    const skill = strength.pokemonIv.versatileSkill;
+    const val = getSkillValue(skill, skillLevel);
     const bonus = getEventBonus(param.event, param.customEventBonus);
-    const skill = strength.pokemonIv.pokemon.skill;
     let ingBonus = 1;
     if (skill.startsWith("Ingredient Magnet S")) {
-        ingBonus = Math.max(bonus?.ingredientMagnet ?? 1,
-            bonus?.skillIngredient ?? 1);
+        ingBonus = Math.max(bonus.ingredientMagnet, bonus.skillIngredient);
     } else if (skill.startsWith("Ingredient Draw S")) {
-        ingBonus = Math.max(bonus?.ingredientDraw ?? 1,
-            bonus?.skillIngredient ?? 1);
+        ingBonus = Math.max(bonus.ingredientDraw, bonus.skillIngredient);
+    } else if (skill.startsWith("Cooking Assist S")) {
+        ingBonus = bonus.skillIngredient;
     } else {
         throw new Error(`invalid skill: ${skill}`);
     }
@@ -394,9 +404,10 @@ function getDreamShardMagnetValueText(strength: PokemonStrength,
     skillLevel: number, t: typeof i18next.t):
 [React.ReactNode, React.ReactNode] {
     const param = strength.parameter;
-    const skill: MainSkillName = strength.pokemonIv.pokemon.skill;
+    const skill: MainSkillName = strength.pokemonIv.versatileSkill;
 
-    const shardBonus = getEventBonus(param.event, param.customEventBonus)?.dreamShard ?? 1;
+    const bonus = getEventBonus(param.event, param.customEventBonus);
+    const shardBonus = Math.max(bonus.dreamShard, bonus.dreamShard2);
     const text = t('value per skill', { value: t('dream shard')});
     if (skill === 'Dream Shard Magnet S') {
         if (shardBonus === 1) {
@@ -406,7 +417,7 @@ function getDreamShardMagnetValueText(strength: PokemonStrength,
             const val = getSkillValue(skill, skillLevel);
             return [text, <>
                 <>
-                    {val}
+                    {formatWithComma(val)}
                     <small> ({t('base value', { value: t('dream shard')})})</small>
                     <> × </>
                     {shardBonus}
@@ -416,7 +427,9 @@ function getDreamShardMagnetValueText(strength: PokemonStrength,
         }
     }
     else if (skill === 'Dream Shard Magnet S (Random)') {
-        const [min, max] = getSkillRange(skill, skillLevel);
+        const [minVal, maxVal] = getSkillRange(skill, skillLevel);
+        const min = formatWithComma(minVal);
+        const max = formatWithComma(maxVal);
         if (shardBonus === 1) {
             return [text, <>{t('range average', { min, max})}</>];
         }
@@ -424,7 +437,7 @@ function getDreamShardMagnetValueText(strength: PokemonStrength,
             const val = getSkillValue(skill, skillLevel);
             return [text,
                 <>
-                    {val}
+                    {formatWithComma(val)}
                     <small> ({t('range average', { min, max})})</small>
                     <> × </>
                     {shardBonus}
@@ -444,7 +457,9 @@ function getSuperLuckShardText(strength: PokemonStrength, skillLevel: number,
     const shards = getSkillSubValue("Ingredient Draw S (Super Luck)", skillLevel);
 
     const param = strength.parameter;
-    const ingBonus = getEventBonus(param.event, param.customEventBonus)?.ingredientMagnet ?? 1;
+    const bonus = getEventBonus(param.event, param.customEventBonus);
+    const ingBonus = Math.max(bonus.ingredientMagnet,
+        bonus.dreamShard2);
 
     return [<>
         {text}<br/>
@@ -472,8 +487,8 @@ function getPlusValueText(strength: PokemonStrength, skillLevel: number, t: type
     const text = t('value per skill', { value: t('additional ingredients') });
     const param = strength.parameter;
     const bonus = getEventBonus(param.event, param.customEventBonus);
-    const ingBonus = Math.max(bonus?.ingredientMagnet ?? 1,
-        bonus?.skillIngredient ?? 1);
+    const ingBonus = Math.max(bonus.ingredientMagnet,
+        bonus.skillIngredient);
 
     if (ingBonus === 1) {
         return [text, null];
@@ -494,7 +509,7 @@ function getPresentValueText(strength: PokemonStrength, skillLevel: number, t: t
 [React.ReactNode, React.ReactNode] {
     const text = t('value per skill', { value: t('candy') });
     const param = strength.parameter;
-    const ingBonus = getEventBonus(param.event, param.customEventBonus)?.ingredientMagnet ?? 1;
+    const ingBonus = getEventBonus(param.event, param.customEventBonus).ingredientMagnet;
 
     const val = getSkillSubValue(strength.pokemonIv.pokemon.skill,
         skillLevel, strength.pokemonIv.pokemon.ing1.name);
@@ -509,6 +524,12 @@ function getPresentValueText(strength: PokemonStrength, skillLevel: number, t: t
             <small> ({t('event bonus')})</small>
         </>}
     </>];
+}
+
+function getVersatileCandyValueText(t: typeof i18next.t):
+[React.ReactNode, React.ReactNode] {
+    const text = t('value per skill', { value: t('candy') });
+    return [text, null];
 }
 
 function getEnergyRecoveryValueText(value: number,
@@ -539,14 +560,14 @@ function getEnergyRecoveryValueText(value: number,
 }
 
 function getBerryBurstValueText(strength: PokemonStrength,
-    t: typeof i18next.t, valueText: string
+    skillLevel: number, t: typeof i18next.t, valueText: string
 ): [React.ReactNode, React.ReactNode] {
     const text = t('value per skill', { value: valueText});
 
     const param = strength.parameter;
-    const bonus = getEventBonus(param.event, param.customEventBonus)?.berryBurst ?? 1;
+    const bonus = getEventBonus(param.event, param.customEventBonus).berryBurst;
     const result = calculateBerryBurstStrength(strength.pokemonIv,
-        strength.parameter, bonus, strength.getSkillLevel());
+        strength.parameter, bonus, skillLevel);
     return [<>
         {text}<br/>
         <div className="bbgrid">
@@ -585,7 +606,7 @@ function getBerryBurstConfigHtml(strength: PokemonStrength,
 ) {
     const settings = strength.parameter;
 
-    const showBurstConfig = strength.pokemonIv.pokemon.skill.startsWith("Berry Burst") ||
+    const showBurstConfig = strength.pokemonIv.versatileSkill.startsWith("Berry Burst") ||
         strength.pokemonIv.pokemon.skill === "Energy for Everyone S (Lunar Blessing)";
     if (!showBurstConfig) {
         return <></>;

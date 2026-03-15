@@ -15,6 +15,14 @@
             "notice detail1": "Let's check the future RP and Strength of the Pokémon.",
             "notice detail2": "Please check our tutorial videos on our <YouTube>YouTube channel</YouTube>.",
             "news": {
+                "add mew": {
+                    "headline": "Added data for $t(pokemons.Mew).",
+                    "detail": "$t(rp collection)"
+                },
+                "v3.3.0": {
+                    "headline": "Updated the data with balance adjustments in version 3.3.0",
+                    "detail": "If the $t(rp) is different, please let us know."
+                },
                 "add cutiefly": {
                     "headline": "Added data for $t(pokemons.Cutiefly) and $t(pokemons.Ribombee).",
                     "detail": "$t(rp collection)"
@@ -539,6 +547,12 @@
         "estimated beyond level": "The value beyond level {{level}} is estimated.",
         "estimated value": "Estimated",
         "rate is not fixed": "The ingredient% and skill% for this Pokémon are not yet confirmed, so provisional values are displayed.",
+        "rate is not fixed title": "{{name}}'s stats are not confirmed. You can simulate by changing the provisional values.",
+        "low chance": "Low",
+        "medium chance": "Medium",
+        "high chance": "High",
+        "additional candy": "Additional candy acquisition chance",
+        "additional candy description": "Chance to obtain additional candy (from $t(skill level) 6)",
 
         "box": "Box",
         "parameter": "Parameter",
@@ -605,6 +619,8 @@
             "none": "None",
             "advanced": "Advanced",
             "custom": "Custom",
+            "dream shard week 2": "Dream Shard Week Vol. 2",
+            "pokemon day celebration vol1": "Pokémon Day Celebration Event Vol. 1",
             "valentine 2026": "Valentine's Day 2026",
             "super skill week part 3": "$t(events.super skill week) Part 3",
             "new year 2026 2nd week": "New Year 2026 (2nd week)",
@@ -647,6 +663,7 @@
             "eevee week 2023": "Eevee Week 2023"
         },
         "target": "Target",
+        "dream shards from main skills": "Dream shards from main skills",
         "ingredients from main skills": "Ingredients from main skills",
         "dish": "Dish",
         "energy from dish": "Energy recovery from dishes",
@@ -792,6 +809,8 @@
             "Ingredient Draw S": "The strength of ingredients is calculated by applying the recipe bonus.",
             "Ingredient Draw S (Super Luck)": "$t(strength skill info.Ingredient Draw S) The probability of collecting $t(dream shard) is based on aggregated results from RaenonX.",
             "Ingredient Draw S (Hyper Cutter)": "$t(strength skill info.Ingredient Draw S) $t(additional ingredient rate) uses aggregated results from RaenonX (16.68%).",
+            "Cooking Assist S": "",
+            "Cooking Assist S (Bulk Up)": "$t(strength skill info.Ingredient Magnet S) The % increase in great success rate is not counted towards the total strength amount.",
             "not triggered": "The main skill is not triggered in this setting.",
             "unknown": "The main skill has not been determined yet."
         },
@@ -862,6 +881,9 @@
             "Ingredient Draw S": "Ingredient Draw S",
             "Ingredient Draw S (Super Luck)": "Super Luck (Ingredient Draw S)",
             "Ingredient Draw S (Hyper Cutter)": "Hyper Cutter (Ingredient Draw S)",
+            "Cooking Assist S": "Cooking Assist S",
+            "Cooking Assist S (Bulk Up)": "Bulk Up (Cooking Assist S)",
+            "Versatile": "Versatile",
             "unknown": "(Unknown)"
         },
 
@@ -1039,6 +1061,7 @@
             "Dratini": "Dratini",
             "Dragonair": "Dragonair",
             "Dragonite": "Dragonite",
+            "Mew": "Mew",
             "Chikorita": "Chikorita",
             "Bayleef": "Bayleef",
             "Meganium": "Meganium",
@@ -1159,6 +1182,8 @@
             "Gourgeist (Medium)": "Gourgeist (Medium)",
             "Gourgeist (Large)": "Gourgeist (Large)",
             "Gourgeist (Jumbo)": "Gourgeist (Jumbo)",
+            "Noibat": "Noibat",
+            "Noivern": "Noivern",
             "Grubbin": "Grubbin",
             "Charjabug": "Charjabug",
             "Vikavolt": "Vikavolt",

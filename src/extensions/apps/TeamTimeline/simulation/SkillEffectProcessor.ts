@@ -23,6 +23,7 @@ import PokemonRp from '../../../../util/PokemonRp';
 import SeededRandom from './SeededRandom';
 import { MAX_ENERGY } from './EnergyCalculator';
 import { getIngredientForHelp } from './HelpCalculator';
+import { getEffectiveMainSkillName } from '../utils/TimelinePokemonUtils';
 
 /**
  * Moonlightチームメイト回復値（スキルレベル1-6ごと）
@@ -104,6 +105,7 @@ const METRONOME_SKILL_POOL: readonly MainSkillName[] = [
     'Cooking Power-Up S',
     'Cooking Power-Up S (Minus)',
     'Tasty Chance S',
+    'Cooking Assist S (Bulk Up)',
     'Dream Shard Magnet S',
     'Dream Shard Magnet S (Random)',
     'Berry Burst',
@@ -116,6 +118,7 @@ export interface PokemonSkillBonusContext {
     ingredientDrawMultiplier: number;
     skillIngredientMultiplier: number;
     dreamShardMultiplier: number;
+    mainSkillDreamShardMultiplier: number;
     berryBurstMultiplier: number;
     berryStrengthBonus: number;
 }
@@ -380,7 +383,8 @@ export function classifySkill(
     if (
         skillName === 'Cooking Power-Up S' ||
         skillName === 'Cooking Power-Up S (Minus)' ||
-        skillName === 'Tasty Chance S'
+        skillName === 'Tasty Chance S' ||
+        skillName === 'Cooking Assist S (Bulk Up)'
     ) {
         return 'cookingSupport';
     }
@@ -415,6 +419,7 @@ export function isNonEPSkill(skillName: string): boolean {
     return skillName === 'Cooking Power-Up S' ||
         skillName === 'Cooking Power-Up S (Minus)' ||
         skillName === 'Tasty Chance S' ||
+        skillName === 'Cooking Assist S (Bulk Up)' ||
         skillName === 'Dream Shard Magnet S' ||
         skillName === 'Dream Shard Magnet S (Random)' ||
         skillName === 'Ingredient Draw S' ||
@@ -508,7 +513,7 @@ export function processSkillTriggers(
     bonusContext?: TeamSkillBonusContext,
     analysisContext?: SkillAnalysisContext,
 ): SkillEffectResult {
-    const skillName = proxySkillNameOverride ?? (pokemon.iv.pokemon.skill as MainSkillName);
+    const skillName = proxySkillNameOverride ?? getEffectiveMainSkillName(pokemon);
     const pokemonBonus = bonusContext?.byPokemonId.get(pokemon.id);
     const skillLevel = resolveSkillLevelForSkill(
         skillName,
@@ -773,7 +778,7 @@ export function processSkillTriggers(
                     const triggerProbability = 1 - Math.pow(1 - targetSkillRate, skillLevel);
                     if (random.chance(triggerProbability)) {
                         activeNuzzleChainState.remaining -= 1;
-                        const triggeredSkillName = target.iv.pokemon.skill as MainSkillName;
+                        const triggeredSkillName = getEffectiveMainSkillName(target);
                         nuzzleTriggeredSkillEvents.push({
                             targetPokemonId: target.id,
                             triggeredSkillName,
@@ -924,7 +929,7 @@ export function processSkillTriggers(
         const remainderCount = totalCountPerTrigger % INGREDIENT_MAGNET_PICK_COUNT;
         const shouldApplyPlusBonus =
             skillName === 'Ingredient Magnet S (Plus)' &&
-            activeTeammates.some(teammate => PLUS_TRIGGER_SKILLS.has(teammate.iv.pokemon.skill as MainSkillName));
+            activeTeammates.some(teammate => PLUS_TRIGGER_SKILLS.has(getEffectiveMainSkillName(teammate)));
 
         let plusBonusCount = 0;
         if (shouldApplyPlusBonus) {
@@ -977,6 +982,8 @@ export function processSkillTriggers(
             pokemonBonus?.ingredientDrawMultiplier ?? 1,
             pokemonBonus?.skillIngredientMultiplier ?? 1
         );
+        const dreamShardMultiplier = ingredientDrawMultiplier *
+            (pokemonBonus?.mainSkillDreamShardMultiplier ?? 1);
         const ingredientPerTrigger = Math.floor(getSkillValue(skillName, skillLevel) * ingredientDrawMultiplier);
         const ingredientDrawPool = getIngredientDrawPool(pokemon);
         const dreamShardPerOne = skillName === 'Ingredient Draw S (Super Luck)'
@@ -992,10 +999,10 @@ export function processSkillTriggers(
                 if (roll < superLuckIngRate) {
                     shouldGrantIngredient = true;
                 } else if (roll < superLuckIngRate + superLuckShardRate) {
-                    totalDreamShardCount += dreamShardPerOne;
+                    totalDreamShardCount += dreamShardPerOne * dreamShardMultiplier;
                     shouldGrantIngredient = false;
                 } else if (roll < superLuckIngRate + superLuckShardRate + superLuckShard5Rate) {
-                    totalDreamShardCount += dreamShardPerOne * 5;
+                    totalDreamShardCount += dreamShardPerOne * 5 * dreamShardMultiplier;
                     shouldGrantIngredient = false;
                 } else {
                     shouldGrantIngredient = false;
@@ -1020,6 +1027,40 @@ export function processSkillTriggers(
         if (skillName === 'Tasty Chance S') {
             const increasePerTrigger = getSkillValue('Tasty Chance S', skillLevel);
             totalTastyChanceIncreasePercent = increasePerTrigger * skillTriggerCount;
+        } else if (skillName === 'Cooking Assist S (Bulk Up)') {
+            const ingredientMagnetMultiplier = Math.max(
+                pokemonBonus?.ingredientMagnetMultiplier ?? 1,
+                pokemonBonus?.skillIngredientMultiplier ?? 1
+            );
+            const ingredientCountPerTrigger = Math.floor(
+                getSkillValue(skillName, skillLevel) * ingredientMagnetMultiplier
+            );
+            const tastyChanceIncreasePerTrigger = getSkillSubValue(skillName, skillLevel);
+            totalTastyChanceIncreasePercent = tastyChanceIncreasePerTrigger * skillTriggerCount;
+
+            for (let i = 0; i < skillTriggerCount; i++) {
+                const selectedIngredients = random
+                    .shuffle(INGREDIENT_MAGNET_CANDIDATES)
+                    .slice(0, INGREDIENT_MAGNET_PICK_COUNT);
+                const baseCount = Math.floor(ingredientCountPerTrigger / INGREDIENT_MAGNET_PICK_COUNT);
+                const remainderCount = ingredientCountPerTrigger % INGREDIENT_MAGNET_PICK_COUNT;
+
+                for (const ingredient of selectedIngredients) {
+                    addIngredientCount(skillIngredientMap, ingredient, baseCount);
+                }
+
+                if (remainderCount > 0) {
+                    const remainderTargets = random
+                        .shuffle([0, 1, 2])
+                        .slice(0, remainderCount);
+                    for (const targetIndex of remainderTargets) {
+                        const ingredient = selectedIngredients[targetIndex];
+                        if (ingredient) {
+                            addIngredientCount(skillIngredientMap, ingredient, 1);
+                        }
+                    }
+                }
+            }
         } else {
             const potIncreasePerTrigger = getSkillValue(skillName, skillLevel);
             totalCookingPotCapacityIncrease = potIncreasePerTrigger * skillTriggerCount;
@@ -1029,7 +1070,7 @@ export function processSkillTriggers(
                 const hasOtherPlusMinus = activeTeamMembers.some(
                     member =>
                         member.id !== pokemon.id &&
-                        PLUS_TRIGGER_SKILLS.has(member.iv.pokemon.skill as MainSkillName)
+                        PLUS_TRIGGER_SKILLS.has(getEffectiveMainSkillName(member))
                 );
                 const recoveryPerTrigger = getSkillSubValue('Cooking Power-Up S (Minus)', skillLevel);
 
@@ -1050,7 +1091,8 @@ export function processSkillTriggers(
             }
         }
     } else if (category === 'dreamShard') {
-        const dreamShardMultiplier = pokemonBonus?.dreamShardMultiplier ?? 1;
+        const dreamShardMultiplier = (pokemonBonus?.dreamShardMultiplier ?? 1) *
+            (pokemonBonus?.mainSkillDreamShardMultiplier ?? 1);
         if (skillName === 'Dream Shard Magnet S (Random)') {
             const [minShard, maxShard] = getSkillRandomRange('Dream Shard Magnet S (Random)', skillLevel);
             for (let i = 0; i < skillTriggerCount; i++) {
@@ -1084,7 +1126,7 @@ export function processSkillTriggers(
                     continue;
                 }
                 copiedFromPokemonId = copiedTarget.id;
-                triggeredSkillName = copiedTarget.iv.pokemon.skill as MainSkillName;
+                triggeredSkillName = getEffectiveMainSkillName(copiedTarget);
             }
 
             if (!triggeredSkillName) {

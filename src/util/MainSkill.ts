@@ -32,9 +32,12 @@ export type MainSkillName = "Ingredient Magnet S" |
     "Ingredient Draw S" |
     "Ingredient Draw S (Super Luck)" |
     "Ingredient Draw S (Hyper Cutter)" |
+    "Cooking Assist S" |
+    "Cooking Assist S (Bulk Up)" |
+    "Versatile" |
     "unknown";
 
-export const MainSkillNames: MainSkillName[] = [
+export const MainSkillNames: Readonly<MainSkillName[]> = [
     "Charge Strength S", "Charge Strength M",
     "Ingredient Magnet S", "Energy for Everyone S",
     "Charge Energy S", "Energizing Cheer S",
@@ -42,6 +45,23 @@ export const MainSkillNames: MainSkillName[] = [
     "Extra Helpful S", "Helper Boost",
     "Dream Shard Magnet S", "Metronome",
     "Berry Burst", "Skill Copy", "Ingredient Draw S",
+    "Cooking Assist S",
+];
+
+/** Versatile candidates */
+export const VersatileCandidates: Readonly<MainSkillName[]> = [
+    "Charge Strength S (Random)",
+    "Charge Strength M",
+    "Dream Shard Magnet S (Random)",
+    "Ingredient Magnet S",
+    "Charge Energy S",
+    "Energizing Cheer S",
+    "Energy for Everyone S",
+    "Tasty Chance S",
+    "Cooking Power-Up S",
+    "Extra Helpful S",
+    "Metronome",
+    "Berry Burst",
 ];
 
 /** Candy probability for Present */
@@ -69,7 +89,9 @@ export const hyperCutterSuccess = 0.1668;
 
 export function getMaxSkillLevel(skill: MainSkillName): 6|7|8 {
     if (skill === "Dream Shard Magnet S" ||
-        skill === "Dream Shard Magnet S (Random)") {
+        skill === "Dream Shard Magnet S (Random)" ||
+        skill === "Versatile"
+    ) {
         return 8;
     }
     if (skill === "Ingredient Magnet S" ||
@@ -88,7 +110,10 @@ export function getMaxSkillLevel(skill: MainSkillName): 6|7|8 {
         skill === "Skill Copy (Mimic)" ||
         skill === "Ingredient Draw S" ||
         skill === "Ingredient Draw S (Super Luck)" ||
-        skill === "Ingredient Draw S (Hyper Cutter)") {
+        skill === "Ingredient Draw S (Hyper Cutter)" ||
+        skill === "Cooking Assist S" ||
+        skill === "Cooking Assist S (Bulk Up)"
+    ) {
         return 7;
     }
     return 6;
@@ -112,7 +137,9 @@ export function getSkillValue(skill: MainSkillName, skillLevel: number,
         throw new Error(`invalid main skill: ${skill}, ${skillLevel}`);
     }
 
-    if (skill === "Ingredient Magnet S") {
+    if (skill === "Ingredient Magnet S" ||
+        skill === "Cooking Assist S (Bulk Up)"
+    ) {
         return [6, 8, 11, 14, 17, 21, 24][skillLevel - 1];
     }
     if (skill === "Ingredient Magnet S (Plus)") {
@@ -127,16 +154,16 @@ export function getSkillValue(skill: MainSkillName, skillLevel: number,
         return [12, 16, 21, 27, 34, 43][skillLevel - 1];
     }
     if (skill === "Charge Strength S") {
-        return [400, 569, 785, 1083, 1496, 2066, 3002][skillLevel - 1];
+        return [400, 569, 785, 1083, 1496, 2066, 3212][skillLevel - 1];
     }
     if (skill === "Charge Strength S (Stockpile)") {
         return [644.3, 915.95, 1263.97, 1745.19, 2408.59, 3327.75, 4834.38][skillLevel - 1];
     }
     if (skill === "Charge Strength S (Random)") {
-        return [500, 711.5, 981.5, 1354, 1870, 2582.5, 3752.5][skillLevel - 1];
+        return [500, 711.5, 981.5, 1354, 1870, 2582.5, 4015][skillLevel - 1];
     }
     if (skill === "Charge Strength M") {
-        return [880, 1251, 1726, 2383, 3290, 4546, 6409][skillLevel - 1];
+        return [880, 1251, 1726, 2383, 3290, 4546, 6858][skillLevel - 1];
     }
     if (skill === "Charge Strength M (Bad Dreams)") {
         return [2640, 3753, 5178, 7149, 9870, 13638, 17304][skillLevel - 1];
@@ -247,6 +274,13 @@ export function getSkillSubValue(skill: MainSkillName, skillLevel: number,
     if (skill === "Ingredient Draw S (Super Luck)") {
         // Amount of Dream Shards (x1)
         return [500, 720, 1030, 1440, 2000, 2800, 4000][skillLevel - 1];
+    }
+    if (skill === "Cooking Assist S (Bulk Up)") {
+        return [1, 2, 2, 3, 3, 4, 5][skillLevel - 1];
+    }
+    if (skill === "Versatile") {
+        // additional candy count
+        return [0, 0, 0, 0, 0, 1, 2, 3][skillLevel - 1];
     }
     throw new Error(`This skill doesn’t have a sub-value: ${skill}`);
 }
@@ -383,6 +417,15 @@ export function matchMainSkillName(pokemon: PokemonData, match: string,
 ): boolean {
     let name: MainSkillName = pokemon.skill;
 
+    // Special case: Mew matches the versatileSkill
+    if (pokemon.skill === "Versatile") {
+        // Matches all VersatileCandidates
+        if (iv === undefined) {
+            return VersatileCandidates.some(x => x.startsWith(match));
+        }
+        name = iv.versatileSkill;
+    }
+
     // Special case: Toxel's main skill changes upon evolution
     if (evolved && pokemon.id === toxelId && iv !== undefined) {
         name = (iv.nature.isAmped ?
@@ -411,6 +454,14 @@ export function matchMainSkillName(pokemon: PokemonData, match: string,
     // Treat "Dream Shard Magnet S" as matching "Ingredient Draw S (Super Luck)"
     if (name === "Ingredient Draw S (Super Luck)" && match === "Dream Shard Magnet S") {
         return true;
+    }
+
+    // Treat "Bulk Up" as matching "Tasty Chance S" and "Ingredient Magnet S"
+    if (name === "Cooking Assist S (Bulk Up)") {
+        if (match === "Tasty Chance S" ||
+            match === "Ingredient Magnet S") {
+            return true;
+        }
     }
 
     return false;

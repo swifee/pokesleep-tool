@@ -15,7 +15,7 @@ vi.mock('react-i18next', () => ({
     }),
 }));
 
-const METRONOME_POOL_LAST_INDEX = 21;
+const METRONOME_POOL_LAST_INDEX = 22;
 
 function createPokemonBySkill(skillName: string, skillLevel: number): PokemonBoxItem {
     const pokemon = pokemons.find(p => p.skill === skillName);

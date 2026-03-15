@@ -5,6 +5,7 @@ import PokemonBox, { PokemonBoxItem } from '../../../../util/PokemonBox';
 import SubSkill from '../../../../util/SubSkill';
 import SubSkillList from '../../../../util/SubSkillList';
 import { loadHelpEventBonus } from '../../../../data/events';
+import { MainSkillName } from '../../../../util/MainSkill';
 import {
     NoCollectCellSetting,
     PokemonSwap,
@@ -38,6 +39,14 @@ function createBerryBurstDisguisePokemon(skillLevel: number): PokemonBoxItem {
         skillLevel,
     });
     return new PokemonBoxItem(iv);
+}
+
+function createMewPokemon(skillLevel: number, versatileSkill: MainSkillName): PokemonBoxItem {
+    return new PokemonBoxItem(new PokemonIv({
+        pokemonName: 'Mew',
+        skillLevel,
+        versatileSkill,
+    }));
 }
 
 function createPokemonWithHelpingBonus(base: PokemonBoxItem): PokemonBoxItem {
@@ -212,6 +221,40 @@ describe('TimelineSimulator', () => {
         const morningResults = result.slotResults.get('morning__day0') ?? [];
         expect(morningResults.length).toBeGreaterThan(0);
         expect(morningResults[0]?.ingredientDrawGreatSuccessCount).toBe(2);
+    });
+
+    it('Mew をシミュレーション投入時に保存済み Mew rate で正規化する', () => {
+        processSkillTriggersMock.mockImplementation((pokemon: PokemonBoxItem, ...args: unknown[]) => {
+            const energy = typeof args[1] === 'number' ? args[1] : 50;
+            expect(pokemon.iv.baseIngRate).toBe(16);
+            expect(pokemon.iv.baseSkillRate).toBe(2.8);
+            return createNeutralSkillEffectResult(energy);
+        });
+        localStorage.setItem('PstStrenghParam', JSON.stringify({
+            ...defaultBonusSettings,
+            mew: {
+                ing: 16,
+                skill1: 8,
+                skill2: 4.4,
+                skill3: 2.8,
+                success: 30,
+            },
+        }));
+
+        const mew = createMewPokemon(6, 'Energy for Everyone S');
+        const timeSlots: TimeSlot[] = [
+            { id: 'sleep-start', time: '22:00', sleepState: 'sleep', hasMeal: false },
+            { id: 'morning', time: '08:00', sleepState: 'none', hasMeal: false },
+        ];
+
+        runSimulation({
+            team: [mew, null, null, null, null],
+            timeSlots,
+            config: { seed: 24680, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+
+        expect(processSkillTriggersMock).toHaveBeenCalled();
     });
 
     it('simulationDaysを増やすと結果件数が増え、合計は期間全体で集計される', () => {
