@@ -47,6 +47,13 @@ function createTeamSets(): TeamSetState[] {
                 averageTotalEP: 12345,
                 settingsHash: 'hash-current',
             },
+            saveCookingSettings: true,
+            saveFieldSettings: false,
+            savedCookingSettings: {
+                enabled: true,
+                category: 'dessert',
+            },
+            savedFieldSettings: null,
         },
         {
             id: 'set-2',
@@ -61,6 +68,13 @@ function createTeamSets(): TeamSetState[] {
                 averageTotalEP: 7777,
                 settingsHash: 'hash-stale',
             },
+            saveCookingSettings: false,
+            saveFieldSettings: true,
+            savedCookingSettings: null,
+            savedFieldSettings: {
+                fieldIndex: 2,
+                favoriteType: ['fire', 'water', 'grass'],
+            },
         },
         {
             id: 'set-3',
@@ -71,20 +85,24 @@ function createTeamSets(): TeamSetState[] {
             ],
             noCollectCells: [],
             lastSimulationSnapshot: null,
+            saveCookingSettings: false,
+            saveFieldSettings: false,
+            savedCookingSettings: null,
+            savedFieldSettings: null,
         },
     ];
 }
 
 describe('TeamSetToolbar', () => {
-    it('opens team name dialog and saves the new name', () => {
-        const onNameChange = vi.fn();
+    it('opens team save settings dialog and saves name with options', () => {
+        const onSaveSettings = vi.fn();
 
         render(
             <TeamSetToolbar
                 teamSets={createTeamSets()}
                 activeTeamSetIndex={0}
                 currentSimulationContextHash="hash-current"
-                onNameChange={onNameChange}
+                onSaveSettings={onSaveSettings}
                 onCreate={vi.fn()}
                 onDuplicateAt={vi.fn()}
                 onDeleteAt={vi.fn()}
@@ -94,9 +112,13 @@ describe('TeamSetToolbar', () => {
 
         fireEvent.click(screen.getByTestId('team-set-edit-name-button'));
         const dialog = screen.getByTestId('team-set-name-dialog');
+        expect(within(dialog).getByText('チーム保存設定')).toBeDefined();
+        expect((within(dialog).getByRole('checkbox', { name: '料理' }) as HTMLInputElement).checked).toBe(true);
+        expect((within(dialog).getByRole('checkbox', { name: 'フィールド' }) as HTMLInputElement).checked).toBe(false);
         fireEvent.change(within(dialog).getByRole('textbox', { name: 'チーム名' }), { target: { value: 'きのみ特化' } });
+        fireEvent.click(within(dialog).getByRole('checkbox', { name: 'フィールド' }));
         fireEvent.click(screen.getByRole('button', { name: '保存' }));
-        expect(onNameChange).toHaveBeenCalledWith('きのみ特化');
+        expect(onSaveSettings).toHaveBeenCalledWith('きのみ特化', true, true);
     });
 
     it('renders menu details and fires select/duplicate/delete/create handlers', () => {
@@ -110,7 +132,7 @@ describe('TeamSetToolbar', () => {
                 teamSets={createTeamSets()}
                 activeTeamSetIndex={0}
                 currentSimulationContextHash="hash-current"
-                onNameChange={vi.fn()}
+                onSaveSettings={vi.fn()}
                 onCreate={onCreate}
                 onDuplicateAt={onDuplicateAt}
                 onDeleteAt={onDeleteAt}

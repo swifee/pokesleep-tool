@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type PokemonBox from '../../../util/PokemonBox';
 import TeamTimelineApp from './TeamTimelineApp';
@@ -38,7 +38,22 @@ vi.mock('./components/SwapSupplementBar', () => ({
 }));
 
 vi.mock('./components/SimulationControls', () => ({
-    default: () => <div data-testid="simulation-controls" />,
+    default: ({
+        fieldIndex,
+        cookingSimEnabled,
+        cookingCategory,
+    }: {
+        fieldIndex: number;
+        cookingSimEnabled: boolean;
+        cookingCategory: string;
+    }) => (
+        <div
+            data-testid="simulation-controls"
+            data-field-index={String(fieldIndex)}
+            data-cooking-enabled={cookingSimEnabled ? 'true' : 'false'}
+            data-cooking-category={cookingCategory}
+        />
+    ),
 }));
 
 vi.mock('./components/TimeSlotEditor', () => ({
@@ -207,5 +222,80 @@ describe('TeamTimelineApp pre-simulation timeline', () => {
         fireEvent.click(screen.getByTestId('timeline-open-time-slot-settings-click'));
 
         expect(screen.getByTestId('team-timeline-sleep-energy-value').textContent).toBe('50');
+    });
+
+    it('restores saved cooking and field settings from active team set and when switching team set', async () => {
+        localStorage.setItem('PstTeamTimelineBonusSettings', JSON.stringify({
+            fieldIndex: 1,
+            favoriteType: ['fire', 'fire', 'fire'],
+        }));
+        localStorage.setItem('PstTeamTimelineCookingSettings', JSON.stringify({
+            enabled: false,
+            category: 'curry',
+            recipeLevels: {},
+            basePotCapacity: 81,
+            initialIngredients: {},
+            disabledRecipes: {},
+            disabledExtraIngredients: {},
+        }));
+        localStorage.setItem('PstTeamTimelineTeamSetsV1', JSON.stringify({
+            activeTeamSetIndex: 0,
+            teamSets: [
+                {
+                    id: 'set-1',
+                    name: 'set1',
+                    team: [null, null, null, null, null],
+                    swaps: [],
+                    noCollectCells: [],
+                    lastSimulationSnapshot: null,
+                    saveCookingSettings: true,
+                    saveFieldSettings: true,
+                    savedCookingSettings: {
+                        enabled: true,
+                        category: 'dessert',
+                    },
+                    savedFieldSettings: {
+                        fieldIndex: 4,
+                        favoriteType: ['rock', 'ground', 'steel'],
+                    },
+                },
+                {
+                    id: 'set-2',
+                    name: 'set2',
+                    team: [null, null, null, null, null],
+                    swaps: [],
+                    noCollectCells: [],
+                    lastSimulationSnapshot: null,
+                    saveCookingSettings: true,
+                    saveFieldSettings: true,
+                    savedCookingSettings: {
+                        enabled: false,
+                        category: 'salad',
+                    },
+                    savedFieldSettings: {
+                        fieldIndex: 2,
+                        favoriteType: ['fire', 'water', 'grass'],
+                    },
+                },
+            ],
+        }));
+
+        render(<TeamTimelineApp />);
+
+        await waitFor(() => {
+            const controls = screen.getByTestId('simulation-controls');
+            expect(controls.getAttribute('data-field-index')).toBe('4');
+            expect(controls.getAttribute('data-cooking-enabled')).toBe('true');
+            expect(controls.getAttribute('data-cooking-category')).toBe('dessert');
+        });
+
+        fireEvent.click(screen.getByTestId('team-set-select-second-click'));
+
+        await waitFor(() => {
+            const controls = screen.getByTestId('simulation-controls');
+            expect(controls.getAttribute('data-field-index')).toBe('2');
+            expect(controls.getAttribute('data-cooking-enabled')).toBe('false');
+            expect(controls.getAttribute('data-cooking-category')).toBe('salad');
+        });
     });
 });

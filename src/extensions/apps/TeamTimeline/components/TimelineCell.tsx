@@ -56,6 +56,29 @@ interface TimelineCellProps {
     onNoCollectToggle?: () => void;
 }
 
+const ENERGY_BAR_COLOR_HIGH = '#62d540';
+const ENERGY_BAR_COLOR_MID_HIGH = '#34cbbf';
+const ENERGY_BAR_COLOR_MID = '#4e9ff2';
+const ENERGY_BAR_COLOR_LOW = '#b792f2';
+const ENERGY_BAR_COLOR_CRITICAL = '#a9a9a9';
+const ENERGY_BAR_TRACK_COLOR = '#f3f4f6';
+
+function getEnergyBarColor(energy: number): string {
+    if (energy >= 80) {
+        return ENERGY_BAR_COLOR_HIGH;
+    }
+    if (energy >= 60) {
+        return ENERGY_BAR_COLOR_MID_HIGH;
+    }
+    if (energy >= 40) {
+        return ENERGY_BAR_COLOR_MID;
+    }
+    if (energy >= 20) {
+        return ENERGY_BAR_COLOR_LOW;
+    }
+    return ENERGY_BAR_COLOR_CRITICAL;
+}
+
 /**
  * Display simulation results for 1 Pokemon x 1 time slot
  */
@@ -450,7 +473,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
             parts.push(`鍋容量+${Math.round(event.cookingPotCapacityIncrease ?? 0)}`);
         }
         if ((event.tastyChanceIncreasePercent ?? 0) > 0) {
-            parts.push(`料理チャンス+${Math.round(event.tastyChanceIncreasePercent ?? 0)}%`);
+            parts.push(`料理大成功+${Math.round(event.tastyChanceIncreasePercent ?? 0)}%`);
         }
         if ((event.dreamShardCount ?? 0) > 0) {
             parts.push(`ゆめのかけら+${Math.round(event.dreamShardCount ?? 0).toLocaleString()}`);
@@ -499,6 +522,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     const totalSkillRecoveryInEnergyLine =
         Math.round(result.skillRecovery + result.selfSkillRecovery);
     const energyBarWidth = Math.max(0, Math.min(100, (result.energyEnd / 150) * 100));
+    const energyBarColor = getEnergyBarColor(result.energyEnd);
     const moonlightEvents = result.moonlightEvents ?? [];
     const cookingMinusEvents = result.cookingMinusEvents ?? [];
     const proxySkillEvents = result.proxySkillEvents ?? [];
@@ -544,7 +568,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     {renderPokemonIcon()}
                     <SimpleRightArea>
                         <SimpleEnergyBarTrack>
-                            <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                            <EnergyBarFill
+                                data-testid="timeline-cell-energy-bar-fill"
+                                style={{ width: `${energyBarWidth}%`, backgroundColor: energyBarColor }}
+                            />
                         </SimpleEnergyBarTrack>
                         <SimpleMetricsLine>
                             <SimpleMetricBadge data-testid="timeline-cell-simple-berry">
@@ -612,9 +639,9 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
     if ((result.cookingPotCapacityIncrease ?? 0) > 0) {
         aggregateDetailParts.push(`鍋容量+${Math.round(result.cookingPotCapacityIncrease ?? 0)}`);
     }
-    if ((result.tastyChanceIncreasePercent ?? 0) > 0) {
-        aggregateDetailParts.push(`料理チャンス+${Math.round(result.tastyChanceIncreasePercent ?? 0)}%`);
-    }
+    const tastyChanceDetail = (result.tastyChanceIncreasePercent ?? 0) > 0
+        ? `料理大成功+${Math.round(result.tastyChanceIncreasePercent ?? 0)}%`
+        : null;
     if ((result.dreamShardCount ?? 0) > 0) {
         aggregateDetailParts.push(`ゆめのかけら+${Math.round(result.dreamShardCount ?? 0).toLocaleString()}`);
     }
@@ -722,7 +749,14 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 </SkillDetailLine>
             );
         }
-    } else if (result.skillTriggerCount > 0 || aggregateDetailParts.length > 0) {
+        if (tastyChanceDetail && !hasProxyEventStyle) {
+            skillDetailLines.push(
+                <SkillDetailLine key="tasty-chance-extra">
+                    {renderTextWithHealIcon(tastyChanceDetail, 'tasty-chance-extra')}
+                </SkillDetailLine>
+            );
+        }
+    } else if (result.skillTriggerCount > 0 || aggregateDetailParts.length > 0 || tastyChanceDetail) {
         if (isHelperBoostOnlySupportEvents) {
             const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
             skillDetailLines.push(
@@ -741,6 +775,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                     ))}
                 </SkillDetailLine>
             );
+            if (tastyChanceDetail) {
+                skillDetailLines.push(
+                    <SkillDetailLine key="helper-boost-tasty-chance">
+                        {renderTextWithHealIcon(tastyChanceDetail, 'helper-boost-tasty-chance')}
+                    </SkillDetailLine>
+                );
+            }
         } else {
             if (skillIngredients.length > 0) {
                 const triggerCount = result.skillTriggerCount > 0 ? result.skillTriggerCount : 1;
@@ -770,6 +811,13 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                 </SkillDetailLine>
             );
         }
+            if (tastyChanceDetail) {
+                skillDetailLines.push(
+                    <SkillDetailLine key="aggregate-tasty-chance">
+                        {renderTextWithHealIcon(tastyChanceDetail, 'aggregate-tasty-chance')}
+                    </SkillDetailLine>
+                );
+            }
         }
     }
 
@@ -798,7 +846,10 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
                         げんき{Math.round(result.energyEnd)}
                     </EnergyLine>
                     <EnergyBarTrack>
-                        <EnergyBarFill style={{ width: `${energyBarWidth}%` }} />
+                        <EnergyBarFill
+                            data-testid="timeline-cell-energy-bar-fill"
+                            style={{ width: `${energyBarWidth}%`, backgroundColor: energyBarColor }}
+                        />
                     </EnergyBarTrack>
                 </EnergySummary>
             </TopEnergyArea>
@@ -1395,13 +1446,12 @@ const EnergyBarTrack = styled('div')({
     height: '3px',
     marginTop: '-1px',
     borderRadius: '999px',
-    backgroundColor: '#d5ead0',
+    backgroundColor: ENERGY_BAR_TRACK_COLOR,
     overflow: 'hidden',
 });
 
 const EnergyBarFill = styled('div')({
     height: '100%',
-    backgroundColor: '#62d540',
     borderRadius: '999px',
 });
 

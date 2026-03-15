@@ -2,10 +2,12 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
     Box,
     Button,
+    Checkbox,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
+    FormControlLabel,
     IconButton,
     MenuItem,
     Select,
@@ -30,7 +32,7 @@ interface TeamSetToolbarProps {
     teamSets: TeamSetState[];
     activeTeamSetIndex: number;
     currentSimulationContextHash: string;
-    onNameChange: (name: string) => void;
+    onSaveSettings: (name: string, saveCookingSettings: boolean, saveFieldSettings: boolean) => void;
     onCreate: () => void;
     onDuplicateAt: (index: number) => void;
     onDeleteAt: (index: number) => void;
@@ -69,7 +71,7 @@ const TeamSetToolbar = React.memo(({
     teamSets,
     activeTeamSetIndex,
     currentSimulationContextHash,
-    onNameChange,
+    onSaveSettings,
     onCreate,
     onDuplicateAt,
     onDeleteAt,
@@ -80,6 +82,8 @@ const TeamSetToolbar = React.memo(({
     const activeTeamSet = teamSets[safeActiveIndex];
     const [nameDialogOpen, setNameDialogOpen] = useState(false);
     const [nameDraft, setNameDraft] = useState('');
+    const [saveCookingDraft, setSaveCookingDraft] = useState(false);
+    const [saveFieldDraft, setSaveFieldDraft] = useState(false);
 
     const swapCountBySetId = useMemo(
         () => new Map(teamSets.map((teamSet) => [teamSet.id, countUniqueSwapPokemonIds(teamSet)])),
@@ -88,6 +92,8 @@ const TeamSetToolbar = React.memo(({
 
     const handleOpenNameDialog = useCallback(() => {
         setNameDraft(activeTeamSet?.name ?? '');
+        setSaveCookingDraft(activeTeamSet?.saveCookingSettings ?? false);
+        setSaveFieldDraft(activeTeamSet?.saveFieldSettings ?? false);
         setNameDialogOpen(true);
     }, [activeTeamSet]);
 
@@ -96,9 +102,9 @@ const TeamSetToolbar = React.memo(({
     }, []);
 
     const handleSaveName = useCallback(() => {
-        onNameChange(nameDraft);
+        onSaveSettings(nameDraft, saveCookingDraft, saveFieldDraft);
         setNameDialogOpen(false);
-    }, [nameDraft, onNameChange]);
+    }, [nameDraft, onSaveSettings, saveCookingDraft, saveFieldDraft]);
 
     const handleSelectChange = (event: SelectChangeEvent<number>) => {
         const nextValue = Number(event.target.value);
@@ -249,7 +255,7 @@ const TeamSetToolbar = React.memo(({
                 fullWidth
                 data-testid="team-set-name-dialog"
             >
-                <DialogTitle>{t('TeamTimeline.team set name', 'チーム名')}</DialogTitle>
+                <DialogTitle>{t('TeamTimeline.team set save settings', 'チーム保存設定')}</DialogTitle>
                 <DialogContent>
                     <TextField
                         autoFocus
@@ -261,6 +267,26 @@ const TeamSetToolbar = React.memo(({
                         inputProps={{ 'aria-label': t('TeamTimeline.team set name', 'チーム名') }}
                         sx={{ mt: '4px' }}
                     />
+                    <Box sx={{ mt: '8px', display: 'flex', flexDirection: 'column' }}>
+                        <FormControlLabel
+                            control={(
+                                <Checkbox
+                                    checked={saveCookingDraft}
+                                    onChange={(event) => setSaveCookingDraft(event.target.checked)}
+                                />
+                            )}
+                            label={t('TeamTimeline.team set save option cooking', '料理')}
+                        />
+                        <FormControlLabel
+                            control={(
+                                <Checkbox
+                                    checked={saveFieldDraft}
+                                    onChange={(event) => setSaveFieldDraft(event.target.checked)}
+                                />
+                            )}
+                            label={t('TeamTimeline.team set save option field', 'フィールド')}
+                        />
+                    </Box>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCloseNameDialog}>

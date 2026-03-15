@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TeamTimelineApp from './TeamTimelineApp';
 
@@ -12,6 +12,7 @@ const { runSimulationMock } = vi.hoisted(() => ({
             totalBerryEP: 0,
             totalIngredientEP: 0,
             totalSkillEP: 0,
+            totalCookingEP: 0,
             grandTotalEP: 0,
             totalPresentCandyCount: 0,
             totalCookingPotCapacityIncrease: 0,
@@ -39,6 +40,7 @@ vi.mock('./TeamTimelineState', async () => {
         totalBerryEP: 0,
         totalIngredientEP: 0,
         totalSkillEP: 0,
+        totalCookingEP: 0,
         grandTotalEP: 0,
         totalPresentCandyCount: 0,
         totalCookingPotCapacityIncrease: 0,
@@ -65,6 +67,8 @@ vi.mock('./TeamTimelineState', async () => {
                 recipes: [],
                 leftoverIngredients: [{ name: 'apple', count: 1 }],
             },
+            seedMode: 'fixed',
+            multiTrialCount: 1,
         }),
     };
 });
@@ -145,8 +149,37 @@ vi.mock('./components/DailySummaryRow', () => ({
 }));
 
 vi.mock('./components/ResimulationNoticeBar', () => ({
-    default: ({ open }: { open: boolean }) => (
-        <div data-testid="resimulation-notice" data-open={open ? 'true' : 'false'} />
+    default: ({
+        open,
+        mode,
+        deltaSummary,
+        onResimulate,
+        onUndo,
+        onClose,
+    }: {
+        open: boolean;
+        mode?: 'notice' | 'result';
+        deltaSummary?: { totalDeltaEP: number } | null;
+        onResimulate?: () => void;
+        onUndo?: () => void;
+        onClose?: () => void;
+    }) => (
+        <div
+            data-testid="resimulation-notice"
+            data-open={open ? 'true' : 'false'}
+            data-mode={mode ?? 'notice'}
+            data-total-delta={deltaSummary ? String(deltaSummary.totalDeltaEP) : ''}
+        >
+            <button type="button" data-testid="resimulation-notice-run" onClick={() => onResimulate?.()}>
+                run-resimulation
+            </button>
+            <button type="button" data-testid="resimulation-notice-undo" onClick={() => onUndo?.()}>
+                undo-resimulation
+            </button>
+            <button type="button" data-testid="resimulation-notice-close" onClick={() => onClose?.()}>
+                close-resimulation
+            </button>
+        </div>
     ),
 }));
 
@@ -202,11 +235,13 @@ vi.mock('./components/BoxSelectDialog', () => ({
 vi.mock('./components/TimelineTable', () => ({
     default: ({
         displayMode,
+        team,
         onHeaderSlotClick,
         noCollectCells,
         onNoCollectToggle,
     }: {
         displayMode?: 'detailed' | 'simple';
+        team?: Array<{ iv: { pokemonName: string } } | null>;
         onHeaderSlotClick?: (index: number) => void;
         noCollectCells?: { dayIndex: number; slotId: string; teamSlotIndex: number }[];
         onNoCollectToggle?: (slotId: string, teamIndex: number, dayIndex: number) => void;
@@ -215,6 +250,7 @@ vi.mock('./components/TimelineTable', () => ({
             data-testid="timeline-table"
             data-display-mode={displayMode ?? 'detailed'}
             data-no-collect-count={String(noCollectCells?.length ?? 0)}
+            data-team-member-0={team?.[0]?.iv.pokemonName ?? 'null'}
         >
             <button
                 type="button"
@@ -310,6 +346,49 @@ describe('TeamTimelineApp timeline display mode', () => {
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('false');
         fireEvent.click(screen.getByTestId('timeline-no-collect-toggle'));
         expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
+    });
+
+    it('shows result diff after re-simulation and restores previous settings on undo', async () => {
+        localStorage.setItem('PstTeamTimelineSeedMode', 'fixed');
+        localStorage.setItem('PstTeamTimelineTrialCount', '1');
+        runSimulationMock.mockReturnValueOnce({
+            slotResults: new Map(),
+            dailySummaries: [],
+            teamSummary: {
+                totalIngredients: [],
+                totalBerryEP: 2000,
+                totalIngredientEP: 0,
+                totalSkillEP: 3000,
+                totalCookingEP: 5000,
+                grandTotalEP: 10000,
+                totalPresentCandyCount: 0,
+                totalCookingPotCapacityIncrease: 0,
+                totalTastyChanceIncreasePercent: 0,
+                totalDreamShardCount: 0,
+            },
+        });
+
+        render(<TeamTimelineApp />);
+
+        expect(screen.getByTestId('timeline-table').getAttribute('data-team-member-0')).toBe('null');
+
+        fireEvent.click(screen.getByTestId('timeline-header-slot-click'));
+        fireEvent.click(screen.getByTestId('team-box-select-first'));
+        expect(screen.getByTestId('timeline-table').getAttribute('data-team-member-0')).toBe('ピカチュウ');
+        expect(screen.getByTestId('resimulation-notice').getAttribute('data-open')).toBe('true');
+
+        fireEvent.click(screen.getByTestId('resimulation-notice-run'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('resimulation-notice').getAttribute('data-mode')).toBe('result');
+        });
+        expect(screen.getByTestId('resimulation-notice').getAttribute('data-total-delta')).toBe('10000');
+
+        fireEvent.click(screen.getByTestId('resimulation-notice-undo'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('timeline-table').getAttribute('data-team-member-0')).toBe('null');
+        });
     });
 
     it('shares leftover toggle state across average and details summary rows', () => {

@@ -305,6 +305,22 @@ describe('TeamSummaryRow', () => {
         expect((document.body.textContent ?? '')).toContain('食材合計: 3');
     });
 
+    it('shows 料理大成功 label in team metadata when tasty chance is positive', () => {
+        render(
+            <TeamSummaryRow
+                teamSummary={{
+                    ...TEAM_SUMMARY,
+                    totalTastyChanceIncreasePercent: 12.5,
+                }}
+                layoutMode="details"
+            />
+        );
+
+        const content = document.body.textContent ?? '';
+        expect(content).toContain('料理大成功 : +12.5%');
+        expect(content).not.toContain('料理チャンス : +12.5%');
+    });
+
     it('renders translated recipe names in cooking result', () => {
         render(
             <TeamSummaryRow

@@ -4,6 +4,8 @@ import {
     TeamTimelineAction,
     TeamSetState,
     TeamSetSimulationSnapshot,
+    TeamSetSavedCookingSettings,
+    TeamSetSavedFieldSettings,
     MAX_TEAM_SIZE,
     STORAGE_KEY,
     SerializedTeam,
@@ -22,12 +24,12 @@ import {
 } from './types/TimeSlotTypes';
 import { SummaryValueMode } from './utils/SummaryValueModeUtils';
 import { TRIAL_COUNT_OPTIONS } from './types/MultiTrialTypes';
-import { TimelineBonusSettings } from './types/TimelineBonusSettingsTypes';
+import { TimelineBonusSettings, TimelineFavoriteTypes } from './types/TimelineBonusSettingsTypes';
 import {
     createDefaultTimelineBonusSettings,
     normalizeTimelineBonusSettings,
 } from './utils/TimelineBonusSettingsBridge';
-import { createDefaultCookingSettings } from './types/CookingTypes';
+import { CookingCategory, createDefaultCookingSettings } from './types/CookingTypes';
 
 export const STORAGE_KEY_BONUS_SETTINGS = 'PstTeamTimelineBonusSettings';
 export const STORAGE_KEY_SYNC_IV_PARAMETER = 'PstTeamTimelineSyncIvParam';
@@ -44,6 +46,10 @@ interface SerializedTeamSetState {
     swaps: PokemonSwap[];
     noCollectCells: NoCollectCellSetting[];
     lastSimulationSnapshot?: TeamSetSimulationSnapshot | null;
+    saveCookingSettings?: boolean;
+    saveFieldSettings?: boolean;
+    savedCookingSettings?: TeamSetSavedCookingSettings | null;
+    savedFieldSettings?: TeamSetSavedFieldSettings | null;
 }
 
 interface SerializedTeamSetPayload {
@@ -59,6 +65,32 @@ interface SwapPosition {
 
 function createEmptyTeam(): (PokemonBoxItem | null)[] {
     return Array(MAX_TEAM_SIZE).fill(null);
+}
+
+const DEFAULT_COOKING_SETTINGS = createDefaultCookingSettings();
+const DEFAULT_TIMELINE_BONUS_SETTINGS = createDefaultTimelineBonusSettings();
+const VALID_COOKING_CATEGORIES: readonly CookingCategory[] = ['curry', 'salad', 'dessert'];
+
+function cloneFavoriteType(value: TimelineFavoriteTypes): TimelineFavoriteTypes {
+    return [...value] as TimelineFavoriteTypes;
+}
+
+function createSavedCookingSettingsFromState(
+    cookingSettings: TeamTimelineState['cookingSettings'],
+): TeamSetSavedCookingSettings {
+    return {
+        enabled: cookingSettings.enabled,
+        category: cookingSettings.category,
+    };
+}
+
+function createSavedFieldSettingsFromState(
+    bonusSettings: TimelineBonusSettings,
+): TeamSetSavedFieldSettings {
+    return {
+        fieldIndex: bonusSettings.fieldIndex,
+        favoriteType: cloneFavoriteType(bonusSettings.favoriteType),
+    };
 }
 
 function normalizeTeamLength(team: readonly (PokemonBoxItem | null)[]): (PokemonBoxItem | null)[] {
@@ -79,6 +111,17 @@ function cloneTeamSet(set: TeamSetState): TeamSetState {
         lastSimulationSnapshot: set.lastSimulationSnapshot
             ? { ...set.lastSimulationSnapshot }
             : null,
+        saveCookingSettings: set.saveCookingSettings,
+        saveFieldSettings: set.saveFieldSettings,
+        savedCookingSettings: set.savedCookingSettings
+            ? { ...set.savedCookingSettings }
+            : null,
+        savedFieldSettings: set.savedFieldSettings
+            ? {
+                fieldIndex: set.savedFieldSettings.fieldIndex,
+                favoriteType: cloneFavoriteType(set.savedFieldSettings.favoriteType),
+            }
+            : null,
     };
 }
 
@@ -90,6 +133,10 @@ function createEmptyTeamSet(id: string, name: string): TeamSetState {
         swaps: [],
         noCollectCells: [],
         lastSimulationSnapshot: null,
+        saveCookingSettings: false,
+        saveFieldSettings: false,
+        savedCookingSettings: null,
+        savedFieldSettings: null,
     };
 }
 
@@ -258,6 +305,31 @@ export function teamTimelineReducer(
                 teamSets: state.teamSets.map((set, index) => (
                     index === activeIndex
                         ? { ...set, name: action.name }
+                        : set
+                )),
+            };
+        }
+        case 'updateActiveTeamSetSaveSettings': {
+            const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+            const nextSavedCookingSettings = action.saveCookingSettings
+                ? createSavedCookingSettingsFromState(state.cookingSettings)
+                : null;
+            const nextSavedFieldSettings = action.saveFieldSettings
+                ? createSavedFieldSettingsFromState(state.bonusSettings)
+                : null;
+            return {
+                ...state,
+                activeTeamSetIndex: activeIndex,
+                teamSets: state.teamSets.map((set, index) => (
+                    index === activeIndex
+                        ? {
+                            ...set,
+                            name: action.name,
+                            saveCookingSettings: action.saveCookingSettings,
+                            saveFieldSettings: action.saveFieldSettings,
+                            savedCookingSettings: nextSavedCookingSettings,
+                            savedFieldSettings: nextSavedFieldSettings,
+                        }
                         : set
                 )),
             };
@@ -774,10 +846,23 @@ export function teamTimelineReducer(
                 simulationResult: null,
             };
         case 'setBonusSettings':
-            return {
-                ...state,
-                bonusSettings: action.settings,
-            };
+            {
+                const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+                const nextTeamSets = state.teamSets.map((set, index) => {
+                    if (index !== activeIndex || !set.saveFieldSettings) {
+                        return set;
+                    }
+                    return {
+                        ...set,
+                        savedFieldSettings: createSavedFieldSettingsFromState(action.settings),
+                    };
+                });
+                return {
+                    ...state,
+                    bonusSettings: action.settings,
+                    teamSets: nextTeamSets,
+                };
+            }
         case 'loadBonusSettings':
             return {
                 ...state,
@@ -794,11 +879,24 @@ export function teamTimelineReducer(
                 syncWithIvParameter: action.enabled,
             };
         case 'setCookingSettings':
-            return {
-                ...state,
-                ...getResetSimulationFields(),
-                cookingSettings: action.settings,
-            };
+            {
+                const activeIndex = clampActiveTeamSetIndex(state.activeTeamSetIndex, state.teamSets);
+                const nextTeamSets = state.teamSets.map((set, index) => {
+                    if (index !== activeIndex || !set.saveCookingSettings) {
+                        return set;
+                    }
+                    return {
+                        ...set,
+                        savedCookingSettings: createSavedCookingSettingsFromState(action.settings),
+                    };
+                });
+                return {
+                    ...state,
+                    ...getResetSimulationFields(),
+                    cookingSettings: action.settings,
+                    teamSets: nextTeamSets,
+                };
+            }
         case 'loadCookingSettings':
             return {
                 ...state,
@@ -921,6 +1019,43 @@ function migrateTeamSetSimulationSnapshot(rawSnapshot: unknown): TeamSetSimulati
     };
 }
 
+function migrateTeamSetSavedCookingSettings(rawSettings: unknown): TeamSetSavedCookingSettings | null {
+    if (!rawSettings || typeof rawSettings !== 'object') {
+        return null;
+    }
+    const candidate = rawSettings as { enabled?: unknown; category?: unknown };
+    const enabled = typeof candidate.enabled === 'boolean'
+        ? candidate.enabled
+        : DEFAULT_COOKING_SETTINGS.enabled;
+    const category = typeof candidate.category === 'string'
+        && VALID_COOKING_CATEGORIES.includes(candidate.category as CookingCategory)
+        ? candidate.category as CookingCategory
+        : DEFAULT_COOKING_SETTINGS.category;
+    return {
+        enabled,
+        category,
+    };
+}
+
+function migrateTeamSetSavedFieldSettings(rawSettings: unknown): TeamSetSavedFieldSettings | null {
+    if (!rawSettings || typeof rawSettings !== 'object') {
+        return null;
+    }
+    const candidate = rawSettings as { fieldIndex?: unknown; favoriteType?: unknown };
+    const normalized = normalizeTimelineBonusSettings({
+        fieldIndex: typeof candidate.fieldIndex === 'number' && Number.isFinite(candidate.fieldIndex)
+            ? Math.floor(candidate.fieldIndex)
+            : DEFAULT_TIMELINE_BONUS_SETTINGS.fieldIndex,
+        favoriteType: Array.isArray(candidate.favoriteType)
+            ? candidate.favoriteType as TimelineFavoriteTypes
+            : cloneFavoriteType(DEFAULT_TIMELINE_BONUS_SETTINGS.favoriteType),
+    });
+    return {
+        fieldIndex: normalized.fieldIndex,
+        favoriteType: cloneFavoriteType(normalized.favoriteType),
+    };
+}
+
 function deserializeSerializedTeam(
     serializedTeam: unknown,
     box: PokemonBox,
@@ -956,6 +1091,17 @@ export function saveTeamSetsToStorage(teamSets: TeamSetState[], activeTeamSetInd
             noCollectCells: [...teamSet.noCollectCells],
             lastSimulationSnapshot: teamSet.lastSimulationSnapshot
                 ? { ...teamSet.lastSimulationSnapshot }
+                : null,
+            saveCookingSettings: teamSet.saveCookingSettings,
+            saveFieldSettings: teamSet.saveFieldSettings,
+            savedCookingSettings: teamSet.savedCookingSettings
+                ? { ...teamSet.savedCookingSettings }
+                : null,
+            savedFieldSettings: teamSet.savedFieldSettings
+                ? {
+                    fieldIndex: teamSet.savedFieldSettings.fieldIndex,
+                    favoriteType: cloneFavoriteType(teamSet.savedFieldSettings.favoriteType),
+                }
                 : null,
         })),
     };
@@ -996,6 +1142,10 @@ export function loadTeamSetsFromStorage(
                         .filter((cell): cell is NoCollectCellSetting => cell !== null)
                     : [];
                 const lastSimulationSnapshot = migrateTeamSetSimulationSnapshot(rawTeamSet.lastSimulationSnapshot);
+                const saveCookingSettings = rawTeamSet.saveCookingSettings === true;
+                const saveFieldSettings = rawTeamSet.saveFieldSettings === true;
+                const migratedSavedCookingSettings = migrateTeamSetSavedCookingSettings(rawTeamSet.savedCookingSettings);
+                const migratedSavedFieldSettings = migrateTeamSetSavedFieldSettings(rawTeamSet.savedFieldSettings);
                 return {
                     id,
                     name,
@@ -1003,6 +1153,20 @@ export function loadTeamSetsFromStorage(
                     swaps,
                     noCollectCells,
                     lastSimulationSnapshot,
+                    saveCookingSettings,
+                    saveFieldSettings,
+                    savedCookingSettings: saveCookingSettings
+                        ? (migratedSavedCookingSettings ?? {
+                            enabled: DEFAULT_COOKING_SETTINGS.enabled,
+                            category: DEFAULT_COOKING_SETTINGS.category,
+                        })
+                        : null,
+                    savedFieldSettings: saveFieldSettings
+                        ? (migratedSavedFieldSettings ?? {
+                            fieldIndex: DEFAULT_TIMELINE_BONUS_SETTINGS.fieldIndex,
+                            favoriteType: cloneFavoriteType(DEFAULT_TIMELINE_BONUS_SETTINGS.favoriteType),
+                        })
+                        : null,
                 };
             })
             .filter((teamSet): teamSet is TeamSetState => teamSet !== null);
