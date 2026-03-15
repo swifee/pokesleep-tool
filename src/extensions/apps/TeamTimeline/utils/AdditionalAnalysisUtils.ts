@@ -15,6 +15,7 @@ import {
     EnergySkillContributionResult,
     EnergySkillContributionTarget,
 } from '../types/AdditionalAnalysisTypes';
+import { getEffectiveMainSkillName } from './TimelinePokemonUtils';
 
 const SELF_ENERGY_SKILLS = new Set<string>([
     'Charge Energy S',
@@ -81,7 +82,7 @@ export function collectAppearingTimelineMembers(
 }
 
 export function hasAnyPlusOrMinusSkill(members: readonly PokemonBoxItem[]): boolean {
-    return members.some(member => PLUS_MINUS_SKILLS.has(member.iv.pokemon.skill));
+    return members.some(member => PLUS_MINUS_SKILLS.has(getEffectiveMainSkillName(member)));
 }
 
 function isPlusOrMinusSkill(skillName: string): boolean {
@@ -110,13 +111,13 @@ function collectCookingMinusEligibleIdsByTimeline(
 
     const inspectCurrentTeam = (): void => {
         const plusMinusMembers = currentTeam.filter((member): member is PokemonBoxItem => (
-            member !== null && isPlusOrMinusSkill(member.iv.pokemon.skill)
+            member !== null && isPlusOrMinusSkill(getEffectiveMainSkillName(member))
         ));
         if (plusMinusMembers.length < 2) {
             return;
         }
         plusMinusMembers.forEach((member) => {
-            if (isCookingMinusSkill(member.iv.pokemon.skill)) {
+            if (isCookingMinusSkill(getEffectiveMainSkillName(member))) {
                 eligibleMinusIds.add(member.id);
             }
         });
@@ -182,9 +183,10 @@ export function buildEnergySkillContributionTargets(
         : null;
     const targets: EnergySkillContributionTarget[] = [];
     members.forEach((member) => {
+        const skillName = getEffectiveMainSkillName(member);
         const category = classifyEnergyDeltaSkill(
-            member.iv.pokemon.skill,
-            isCookingMinusSkill(member.iv.pokemon.skill)
+            skillName,
+            isCookingMinusSkill(skillName)
                 ? (cookingMinusEligibleIds?.has(member.id) ?? includeCookingMinus)
                 : includeCookingMinus
         );
@@ -194,7 +196,7 @@ export function buildEnergySkillContributionTargets(
         targets.push({
             pokemonId: member.id,
             pokemonName: member.nickname || member.iv.pokemonName,
-            skillName: member.iv.pokemon.skill,
+            skillName,
             category,
         });
     });

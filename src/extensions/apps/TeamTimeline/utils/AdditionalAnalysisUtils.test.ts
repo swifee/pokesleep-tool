@@ -143,6 +143,20 @@ describe('AdditionalAnalysisUtils', () => {
         expect(byId.get(nightmareMember.id)?.category).toBe('nightmare');
     });
 
+    it('Mew は実効スキル名で energy skill targets を構築する', () => {
+        const mew = new PokemonBoxItem(new PokemonIv({
+            pokemonName: 'Mew',
+            skillLevel: 6,
+            versatileSkill: 'Energy for Everyone S',
+        }));
+
+        const targets = buildEnergySkillContributionTargets([mew]);
+
+        expect(targets).toHaveLength(1);
+        expect(targets[0]?.skillName).toBe('Energy for Everyone S');
+        expect(targets[0]?.category).toBe('team');
+    });
+
     it('shows Cooking Minus target only when timeline has concurrent plus/minus teammate timing', () => {
         const minusMember = createPokemonBySkill('Cooking Power-Up S (Minus)');
         const plusMember = createPokemonBySkill('Ingredient Magnet S (Plus)');
