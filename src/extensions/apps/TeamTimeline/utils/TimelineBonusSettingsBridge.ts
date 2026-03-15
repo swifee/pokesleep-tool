@@ -160,7 +160,7 @@ export function buildStrengthParameterFromTimelineBonusSettings(
     settings: TimelineBonusSettings
 ): StrengthParameter {
     return mergeTimelineBonusSettingsIntoStrengthParameter(
-        createStrengthParameter({}),
+        loadStrengthParameter(),
         settings
     );
 }

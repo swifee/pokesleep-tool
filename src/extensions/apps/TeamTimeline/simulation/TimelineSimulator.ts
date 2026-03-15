@@ -55,6 +55,7 @@ import {
     getAvailableIngredientCount,
     planExtraIngredientsByEvent,
 } from './CookingSimulator';
+import { normalizeTimelinePokemon } from '../utils/TimelinePokemonUtils';
 
 const INACTIVE_WAKE_RECOVERY_DIVISOR = 20;
 const BAG_COUNT_EPSILON = 1e-9;
@@ -251,6 +252,7 @@ function buildPokemonBonusContext(
             ingredientDrawMultiplier: bonus.ingredientDraw,
             skillIngredientMultiplier: bonus.skillIngredient,
             dreamShardMultiplier: bonus.dreamShard,
+            mainSkillDreamShardMultiplier: bonus.dreamShard2,
             berryBurstMultiplier: bonus.berryBurst,
             berryStrengthBonus: strength.berryStrengthBonus,
         },
@@ -558,9 +560,21 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         disabledPokemonIds,
         disableEnergyRecoveryBonus: analysisOptions?.disableEnergyRecoveryBonus === true,
     };
+    const strengthParameter = buildStrengthParameterFromTimelineBonusSettings(bonusSettings);
+    const normalizedPokemonById = new Map<number, PokemonBoxItem>();
+    const getSimulationPokemon = (pokemon: PokemonBoxItem): PokemonBoxItem => {
+        const cached = normalizedPokemonById.get(pokemon.id);
+        if (cached) {
+            return cached;
+        }
+        const normalized = normalizeTimelinePokemon(pokemon, strengthParameter);
+        normalizedPokemonById.set(pokemon.id, normalized);
+        return normalized;
+    };
+    const normalizedTeam = team.map(pokemon => pokemon ? getSimulationPokemon(pokemon) : null);
 
     // 1. 有効なポケモンのみ抽出
-    const validTeam: PokemonBoxItem[] = team.filter((p): p is PokemonBoxItem => p !== null);
+    const validTeam: PokemonBoxItem[] = normalizedTeam.filter((p): p is PokemonBoxItem => p !== null);
     const activeTeamAtStart = validTeam.filter(pokemon => !disabledPokemonIds.has(pokemon.id));
 
     if (activeTeamAtStart.length === 0 || timeSlots.length === 0) {
@@ -581,7 +595,6 @@ export function runSimulation(input: SimulationInput): SimulationResult {
         };
     }
 
-    const strengthParameter = buildStrengthParameterFromTimelineBonusSettings(bonusSettings);
     const bonusContextByPokemonId = new Map<number, PokemonBonusContext>();
     const getPokemonBonusContext = (pokemon: PokemonBoxItem): PokemonBonusContext => {
         const cached = bonusContextByPokemonId.get(pokemon.id);
@@ -623,14 +636,14 @@ export function runSimulation(input: SimulationInput): SimulationResult {
     });
 
     // 5. 現在のチームを追跡（入れ替えで変化する）
-    const currentTeam: (PokemonBoxItem | null)[] = [...team];
+    const currentTeam: (PokemonBoxItem | null)[] = [...normalizedTeam];
 
     // 6. 各ポケモンの状態を初期化（Map に変更）
     const pokemonStates = new Map<number, PokemonState>();
     validTeam.forEach((pokemon, index) => {
         pokemonStates.set(pokemon.id, {
             pokemon,
-            slotIndex: team.indexOf(pokemon),
+            slotIndex: normalizedTeam.indexOf(pokemon),
             currentEnergy: config.initialEnergy,
             random: new SeededRandom(config.seed + index),
             sleepStartTime: null,
@@ -1168,13 +1181,14 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             const newPokemon = box?.items.find((item: PokemonBoxItem) => item.id === swap.newPokemonId);
             if (!newPokemon) continue; // ボックスにない場合はスキップ
 
-            currentTeam[swap.teamSlotIndex] = newPokemon;
+            const simulationPokemon = getSimulationPokemon(newPokemon);
+            currentTeam[swap.teamSlotIndex] = simulationPokemon;
 
             // 新ポケモンの初期げんきを決定
             let startEnergy: number;
-            if (pokemonLastEnergy.has(newPokemon.id)) {
+            if (pokemonLastEnergy.has(simulationPokemon.id)) {
                 // 2回目以降: 前回の最終げんきを引き継ぐ
-                startEnergy = pokemonLastEnergy.get(newPokemon.id)!;
+                startEnergy = pokemonLastEnergy.get(simulationPokemon.id)!;
             } else {
                 // 初回: swap.initialEnergy を使用
                 startEnergy = swap.initialEnergy;
@@ -1184,7 +1198,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             const swapSeed = config.seed + swap.teamSlotIndex + (i * 100);
 
             const newState: PokemonState = {
-                pokemon: newPokemon,
+                pokemon: simulationPokemon,
                 slotIndex: swap.teamSlotIndex,
                 currentEnergy: startEnergy,
                 random: new SeededRandom(swapSeed),
@@ -1197,8 +1211,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 carriedHelpIngredients: new Map<IngredientName, number>(),
                 carriedSkillIngredients: new Map<IngredientName, number>(),
                 bankedTimeSeconds: 0,
-                maxSkillStock: getMaxSkillStock(newPokemon.iv.pokemon.specialty),
-                maxInventory: newPokemon.iv.carryLimit,
+                maxSkillStock: getMaxSkillStock(simulationPokemon.iv.pokemon.specialty),
+                maxInventory: simulationPokemon.iv.carryLimit,
                 stockpileCount: 0,
                 berryBurstDisguiseLocked: false,
             };
@@ -1208,7 +1222,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
                 newState.sleepStartTime = slot.time;
             }
 
-            pokemonStates.set(newPokemon.id, newState);
+            pokemonStates.set(simulationPokemon.id, newState);
         }
 
         slotResults.set(slot.id, slotResultsForThisSlot);

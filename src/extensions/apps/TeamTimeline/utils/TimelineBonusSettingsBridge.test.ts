@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createStrengthParameter, loadStrengthParameter } from '../../../../util/PokemonStrength';
 import {
+    buildStrengthParameterFromTimelineBonusSettings,
     createDefaultTimelineBonusSettings,
     mergeTimelineBonusSettingsIntoStrengthParameter,
     normalizeTimelineBonusSettings,
@@ -112,5 +113,29 @@ describe('TimelineBonusSettingsBridge', () => {
         expect(loaded.recipeBonus).toBe(48);
         expect(loaded.recipeLevel).toBe(40);
         expect(loaded.event).toBe('custom');
+    });
+
+    it('StrengthParameter構築時に保存済み Mew 設定を引き継ぐ', () => {
+        localStorage.setItem(IV_PARAMETER_STORAGE_KEY, JSON.stringify(createStrengthParameter({
+            mew: {
+                ing: 18,
+                skill1: 7,
+                skill2: 4.5,
+                skill3: 2.5,
+                success: 35,
+            },
+        })));
+
+        const parameter = buildStrengthParameterFromTimelineBonusSettings(
+            createDefaultTimelineBonusSettings()
+        );
+
+        expect(parameter.mew).toEqual({
+            ing: 18,
+            skill1: 7,
+            skill2: 4.5,
+            skill3: 2.5,
+            success: 35,
+        });
     });
 });

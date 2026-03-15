@@ -10,6 +10,7 @@ import { getSkillValue, MainSkillName } from '../../../../util/MainSkill';
 import { IngredientResult } from '../types/TimeSlotTypes';
 import SeededRandom from './SeededRandom';
 import { calculateWeightedEfficiency } from './EnergyCalculator';
+import { getEffectiveMainSkillName } from '../utils/TimelinePokemonUtils';
 
 export interface HelpBonusContext {
     /** スキル発動率倍率（イベント/EX） */
@@ -335,7 +336,7 @@ export function getSkillEffect(
     pokemon: PokemonBoxItem,
     skillTriggerCount: number
 ): SkillEffect {
-    const skillName = pokemon.iv.pokemon.skill;
+    const skillName = getEffectiveMainSkillName(pokemon);
     const skillLevel = pokemon.iv.skillLevel;
 
     // Energy for Everyone S系のスキルかチェック
@@ -345,8 +346,8 @@ export function getSkillEffect(
         'Energy for Everyone S (Berry Juice)',
     ];
 
-    if (e4eSkills.includes(skillName as MainSkillName)) {
-        const recoveryPerTrigger = getSkillValue(skillName as MainSkillName, skillLevel);
+    if (e4eSkills.includes(skillName)) {
+        const recoveryPerTrigger = getSkillValue(skillName, skillLevel);
         return {
             skillName,
             energyRecoveryForTeam: recoveryPerTrigger * skillTriggerCount,

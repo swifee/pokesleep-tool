@@ -217,6 +217,31 @@ describe('TimelineCell ingredient ordering', () => {
         expect(container.querySelectorAll('[data-heal-icon="true"]').length).toBeGreaterThan(0);
     });
 
+    it('renders ingredient gain and tasty chance together for composite cooking support', () => {
+        const result = createTimeSlotResult({
+            skillTriggerCount: 1,
+            skillIngredients: [
+                { name: 'apple', count: 6 },
+                { name: 'honey', count: 3 },
+            ],
+            tastyChanceIncreasePercent: 17,
+        });
+
+        const { container } = render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
+        );
+
+        const content = container.textContent ?? '';
+        expect(content).toContain('apple6');
+        expect(content).toContain('honey3');
+        expect(content).toContain('料理チャンス+17%');
+    });
+
     it('renders pokemon icon next to energy display when pokemonIdForm exists', () => {
         const result = createTimeSlotResult({
             energyEnd: 60,

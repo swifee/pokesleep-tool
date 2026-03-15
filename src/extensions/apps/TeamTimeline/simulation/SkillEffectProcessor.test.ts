@@ -4,6 +4,7 @@ import pokemons from '../../../../data/pokemons';
 import { PokemonBoxItem } from '../../../../util/PokemonBox';
 import {
     getLunarBlessingBerryCount,
+    MainSkillName,
     getSkillRandomRange,
     getSkillSubValue,
     getSkillValue,
@@ -107,6 +108,10 @@ function createTastyChancePokemon(skillLevel: number): PokemonBoxItem {
     return createPokemonBySkill('Tasty Chance S', skillLevel);
 }
 
+function createBulkUpPokemon(skillLevel: number): PokemonBoxItem {
+    return createPokemonBySkill('Cooking Assist S (Bulk Up)', skillLevel);
+}
+
 function createBerryBurstPokemon(skillLevel: number): PokemonBoxItem {
     return createPokemonBySkill('Berry Burst', skillLevel);
 }
@@ -141,6 +146,14 @@ function createSkillCopyPokemon(skillLevel: number): PokemonBoxItem {
         skillLevel,
     });
     return new PokemonBoxItem(iv);
+}
+
+function createMewPokemon(skillLevel: number, versatileSkill: MainSkillName): PokemonBoxItem {
+    return new PokemonBoxItem(new PokemonIv({
+        pokemonName: 'Mew',
+        skillLevel,
+        versatileSkill,
+    }));
 }
 
 function ingredientCount(ingredients: { name: string; count: number }[], name: string): number {
@@ -318,6 +331,7 @@ function createPokemonBonusContext(
         ingredientDrawMultiplier: 1,
         skillIngredientMultiplier: 1,
         dreamShardMultiplier: 1,
+        mainSkillDreamShardMultiplier: 1,
         berryBurstMultiplier: 1,
         berryStrengthBonus: 1,
         ...overrides,
@@ -409,6 +423,10 @@ describe('SkillEffectProcessor', () => {
         expect(classifySkill('Tasty Chance S')).toBe('cookingSupport');
     });
 
+    it('Cooking Assist S (Bulk Up)をcookingSupportカテゴリに分類する', () => {
+        expect(classifySkill('Cooking Assist S (Bulk Up)')).toBe('cookingSupport');
+    });
+
     it('Dream Shard Magnet SをdreamShardカテゴリに分類する', () => {
         expect(classifySkill('Dream Shard Magnet S')).toBe('dreamShard');
     });
@@ -461,6 +479,36 @@ describe('SkillEffectProcessor', () => {
         );
 
         expect(result.teamEnergyRecoveryPerMember).toBe(getSkillValue('Energy for Everyone S', 3));
+    });
+
+    it('Mew: versatileSkill が Charge Strength M なら directEP として処理する', () => {
+        const mew = createMewPokemon(6, 'Charge Strength M');
+
+        const result = processSkillTriggers(
+            mew,
+            2,
+            50,
+            new SeededRandom(45449),
+            []
+        );
+
+        expect(result.directEP).toBe(getSkillValue('Charge Strength M', 6) * 2);
+        expect(result.teamEnergyRecoveryPerMember).toBe(0);
+    });
+
+    it('Mew: versatileSkill が Energy for Everyone S なら teamEnergy として処理する', () => {
+        const mew = createMewPokemon(6, 'Energy for Everyone S');
+
+        const result = processSkillTriggers(
+            mew,
+            3,
+            50,
+            new SeededRandom(45450),
+            []
+        );
+
+        expect(result.teamEnergyRecoveryPerMember).toBe(getSkillValue('Energy for Everyone S', 6) * 3);
+        expect(result.directEP).toBe(0);
     });
 
     it('Ingredient Magnet/Drawは最大倍率を適用する', () => {
@@ -653,6 +701,26 @@ describe('SkillEffectProcessor', () => {
         expect(result.cookingMinusEvents).toHaveLength(0);
     });
 
+    it('Cooking Assist S (Bulk Up): 食材と料理チャンス増加を同時に記録する', () => {
+        const caster = createBulkUpPokemon(6);
+        const triggerCount = 2;
+
+        const result = processSkillTriggers(
+            caster,
+            triggerCount,
+            50,
+            new SeededRandom(454541),
+            []
+        );
+
+        expect(totalIngredientCount(result.skillIngredients)).toBe(
+            getSkillValue('Cooking Assist S (Bulk Up)', 6) * triggerCount
+        );
+        expect(result.tastyChanceIncreasePercent).toBe(
+            getSkillSubValue('Cooking Assist S (Bulk Up)', 6) * triggerCount
+        );
+    });
+
     it('Dream Shard Magnet S: ゆめのかけら獲得量がスキル値×発動回数と一致する', () => {
         const caster = createDreamShardMagnetPokemon(7);
         const triggerCount = 4;
@@ -667,6 +735,33 @@ describe('SkillEffectProcessor', () => {
 
         expect(result.dreamShardCount).toBe(getSkillValue('Dream Shard Magnet S', 7) * triggerCount);
         expect(result.directEP).toBe(0);
+    });
+
+    it('Dream Shard Magnet S: dreamShard と dreamShard2 の両方を反映する', () => {
+        const caster = createDreamShardMagnetPokemon(4);
+        const triggerCount = 3;
+        const bonusContext = createTeamBonusContext(caster, {
+            dreamShardMultiplier: 1.5,
+            mainSkillDreamShardMultiplier: 1.5,
+        });
+
+        const result = processSkillTriggers(
+            caster,
+            triggerCount,
+            50,
+            new SeededRandom(454581),
+            [],
+            0,
+            [caster],
+            undefined,
+            false,
+            undefined,
+            undefined,
+            false,
+            bonusContext
+        );
+
+        expect(result.dreamShardCount).toBe(getSkillValue('Dream Shard Magnet S', 4) * triggerCount * 2.25);
     });
 
     it('Dream Shard Magnet S (Random): 同一seedで再現可能かつ範囲内', () => {
@@ -693,6 +788,39 @@ describe('SkillEffectProcessor', () => {
         expect(result1.dreamShardCount).toBeGreaterThanOrEqual(minShard * triggerCount);
         expect(result1.dreamShardCount).toBeLessThanOrEqual(maxShard * triggerCount);
         expect(result1.directEP).toBe(0);
+    });
+
+    it('Dream Shard Magnet S (Random): dreamShard と dreamShard2 の両方を反映する', () => {
+        const caster = createDreamShardMagnetRandomPokemon(6);
+        const triggerCount = 1;
+        const bonusContext = createTeamBonusContext(caster, {
+            dreamShardMultiplier: 1.5,
+            mainSkillDreamShardMultiplier: 1.5,
+        });
+        const baseResult = processSkillTriggers(
+            caster,
+            triggerCount,
+            50,
+            new SeededRandom(454592),
+            []
+        );
+        const boostedResult = processSkillTriggers(
+            caster,
+            triggerCount,
+            50,
+            new SeededRandom(454592),
+            [],
+            0,
+            [caster],
+            undefined,
+            false,
+            undefined,
+            undefined,
+            false,
+            bonusContext
+        );
+
+        expect(boostedResult.dreamShardCount).toBe(Math.round(baseResult.dreamShardCount * 2.25));
     });
 
     it('Metronome: 発動者Lv7でmaxLv6スキルを引いた場合はLv6で処理する', () => {
@@ -759,6 +887,26 @@ describe('SkillEffectProcessor', () => {
         expect(result.proxySkillEvents[0]?.source).toBe('skillCopy');
         expect(result.proxySkillEvents[0]?.resolvedSkillLevel).toBe(6);
         expect(result.proxySkillEvents[0]?.copiedFromPokemonId).toBe(target.id);
+    });
+
+    it('Skill Copy: Cooking Assist S (Bulk Up) をコピーすると両方の効果を記録する', () => {
+        const caster = createSkillCopyPokemon(7);
+        const target = createBulkUpPokemon(6);
+        const teamMembers = [caster, target];
+
+        const result = processSkillTriggers(
+            caster,
+            1,
+            50,
+            new SeededRandom(910021),
+            [target],
+            0,
+            teamMembers
+        );
+
+        expect(totalIngredientCount(result.skillIngredients)).toBe(getSkillValue('Cooking Assist S (Bulk Up)', 7));
+        expect(result.tastyChanceIncreasePercent).toBe(getSkillSubValue('Cooking Assist S (Bulk Up)', 7));
+        expect(result.proxySkillEvents[0]?.resolvedSkillName).toBe('Cooking Assist S (Bulk Up)');
     });
 
     it('Skill Copy: コピー先がSkill Copy系列ならCharge Strength Sへフォールバックする', () => {
@@ -1028,6 +1176,41 @@ describe('SkillEffectProcessor', () => {
         expect(result.dreamShardCount).toBe(expected.dreamShardCount);
         expect(result.directEP).toBe(0);
         expect(result.ingredientDrawGreatSuccessCount).toBe(0);
+    });
+
+    it('Ingredient Draw S (Super Luck): ingredientDraw と dreamShard2 をゆめのかけら出力へ反映する', () => {
+        const pokemon = createIngredientDrawSuperLuckPokemon(7);
+        const triggerCount = 40;
+        const seed = 32104;
+        const baseResult = processSkillTriggers(
+            pokemon,
+            triggerCount,
+            50,
+            new SeededRandom(seed),
+            []
+        );
+        const bonusContext = createTeamBonusContext(pokemon, {
+            ingredientDrawMultiplier: 1.5,
+            mainSkillDreamShardMultiplier: 1.5,
+        });
+
+        const boostedResult = processSkillTriggers(
+            pokemon,
+            triggerCount,
+            50,
+            new SeededRandom(seed),
+            [],
+            0,
+            [pokemon],
+            undefined,
+            false,
+            undefined,
+            undefined,
+            false,
+            bonusContext
+        );
+
+        expect(boostedResult.dreamShardCount).toBe(baseResult.dreamShardCount * 2.25);
     });
 
     it('Ingredient Draw S (Hyper Cutter): 同一seedで大成功回数と2倍獲得が再現される', () => {
