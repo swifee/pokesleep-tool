@@ -239,7 +239,7 @@ describe('TimelineCell ingredient ordering', () => {
         const content = container.textContent ?? '';
         expect(content).toContain('apple6');
         expect(content).toContain('honey3');
-        expect(content).toContain('料理チャンス+17%');
+        expect(content).toContain('料理大成功+17%');
     });
 
     it('renders pokemon icon next to energy display when pokemonIdForm exists', () => {
