@@ -97,7 +97,7 @@ describe('TimelineCell ingredient ordering', () => {
         expect(content.indexOf('egg')).toBeLessThan(content.indexOf('honey'));
     });
 
-    it('renders support help as berry EP first and removes old parenthesized EP format', () => {
+    it('renders support help target as icon and keeps berry EP first', () => {
         const result = createTimeSlotResult({
             skillTriggerCount: 1,
             skillIngredients: [
@@ -109,6 +109,7 @@ describe('TimelineCell ingredient ordering', () => {
                     source: 'extraHelpful',
                     targetPokemonId: 7,
                     targetPokemonName: 'SupportTarget',
+                    targetPokemonIdForm: 7,
                     helpCount: 2,
                     berryCount: 4,
                     berryEP: 840,
@@ -130,7 +131,8 @@ describe('TimelineCell ingredient ordering', () => {
         );
 
         const content = container.textContent ?? '';
-        expect(content).toContain('→SupportTarget');
+        expect(content).not.toContain('→');
+        expect(content).not.toContain('SupportTarget');
         expect(content).toContain('840 EP');
         expect(content).not.toContain('(+840 EP)');
         expect(content.indexOf('840 EP')).toBeLessThan(content.indexOf('apple'));
@@ -138,9 +140,11 @@ describe('TimelineCell ingredient ordering', () => {
         expect(countOccurrences(content, 'mushroom1')).toBe(1);
         expect(container.querySelector('svg')).not.toBeNull();
         expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(1);
+        expect(screen.getByTestId('timeline-cell-target-support-0').getAttribute('title')).toBe('SupportTarget');
+        expect(container.querySelectorAll('[data-target-pokemon-icon="true"]')).toHaveLength(1);
     });
 
-    it('renders arrows for all team-target skill event names', () => {
+    it('renders target icons for all single-target skill event types', () => {
         const result = createTimeSlotResult({
             skillTriggerCount: 1,
             energizingCheerEvents: [
@@ -148,6 +152,7 @@ describe('TimelineCell ingredient ordering', () => {
                     source: 'cheer',
                     targetPokemonId: 11,
                     targetPokemonName: 'CheerTarget',
+                    targetPokemonIdForm: 11,
                     recovery: 18,
                 },
             ],
@@ -155,6 +160,7 @@ describe('TimelineCell ingredient ordering', () => {
                 {
                     targetPokemonId: 12,
                     targetPokemonName: 'MoonTarget',
+                    targetPokemonIdForm: 12,
                     recovery: 12,
                 },
             ],
@@ -163,6 +169,7 @@ describe('TimelineCell ingredient ordering', () => {
                     source: 'extraHelpful',
                     targetPokemonId: 13,
                     targetPokemonName: 'SupportTarget2',
+                    targetPokemonIdForm: 13,
                     helpCount: 1,
                     berryCount: 2,
                     berryEP: 420,
@@ -173,6 +180,7 @@ describe('TimelineCell ingredient ordering', () => {
                 {
                     targetPokemonId: 14,
                     targetPokemonName: 'MinusTarget',
+                    targetPokemonIdForm: 14,
                     recovery: 9,
                 },
             ],
@@ -188,11 +196,45 @@ describe('TimelineCell ingredient ordering', () => {
         );
 
         const content = container.textContent ?? '';
-        expect(content).toContain('→CheerTarget');
-        expect(content).toContain('→MoonTarget');
-        expect(content).toContain('→SupportTarget2');
-        expect(content).toContain('→MinusTarget');
+        expect(content).not.toContain('→');
+        expect(content).not.toContain('CheerTarget');
+        expect(content).not.toContain('MoonTarget');
+        expect(content).not.toContain('SupportTarget2');
+        expect(content).not.toContain('MinusTarget');
         expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(4);
+        expect(container.querySelectorAll('[data-target-pokemon-icon="true"]')).toHaveLength(4);
+        expect(screen.getByTestId('timeline-cell-target-cheer-0').getAttribute('title')).toBe('CheerTarget');
+        expect(screen.getByTestId('timeline-cell-target-moonlight-0').getAttribute('title')).toBe('MoonTarget');
+        expect(screen.getByTestId('timeline-cell-target-support-0').getAttribute('title')).toBe('SupportTarget2');
+        expect(screen.getByTestId('timeline-cell-target-cooking-minus-0').getAttribute('title')).toBe('MinusTarget');
+    });
+
+    it('falls back to target pokemon name without arrow when idForm is unavailable', () => {
+        const result = createTimeSlotResult({
+            skillTriggerCount: 1,
+            energizingCheerEvents: [
+                {
+                    source: 'cheer',
+                    targetPokemonId: 21,
+                    targetPokemonName: 'FallbackTarget',
+                    recovery: 15,
+                },
+            ],
+        });
+
+        const { container } = render(
+            <TimelineCell
+                result={result}
+                isSleeping={false}
+                slotId="slot-1"
+                teamIndex={0}
+            />
+        );
+
+        const content = container.textContent ?? '';
+        expect(content).toContain('FallbackTarget');
+        expect(content).not.toContain('→FallbackTarget');
+        expect(container.querySelectorAll('[data-target-pokemon-icon="true"]')).toHaveLength(0);
     });
 
     it('renders team-wide recovery as (ALL) instead of target count', () => {

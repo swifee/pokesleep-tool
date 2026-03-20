@@ -15,6 +15,10 @@
             "notice detail1": "可以确认将来的SP和能量，有助于制定养成的计划！",
             "notice detail2": "此外，我们在 <YouTube>YouTube 频道</YouTube> 上发布了使用方法的讲解视频。请务必观看。",
             "news": {
+                "latias research": {
+                    "headline": "现在可以以图表形式显示$t(time to full inventory)了（<a href='https://youtu.be/C7Ik6U9JsEM'>讲解视频</a>）。",
+                    "detail": "可以通过[$t(frequency)]右侧的 [i] 标记或[$t(full inventory while sleeping (short))]右侧的 [i] 标记来确认。详情请观看讲解视频。\n此外，已支持拉帝亚斯调查的模拟。"
+                },
                 "add mew": {
                     "headline": "添加了$t(pokemons.Mew)的数据。",
                     "detail": "$t(rp collection)"
@@ -425,7 +429,9 @@
         "mmss_short": "{{m}}分{{s}}秒",
         "ss_short": "{{s}}秒",
         "hhmm": "{{h}}小时{{m}}分",
+        "after hhmm": "{{hhmm}}后",
         "freq hhmmss": "$t(hour2, {\"count\": {{h}} }){{m}}分{{s}}秒每次",
+        "hour": "{{count}}小时",
         "hour2_zero": "",
         "hour2_other": "{{count}}小时",
         "strength too low": "需要 <strength/> 能量。",
@@ -569,6 +575,8 @@
             "none": "无",
             "advanced": "详细设置",
             "custom": "自定义设置",
+            "latias research 2nd week": "拉帝亚斯研究 (第2周)",
+            "latias research 1st week": "拉帝亚斯研究 (第1周)",
             "dream shard week 2": "梦之碎片增量周vol.2",
             "pokemon day celebration vol1": "Pokémon Day纪念企划vol.1",
             "valentine 2026": "情人节2026",
@@ -671,8 +679,6 @@
         "recipe multiplier": "食谱倍率",
         "event bonus": "活动奖赏",
         "time to full inventory": "到持有溢出的时间",
-        "berry bonus from event": "来自活动的树果加成",
-        "ingredient bonus from event": "来自活动的食材加成",
         "value": "显示值",
         "help count per hour": "1小时 {{n}} 次",
         "probability": "几率",
@@ -681,6 +687,12 @@
         "berry unit": "个",
         "day unit": "{{count}}天",
         "ingredients unit": "食材",
+        "full inventory probability": "持有溢出概率",
+        "average": "平均",
+        "before first help": "收获后立即 (首次帮助前)",
+        "before this time": "本次之前",
+        "this time": "本次",
+        "after this time": "本次之后",
 
         "evolved once": "进化1次",
         "evolved twice": "进化2次",

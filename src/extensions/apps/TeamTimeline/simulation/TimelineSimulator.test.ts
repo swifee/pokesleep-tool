@@ -49,6 +49,13 @@ function createMewPokemon(skillLevel: number, versatileSkill: MainSkillName): Po
     }));
 }
 
+function createNonSkillSpecialtyPokemon(skillLevel: number): PokemonBoxItem {
+    return new PokemonBoxItem(new PokemonIv({
+        pokemonName: 'Pikachu',
+        skillLevel,
+    }));
+}
+
 function createPokemonWithHelpingBonus(base: PokemonBoxItem): PokemonBoxItem {
     const withHelpingBonusIv = base.iv.changeSubSkills(
         new SubSkillList({ lv10: new SubSkill('Helping Bonus') })
@@ -221,6 +228,85 @@ describe('TimelineSimulator', () => {
         const morningResults = result.slotResults.get('morning__day0') ?? [];
         expect(morningResults.length).toBeGreaterThan(0);
         expect(morningResults[0]?.ingredientDrawGreatSuccessCount).toBe(2);
+    });
+
+    it('単体対象イベントに targetPokemonIdForm を反映する', () => {
+        const caster = createBerryBurstDisguisePokemon(3);
+        const target = createBerryBurstDisguisePokemon(4);
+
+        processSkillTriggersMock
+            .mockImplementationOnce(() => ({
+                ...createNeutralSkillEffectResult(50),
+                moonlightTargets: new Map([[target.id, 12]]),
+                energizingCheerTargets: new Map([[target.id, 18]]),
+                energizingCheerEvents: [
+                    { targetPokemonId: target.id, recovery: 18, source: 'cheer' as const },
+                ],
+                supportHelpEvents: [
+                    {
+                        source: 'extraHelpful' as const,
+                        targetPokemonId: target.id,
+                        helpCount: 1,
+                        berryCount: 2,
+                        berryEP: 240,
+                        ingredients: [],
+                    },
+                ],
+                cookingMinusTargets: new Map([[target.id, 9]]),
+                cookingMinusEvents: [
+                    { targetPokemonId: target.id, recovery: 9 },
+                ],
+            }))
+            .mockImplementation(() => createNeutralSkillEffectResult(50));
+
+        const result = runSimulation({
+            team: [caster, target, null, null, null],
+            timeSlots: [
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 34567, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+
+        const casterResult = result.slotResults.get('wake__day0')?.find(slotResult => slotResult.pokemonId === caster.id);
+        expect(casterResult).toBeDefined();
+        expect(casterResult?.moonlightEvents?.[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+        expect(casterResult?.energizingCheerEvents[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+        expect(casterResult?.supportHelpEvents[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+        expect(casterResult?.cookingMinusEvents?.[0]?.targetPokemonIdForm).toBe(target.iv.idForm);
+    });
+
+    it('単体対象イベントの対象がマップに無い場合は targetPokemonIdForm を undefined のまま返す', () => {
+        const caster = createBerryBurstDisguisePokemon(3);
+        const missingTargetId = 99999;
+
+        processSkillTriggersMock.mockImplementation(() => ({
+            ...createNeutralSkillEffectResult(50),
+            supportHelpEvents: [
+                {
+                    source: 'extraHelpful' as const,
+                    targetPokemonId: missingTargetId,
+                    helpCount: 1,
+                    berryCount: 1,
+                    berryEP: 120,
+                    ingredients: [],
+                },
+            ],
+        }));
+
+        const result = runSimulation({
+            team: [caster, null, null, null, null],
+            timeSlots: [
+                { id: 'wake', time: '07:00', sleepState: 'wake', hasMeal: false },
+            ],
+            config: { seed: 45678, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+        });
+
+        const casterResult = result.slotResults.get('wake__day0')?.find(slotResult => slotResult.pokemonId === caster.id);
+        expect(casterResult).toBeDefined();
+        expect(casterResult?.supportHelpEvents[0]?.targetPokemonName).toBe(String(missingTargetId));
+        expect(casterResult?.supportHelpEvents[0]?.targetPokemonIdForm).toBeUndefined();
     });
 
     it('Mew をシミュレーション投入時に保存済み Mew rate で正規化する', () => {
@@ -730,6 +816,53 @@ describe('TimelineSimulator', () => {
 
         expect(eventResult.teamSummary.totalBerryEP).toBeGreaterThan(baseResult.teamSummary.totalBerryEP);
         expect(expertResult.teamSummary.totalBerryEP).toBeGreaterThan(baseResult.teamSummary.totalBerryEP);
+    });
+
+    it('スキル対象イベントのcarryLimitBonusは非対象ポケモンには適用されない', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemon = createNonSkillSpecialtyPokemon(2);
+        const timeSlots: TimeSlot[] = [
+            { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+            { id: 'wake', time: '18:00', sleepState: 'wake', hasMeal: false },
+        ];
+
+        const baseResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 92346, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            noCollectCells: [{ dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 }],
+        });
+        const eventResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 92346, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: {
+                ...defaultBonusSettings,
+                event: 'custom',
+                customEventBonus: loadHelpEventBonus({
+                    target: {
+                        specialty: 'Skills',
+                    },
+                    effects: {
+                        carryLimit: 15,
+                    },
+                }),
+            },
+            noCollectCells: [{ dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 }],
+        });
+
+        const baseWake = baseResult.slotResults.get('wake__day0')?.[0];
+        const eventWake = eventResult.slotResults.get('wake__day0')?.[0];
+
+        expect(baseWake).toBeDefined();
+        expect(eventWake).toBeDefined();
+        expect(eventWake!.berryCount).toBe(baseWake!.berryCount);
+        expect(eventWake!.helpCount).toBe(baseWake!.helpCount);
     });
 
     it('無効化対象はおてつだい/スキルを行わず、対象チームには残る', () => {

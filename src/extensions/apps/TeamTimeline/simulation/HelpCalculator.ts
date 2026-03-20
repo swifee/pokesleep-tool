@@ -5,7 +5,6 @@
 
 import { IngredientName } from '../../../../data/pokemons';
 import { PokemonBoxItem } from '../../../../util/PokemonBox';
-import PokemonRp from '../../../../util/PokemonRp';
 import { getSkillValue, MainSkillName } from '../../../../util/MainSkill';
 import { IngredientResult } from '../types/TimeSlotTypes';
 import SeededRandom from './SeededRandom';
@@ -19,6 +18,8 @@ export interface HelpBonusContext {
     berryBonus: number;
     /** 食材追加数（イベント/EX） */
     ingredientBonus: number;
+    /** 最大所持数追加（イベント） */
+    carryLimitBonus?: number;
     /** いいキャンプチケット */
     isGoodCampTicketSet: boolean;
     /** EXメインきのみ補正対象 */
@@ -91,6 +92,15 @@ export interface SkillEffect {
     energyRecoveryForTeam: number;
 }
 
+export function getEffectiveMaxInventory(
+    maxInventory: number,
+    carryLimitBonus: number = 0,
+    isGoodCampTicketSet: boolean = false,
+): number {
+    const adjustedMaxInventory = Math.max(0, maxInventory + carryLimitBonus);
+    return Math.ceil(adjustedMaxInventory * (isGoodCampTicketSet ? 1.2 : 1));
+}
+
 /**
  * 基礎おてつだい間隔を取得（秒）
  * @param pokemon ポケモン
@@ -101,8 +111,7 @@ export function getBaseFrequency(
     pokemon: PokemonBoxItem,
     teamHelpingBonusCount: number
 ): number {
-    const rp = new PokemonRp(pokemon.iv);
-    return rp.frequencyWithHelpingBonus(teamHelpingBonusCount);
+    return pokemon.iv.frequencyWithHelpingBonus(teamHelpingBonusCount);
 }
 
 /**
@@ -135,26 +144,25 @@ export function getIngredientForHelp(
     pokemon: PokemonBoxItem,
     random: SeededRandom
 ): { name: IngredientName; count: number } {
-    const rp = new PokemonRp(pokemon.iv);
     const level = pokemon.iv.level;
 
     // レベルに応じて解放された食材リストを作成
     const ingredients: { name: IngredientName; count: number }[] = [];
 
-    const ing1 = rp.ingredient1;
+    const ing1 = pokemon.iv.ingredient1;
     if (ing1.count > 0) {
         ingredients.push({ name: ing1.name as IngredientName, count: ing1.count });
     }
 
     if (level >= 30) {
-        const ing2 = rp.ingredient2;
+        const ing2 = pokemon.iv.ingredient2;
         if (ing2.count > 0) {
             ingredients.push({ name: ing2.name as IngredientName, count: ing2.count });
         }
     }
 
     if (level >= 60) {
-        const ing3 = rp.ingredient3;
+        const ing3 = pokemon.iv.ingredient3;
         if (ing3.count > 0) {
             ingredients.push({ name: ing3.name as IngredientName, count: ing3.count });
         }
@@ -204,17 +212,21 @@ export function calculateHelp(input: HelpInput): HelpOutput {
         };
     }
 
-    const rp = new PokemonRp(pokemon.iv);
     const skillTriggerBonus = bonusContext?.skillTriggerBonus ?? 1;
     const berryBonus = Math.max(0, bonusContext?.berryBonus ?? 0);
     const ingredientBonus = Math.max(0, bonusContext?.ingredientBonus ?? 0);
+    const carryLimitBonus = Math.max(0, bonusContext?.carryLimitBonus ?? 0);
     const isGoodCampTicketSet = bonusContext?.isGoodCampTicketSet ?? false;
-    const effectiveMaxInventory = Math.ceil(maxInventory * (isGoodCampTicketSet ? 1.2 : 1));
+    const effectiveMaxInventory = getEffectiveMaxInventory(
+        maxInventory,
+        carryLimitBonus,
+        isGoodCampTicketSet,
+    );
     const isMainBerry = bonusContext?.isMainBerry ?? false;
     const isNonFavoriteBerry = bonusContext?.isNonFavoriteBerry ?? false;
 
     // 基礎おてつだい間隔
-    const baseFrequency = rp.getBaseFrequency(
+    const baseFrequency = pokemon.iv.getBaseFrequency(
         Math.max(0, teamHelpingBonusCount),
         isGoodCampTicketSet,
         isMainBerry,
@@ -242,7 +254,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 
     const ingredientRate = pokemon.iv.ingredientRate;
     const skillRate = Math.min(1, pokemon.iv.skillRate * skillTriggerBonus);
-    const berryCountPerHelp = rp.berryCount + berryBonus;
+    const berryCountPerHelp = pokemon.iv.berryCount + berryBonus;
     const ingredientBonusBase = Math.floor(ingredientBonus);
     const ingredientBonusFraction = Math.max(0, ingredientBonus - ingredientBonusBase);
 

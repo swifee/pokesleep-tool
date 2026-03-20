@@ -143,6 +143,7 @@ export interface IngredientResult {
 export interface EnergizingCheerEvent {
     targetPokemonId: number;
     targetPokemonName: string;
+    targetPokemonIdForm?: number;
     recovery: number;
     source: 'cheer' | 'nuzzle';
 }
@@ -156,6 +157,7 @@ export interface NuzzleTriggeredSkillEvent {
 export interface MoonlightEvent {
     targetPokemonId: number;
     targetPokemonName: string;
+    targetPokemonIdForm?: number;
     recovery: number;
 }
 
@@ -163,6 +165,7 @@ export interface SupportHelpEvent {
     source: 'extraHelpful' | 'helperBoost';
     targetPokemonId: number;
     targetPokemonName: string;
+    targetPokemonIdForm?: number;
     helpCount: number;
     berryCount: number;
     berryEP: number;
@@ -172,6 +175,7 @@ export interface SupportHelpEvent {
 export interface CookingMinusEvent {
     targetPokemonId: number;
     targetPokemonName: string;
+    targetPokemonIdForm?: number;
     recovery: number;
 }
 
