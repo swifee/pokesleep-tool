@@ -49,6 +49,13 @@ function createMewPokemon(skillLevel: number, versatileSkill: MainSkillName): Po
     }));
 }
 
+function createNonSkillSpecialtyPokemon(skillLevel: number): PokemonBoxItem {
+    return new PokemonBoxItem(new PokemonIv({
+        pokemonName: 'Pikachu',
+        skillLevel,
+    }));
+}
+
 function createPokemonWithHelpingBonus(base: PokemonBoxItem): PokemonBoxItem {
     const withHelpingBonusIv = base.iv.changeSubSkills(
         new SubSkillList({ lv10: new SubSkill('Helping Bonus') })
@@ -809,6 +816,53 @@ describe('TimelineSimulator', () => {
 
         expect(eventResult.teamSummary.totalBerryEP).toBeGreaterThan(baseResult.teamSummary.totalBerryEP);
         expect(expertResult.teamSummary.totalBerryEP).toBeGreaterThan(baseResult.teamSummary.totalBerryEP);
+    });
+
+    it('スキル対象イベントのcarryLimitBonusは非対象ポケモンには適用されない', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemon = createNonSkillSpecialtyPokemon(2);
+        const timeSlots: TimeSlot[] = [
+            { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+            { id: 'wake', time: '18:00', sleepState: 'wake', hasMeal: false },
+        ];
+
+        const baseResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 92346, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            noCollectCells: [{ dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 }],
+        });
+        const eventResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 92346, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: {
+                ...defaultBonusSettings,
+                event: 'custom',
+                customEventBonus: loadHelpEventBonus({
+                    target: {
+                        specialty: 'Skills',
+                    },
+                    effects: {
+                        carryLimit: 15,
+                    },
+                }),
+            },
+            noCollectCells: [{ dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 }],
+        });
+
+        const baseWake = baseResult.slotResults.get('wake__day0')?.[0];
+        const eventWake = eventResult.slotResults.get('wake__day0')?.[0];
+
+        expect(baseWake).toBeDefined();
+        expect(eventWake).toBeDefined();
+        expect(eventWake!.berryCount).toBe(baseWake!.berryCount);
+        expect(eventWake!.helpCount).toBe(baseWake!.helpCount);
     });
 
     it('無効化対象はおてつだい/スキルを行わず、対象チームには残る', () => {

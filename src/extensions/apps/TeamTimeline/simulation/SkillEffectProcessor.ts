@@ -19,7 +19,6 @@ import {
 import { PokemonBoxItem } from '../../../../util/PokemonBox';
 import { IngredientNames, IngredientName, PokemonType } from '../../../../data/pokemons';
 import { IngredientResult } from '../types/TimeSlotTypes';
-import PokemonRp from '../../../../util/PokemonRp';
 import SeededRandom from './SeededRandom';
 import { MAX_ENERGY } from './EnergyCalculator';
 import { getIngredientForHelp } from './HelpCalculator';
@@ -447,7 +446,7 @@ function simulateSupportHelps(
     }
 
     const ingredientMap = new Map<IngredientName, number>();
-    const berryCountPerHelp = new PokemonRp(target.iv).berryCount;
+    const berryCountPerHelp = target.iv.berryCount;
     let totalBerryCount = 0;
 
     for (let i = 0; i < helpCount; i++) {

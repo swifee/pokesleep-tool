@@ -122,4 +122,126 @@ describe('HelpCalculator bonus behavior', () => {
         expect(withCamp.newInventory).toBeGreaterThan(10);
         expect(withCamp.ingredients.length).toBeGreaterThan(0);
     });
+
+    it('carryLimitBonusがあるとイベント対象の最大所持数が増える', () => {
+        const pokemon = createTestPokemon();
+        Object.defineProperty(pokemon.iv, 'ingredientRate', {
+            configurable: true,
+            get: () => 1,
+        });
+        Object.defineProperty(pokemon.iv, 'skillRate', {
+            configurable: true,
+            get: () => 0,
+        });
+
+        const withoutCarryLimitBonus = calculateHelp({
+            pokemon,
+            durationMinutes: 300,
+            startEnergy: 50,
+            isSleeping: false,
+            random: new SeededRandom(303),
+            teamHelpingBonusCount: 0,
+            currentSkillStock: 0,
+            maxSkillStock: 1,
+            currentInventory: 10,
+            maxInventory: 10,
+            bankedTimeSeconds: 0,
+            bonusContext: {
+                skillTriggerBonus: 1,
+                berryBonus: 0,
+                ingredientBonus: 0,
+                carryLimitBonus: 0,
+                isGoodCampTicketSet: false,
+                isMainBerry: false,
+                isNonFavoriteBerry: false,
+            },
+        });
+        const withCarryLimitBonus = calculateHelp({
+            pokemon,
+            durationMinutes: 300,
+            startEnergy: 50,
+            isSleeping: false,
+            random: new SeededRandom(303),
+            teamHelpingBonusCount: 0,
+            currentSkillStock: 0,
+            maxSkillStock: 1,
+            currentInventory: 10,
+            maxInventory: 10,
+            bankedTimeSeconds: 0,
+            bonusContext: {
+                skillTriggerBonus: 1,
+                berryBonus: 0,
+                ingredientBonus: 0,
+                carryLimitBonus: 8,
+                isGoodCampTicketSet: false,
+                isMainBerry: false,
+                isNonFavoriteBerry: false,
+            },
+        });
+
+        expect(withoutCarryLimitBonus.newInventory).toBe(10);
+        expect(withCarryLimitBonus.newInventory).toBeGreaterThan(10);
+        expect(withCarryLimitBonus.ingredients.length).toBeGreaterThan(0);
+    });
+
+    it('carryLimitBonusといいキャンプチケットは重複して最大所持数に反映される', () => {
+        const pokemon = createTestPokemon();
+        Object.defineProperty(pokemon.iv, 'ingredientRate', {
+            configurable: true,
+            get: () => 1,
+        });
+        Object.defineProperty(pokemon.iv, 'skillRate', {
+            configurable: true,
+            get: () => 0,
+        });
+
+        const withoutCamp = calculateHelp({
+            pokemon,
+            durationMinutes: 300,
+            startEnergy: 50,
+            isSleeping: false,
+            random: new SeededRandom(404),
+            teamHelpingBonusCount: 0,
+            currentSkillStock: 0,
+            maxSkillStock: 1,
+            currentInventory: 18,
+            maxInventory: 10,
+            bankedTimeSeconds: 0,
+            bonusContext: {
+                skillTriggerBonus: 1,
+                berryBonus: 0,
+                ingredientBonus: 0,
+                carryLimitBonus: 8,
+                isGoodCampTicketSet: false,
+                isMainBerry: false,
+                isNonFavoriteBerry: false,
+            },
+        });
+        const withCamp = calculateHelp({
+            pokemon,
+            durationMinutes: 300,
+            startEnergy: 50,
+            isSleeping: false,
+            random: new SeededRandom(404),
+            teamHelpingBonusCount: 0,
+            currentSkillStock: 0,
+            maxSkillStock: 1,
+            currentInventory: 18,
+            maxInventory: 10,
+            bankedTimeSeconds: 0,
+            bonusContext: {
+                skillTriggerBonus: 1,
+                berryBonus: 0,
+                ingredientBonus: 0,
+                carryLimitBonus: 8,
+                isGoodCampTicketSet: true,
+                isMainBerry: false,
+                isNonFavoriteBerry: false,
+            },
+        });
+
+        expect(withoutCamp.newInventory).toBe(18);
+        expect(withCamp.newInventory).toBeGreaterThan(18);
+        expect(withCamp.ingredients.length).toBeGreaterThan(0);
+    });
 });

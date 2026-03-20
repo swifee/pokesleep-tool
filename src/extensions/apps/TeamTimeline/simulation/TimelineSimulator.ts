@@ -32,7 +32,7 @@ import {
     DEFAULT_MAX_ENERGY as ENERGY_MAX_NORMAL,
     MAX_ENERGY,
 } from './EnergyCalculator';
-import { calculateHelp, HelpBonusContext, HelpInput } from './HelpCalculator';
+import { calculateHelp, getEffectiveMaxInventory, HelpBonusContext, HelpInput } from './HelpCalculator';
 import { calculateDailySummary, calculateTeamSummary, DailySummaryBonusContext } from './EnergyPointCalculator';
 import {
     processSkillTriggers,
@@ -241,6 +241,7 @@ function buildPokemonBonusContext(
             skillTriggerBonus: bonus.skillTrigger,
             berryBonus: bonus.berry,
             ingredientBonus: bonus.ingredient,
+            carryLimitBonus: bonus.carryLimit,
             isGoodCampTicketSet: bonusSettings.isGoodCampTicketSet,
             isMainBerry,
             isNonFavoriteBerry: isExpertMode && !isFavoriteBerry,
@@ -1012,8 +1013,10 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             state.inventoryCount = helpOutput.newInventory + sumIngredientCounts(skillIngredientsFromSkill);
 
             const helpBonusContext = getPokemonBonusContext(state.pokemon).help;
-            const effectiveMaxInventory = Math.ceil(
-                state.maxInventory * (helpBonusContext.isGoodCampTicketSet ? 1.2 : 1)
+            const effectiveMaxInventory = getEffectiveMaxInventory(
+                state.maxInventory,
+                helpBonusContext.carryLimitBonus ?? 0,
+                helpBonusContext.isGoodCampTicketSet,
             );
 
             let collectedBerryCount = 0;
