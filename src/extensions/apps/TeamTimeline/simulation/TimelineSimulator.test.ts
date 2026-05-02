@@ -580,6 +580,58 @@ describe('TimelineSimulator', () => {
         expect(wake!.skillIngredients ?? []).toEqual([]);
     });
 
+    it('noCollectセルで所持数上限へ達する時はberryBonusが過大計上されない', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemon = new PokemonBoxItem(new PokemonIv({
+            pokemonName: 'Toxel',
+            level: 60,
+            skillLevel: 1,
+        }));
+        const timeSlots: TimeSlot[] = [
+            { id: 'sleep', time: '22:00', sleepState: 'sleep', hasMeal: false },
+            { id: 'wake', time: '18:00', sleepState: 'wake', hasMeal: false },
+        ];
+        const noCollectCells: NoCollectCellSetting[] = [
+            { dayIndex: 0, slotId: 'wake', teamSlotIndex: 0 },
+        ];
+
+        const baseResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 44002, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            noCollectCells,
+        });
+        const eventResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 44002, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: {
+                ...defaultBonusSettings,
+                event: 'custom',
+                customEventBonus: loadHelpEventBonus({
+                    target: {},
+                    effects: {
+                        berry: 1,
+                    },
+                }),
+            },
+            noCollectCells,
+        });
+
+        const baseWake = baseResult.slotResults.get('wake__day0')?.[0];
+        const eventWake = eventResult.slotResults.get('wake__day0')?.[0];
+
+        expect(baseWake).toBeDefined();
+        expect(eventWake).toBeDefined();
+        expect(baseWake?.berryCount).toBeGreaterThan(0);
+        expect(eventWake?.berryCount ?? 0).toBeLessThanOrEqual(baseWake?.berryCount ?? 0);
+    });
+
     it('swap設定セルはnoCollect指定されていても通常回収として扱う', () => {
         processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
             const energy = typeof args[2] === 'number' ? args[2] : 50;
@@ -1052,5 +1104,128 @@ describe('TimelineSimulator', () => {
         const thirdWithoutExtraApple = thirdEvent?.bagIngredientsBeforeCookingWithoutExtra?.find(entry => entry.name === 'apple')?.count ?? 0;
         expect(thirdActualApple).toBeCloseTo(0, 6);
         expect(thirdWithoutExtraApple).toBeCloseTo(5, 6);
+    });
+
+    it('料理イベント倍率dishは料理結果と配分後の料理EPへ反映される', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return {
+                ...createNeutralSkillEffectResult(energy),
+                skillIngredients: [{ name: 'apple', count: 7 }],
+            };
+        });
+
+        const pokemon = createBerryBurstDisguisePokemon(1);
+        const timeSlots: TimeSlot[] = [
+            { id: 'meal-only', time: '07:00', sleepState: 'wake', hasMeal: true },
+        ];
+        const cookingSettings = {
+            enabled: true,
+            category: 'curry' as const,
+            recipeLevels: {},
+            basePotCapacity: 7,
+            initialIngredients: {},
+            disabledRecipes: {},
+            disabledExtraIngredients: {},
+        };
+
+        const baseResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 55001, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            cookingSettings,
+        });
+        const eventResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 55001, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: {
+                ...defaultBonusSettings,
+                event: 'custom',
+                customEventBonus: loadHelpEventBonus({
+                    target: {
+                        specialty: 'Skills',
+                    },
+                    effects: {
+                        dish: 1.5,
+                    },
+                }),
+            },
+            cookingSettings,
+        });
+
+        const baseCookingEvent = baseResult.cookingResult?.events[0];
+        const eventCookingEvent = eventResult.cookingResult?.events[0];
+        const baseSummary = baseResult.dailySummaries[0];
+        const eventSummary = eventResult.dailySummaries[0];
+        const baseAttribution = baseResult.cookingResult?.pokemonAttributions[0];
+        const eventAttribution = eventResult.cookingResult?.pokemonAttributions[0];
+
+        expect(baseCookingEvent?.recipeName).toBe('specialAppleCurry');
+        expect(eventCookingEvent?.recipeName).toBe('specialAppleCurry');
+        expect(eventCookingEvent?.eFinal ?? 0).toBeGreaterThan(baseCookingEvent?.eFinal ?? 0);
+        expect(eventCookingEvent?.cookingEP ?? 0).toBeGreaterThan(baseCookingEvent?.cookingEP ?? 0);
+        expect(eventSummary?.cookingEP ?? 0).toBeGreaterThan(baseSummary?.cookingEP ?? 0);
+        expect(eventResult.teamSummary.totalCookingEP ?? 0).toBeGreaterThan(baseResult.teamSummary.totalCookingEP ?? 0);
+        expect(eventAttribution?.attributedCookingEP ?? 0).toBeGreaterThan(baseAttribution?.attributedCookingEP ?? 0);
+        expect(eventAttribution?.attributedCookingEP).toBe(eventResult.teamSummary.totalCookingEP);
+    });
+
+    it('料理イベント倍率dishは後配分された追加食材の料理EPにも維持される', () => {
+        processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+            const energy = typeof args[2] === 'number' ? args[2] : 50;
+            return createNeutralSkillEffectResult(energy);
+        });
+
+        const pokemon = createBerryBurstDisguisePokemon(1);
+        const cookingSettings = {
+            enabled: true,
+            category: 'curry' as const,
+            recipeLevels: {},
+            basePotCapacity: 3,
+            initialIngredients: {
+                apple: 2,
+                milk: 2,
+            },
+            disabledRecipes: {},
+            disabledExtraIngredients: {},
+        };
+        const timeSlots: TimeSlot[] = [
+            { id: 'meal-only', time: '07:00', sleepState: 'wake', hasMeal: true },
+        ];
+
+        const baseResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 55002, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: defaultBonusSettings,
+            cookingSettings,
+        });
+        const eventResult = runSimulation({
+            team: [pokemon, null, null, null, null],
+            timeSlots,
+            config: { seed: 55002, initialEnergy: 50, simulationDays: 1 },
+            bonusSettings: {
+                ...defaultBonusSettings,
+                event: 'custom',
+                customEventBonus: loadHelpEventBonus({
+                    target: {},
+                    effects: {
+                        dish: 1.5,
+                    },
+                }),
+            },
+            cookingSettings,
+        });
+
+        const baseCookingEvent = baseResult.cookingResult?.events[0];
+        const eventCookingEvent = eventResult.cookingResult?.events[0];
+
+        expect(baseCookingEvent?.recipeName).toBe('mixedCurry');
+        expect(eventCookingEvent?.recipeName).toBe('mixedCurry');
+        expect((baseCookingEvent?.extraIngredientsUsed ?? []).length).toBeGreaterThan(0);
+        expect((eventCookingEvent?.extraIngredientsUsed ?? []).length).toBeGreaterThan(0);
+        expect(eventCookingEvent?.cookingEP ?? 0).toBeGreaterThan(baseCookingEvent?.cookingEP ?? 0);
     });
 });
