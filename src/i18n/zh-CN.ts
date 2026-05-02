@@ -3,10 +3,10 @@ import data from "./zh-CN/data.json";
 import events from "./zh-CN/events.json";
 import IvCalc from "./zh-CN/IvCalc.json";
 import IvCalcNews from "./zh-CN/IvCalcNews.json";
-import legacy from "./zh-CN.json";
 import pokemons from "./zh-CN/pokemons.json";
 import ResearchCalc from "./zh-CN/ResearchCalc.json";
 import skills from "./zh-CN/skills.json";
+import legacy from "./zh-CN.json";
 
 export default {
 	translation: {

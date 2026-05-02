@@ -1,492 +1,549 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import TimelineCell from './TimelineCell';
-import { TimeSlotResult } from '../types/TimeSlotTypes';
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import type { TimeSlotResult } from "../types/TimeSlotTypes";
+import TimelineCell from "./TimelineCell";
 
-vi.mock('react-i18next', () => ({
-    useTranslation: () => ({
-        t: (key: string, defaultValue?: string) => defaultValue ?? key,
-    }),
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string, defaultValue?: string) => defaultValue ?? key,
+	}),
 }));
 
-vi.mock('../../../../ui/IvCalc/IngredientIcon', () => ({
-    default: ({ name }: { name: string }) => <span>{name}</span>,
+vi.mock("../../../../ui/IvCalc/IngredientIcon", () => ({
+	default: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
-vi.mock('../../../../ui/IvCalc/PokemonIcon', () => ({
-    default: ({ idForm, size }: { idForm: number; size: number }) => (
-        <span data-testid="mock-pokemon-icon">{`${idForm}-${size}`}</span>
-    ),
+vi.mock("../../../../ui/IvCalc/PokemonIcon", () => ({
+	default: ({ idForm, size }: { idForm: number; size: number }) => (
+		<span data-testid="mock-pokemon-icon">{`${idForm}-${size}`}</span>
+	),
 }));
 
 function countOccurrences(text: string, token: string): number {
-    return (text.match(new RegExp(token, 'g')) ?? []).length;
+	return (text.match(new RegExp(token, "g")) ?? []).length;
 }
 
 function createTimeSlotResult(base: Partial<TimeSlotResult>): TimeSlotResult {
-    return {
-        slotId: 'slot-1',
-        pokemonId: 1,
-        teamIndex: 0,
-        durationMinutes: 60,
-        isSleeping: false,
-        helpCount: 0,
-        skillTriggerCount: 0,
-        berryCount: 0,
-        ingredients: [],
-        skillIngredients: [],
-        energyStart: 50,
-        energyEnd: 50,
-        mealRecovery: 0,
-        skillRecovery: 0,
-        wakeRecovery: 0,
-        energyDecay: 0,
-        skillOverflowCount: 0,
-        overflowIngredients: [],
-        selfSkillRecovery: 0,
-        directSkillEP: 0,
-        moonlightGivenRecovery: 0,
-        moonlightReceivedRecovery: 0,
-        energizingCheerGivenRecovery: 0,
-        energizingCheerReceivedRecovery: 0,
-        energizingCheerEvents: [],
-        nuzzleTriggeredSkillEvents: [],
-        proxySkillEvents: [],
-        presentCandyCount: 0,
-        berryJuiceCount: 0,
-        supportSkillBerryCount: 0,
-        supportSkillBerryEP: 0,
-        supportHelpEvents: [],
-        stockpileStoreCount: 0,
-        stockpileCountAtStore: 0,
-        stockpileSpitCount: 0,
-        badDreamsHitCount: 0,
-        badDreamsTotalDamageGiven: 0,
-        badDreamsDamageTaken: 0,
-        ...base,
-    };
+	return {
+		slotId: "slot-1",
+		pokemonId: 1,
+		teamIndex: 0,
+		durationMinutes: 60,
+		isSleeping: false,
+		helpCount: 0,
+		skillTriggerCount: 0,
+		berryCount: 0,
+		ingredients: [],
+		skillIngredients: [],
+		energyStart: 50,
+		energyEnd: 50,
+		mealRecovery: 0,
+		skillRecovery: 0,
+		wakeRecovery: 0,
+		energyDecay: 0,
+		skillOverflowCount: 0,
+		overflowIngredients: [],
+		selfSkillRecovery: 0,
+		directSkillEP: 0,
+		moonlightGivenRecovery: 0,
+		moonlightReceivedRecovery: 0,
+		energizingCheerGivenRecovery: 0,
+		energizingCheerReceivedRecovery: 0,
+		energizingCheerEvents: [],
+		nuzzleTriggeredSkillEvents: [],
+		proxySkillEvents: [],
+		presentCandyCount: 0,
+		berryJuiceCount: 0,
+		supportSkillBerryCount: 0,
+		supportSkillBerryEP: 0,
+		supportHelpEvents: [],
+		stockpileStoreCount: 0,
+		stockpileCountAtStore: 0,
+		stockpileSpitCount: 0,
+		badDreamsHitCount: 0,
+		badDreamsTotalDamageGiven: 0,
+		badDreamsDamageTaken: 0,
+		...base,
+	};
 }
 
-describe('TimelineCell ingredient ordering', () => {
-    it('sorts slot ingredients and overflow ingredients by count descending', () => {
-        const result = createTimeSlotResult({
-            ingredients: [
-                { name: 'milk', count: 2 },
-                { name: 'apple', count: 9 },
-                { name: 'mushroom', count: 5 },
-            ],
-            overflowIngredients: [
-                { name: 'honey', count: 1 },
-                { name: 'egg', count: 4 },
-            ],
-        });
+describe("TimelineCell ingredient ordering", () => {
+	it("sorts slot ingredients and overflow ingredients by count descending", () => {
+		const result = createTimeSlotResult({
+			ingredients: [
+				{ name: "milk", count: 2 },
+				{ name: "apple", count: 9 },
+				{ name: "mushroom", count: 5 },
+			],
+			overflowIngredients: [
+				{ name: "honey", count: 1 },
+				{ name: "egg", count: 4 },
+			],
+		});
 
-        const { container } = render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		const { container } = render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const content = container.textContent ?? '';
-        expect(content.indexOf('apple')).toBeLessThan(content.indexOf('mushroom'));
-        expect(content.indexOf('mushroom')).toBeLessThan(content.indexOf('milk'));
-        expect(content.indexOf('egg')).toBeLessThan(content.indexOf('honey'));
-    });
+		const content = container.textContent ?? "";
+		expect(content.indexOf("apple")).toBeLessThan(content.indexOf("mushroom"));
+		expect(content.indexOf("mushroom")).toBeLessThan(content.indexOf("milk"));
+		expect(content.indexOf("egg")).toBeLessThan(content.indexOf("honey"));
+	});
 
-    it('renders support help target as icon and keeps berry EP first', () => {
-        const result = createTimeSlotResult({
-            skillTriggerCount: 1,
-            skillIngredients: [
-                { name: 'apple', count: 1 },
-                { name: 'mushroom', count: 1 },
-            ],
-            supportHelpEvents: [
-                {
-                    source: 'extraHelpful',
-                    targetPokemonId: 7,
-                    targetPokemonName: 'SupportTarget',
-                    targetPokemonIdForm: 7,
-                    helpCount: 2,
-                    berryCount: 4,
-                    berryEP: 840,
-                    ingredients: [
-                        { name: 'apple', count: 1 },
-                        { name: 'mushroom', count: 1 },
-                    ],
-                },
-            ],
-        });
+	it("renders support help target as icon and keeps berry EP first", () => {
+		const result = createTimeSlotResult({
+			skillTriggerCount: 1,
+			skillIngredients: [
+				{ name: "apple", count: 1 },
+				{ name: "mushroom", count: 1 },
+			],
+			supportHelpEvents: [
+				{
+					source: "extraHelpful",
+					targetPokemonId: 7,
+					targetPokemonName: "SupportTarget",
+					targetPokemonIdForm: 7,
+					helpCount: 2,
+					berryCount: 4,
+					berryEP: 840,
+					ingredients: [
+						{ name: "apple", count: 1 },
+						{ name: "mushroom", count: 1 },
+					],
+				},
+			],
+		});
 
-        const { container } = render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		const { container } = render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const content = container.textContent ?? '';
-        expect(content).not.toContain('→');
-        expect(content).not.toContain('SupportTarget');
-        expect(content).toContain('840 EP');
-        expect(content).not.toContain('(+840 EP)');
-        expect(content.indexOf('840 EP')).toBeLessThan(content.indexOf('apple'));
-        expect(countOccurrences(content, 'apple1')).toBe(1);
-        expect(countOccurrences(content, 'mushroom1')).toBe(1);
-        expect(container.querySelector('svg')).not.toBeNull();
-        expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(1);
-        expect(screen.getByTestId('timeline-cell-target-support-0').getAttribute('title')).toBe('SupportTarget');
-        expect(container.querySelectorAll('[data-target-pokemon-icon="true"]')).toHaveLength(1);
-    });
+		const content = container.textContent ?? "";
+		expect(content).not.toContain("→");
+		expect(content).not.toContain("SupportTarget");
+		expect(content).toContain("840 EP");
+		expect(content).not.toContain("(+840 EP)");
+		expect(content.indexOf("840 EP")).toBeLessThan(content.indexOf("apple"));
+		expect(countOccurrences(content, "apple1")).toBe(1);
+		expect(countOccurrences(content, "mushroom1")).toBe(1);
+		expect(container.querySelector("svg")).not.toBeNull();
+		expect(
+			container.querySelectorAll('[data-skill-prefix-icon="true"]'),
+		).toHaveLength(1);
+		expect(
+			screen
+				.getByTestId("timeline-cell-target-support-0")
+				.getAttribute("title"),
+		).toBe("SupportTarget");
+		expect(
+			container.querySelectorAll('[data-target-pokemon-icon="true"]'),
+		).toHaveLength(1);
+	});
 
-    it('renders target icons for all single-target skill event types', () => {
-        const result = createTimeSlotResult({
-            skillTriggerCount: 1,
-            energizingCheerEvents: [
-                {
-                    source: 'cheer',
-                    targetPokemonId: 11,
-                    targetPokemonName: 'CheerTarget',
-                    targetPokemonIdForm: 11,
-                    recovery: 18,
-                },
-            ],
-            moonlightEvents: [
-                {
-                    targetPokemonId: 12,
-                    targetPokemonName: 'MoonTarget',
-                    targetPokemonIdForm: 12,
-                    recovery: 12,
-                },
-            ],
-            supportHelpEvents: [
-                {
-                    source: 'extraHelpful',
-                    targetPokemonId: 13,
-                    targetPokemonName: 'SupportTarget2',
-                    targetPokemonIdForm: 13,
-                    helpCount: 1,
-                    berryCount: 2,
-                    berryEP: 420,
-                    ingredients: [],
-                },
-            ],
-            cookingMinusEvents: [
-                {
-                    targetPokemonId: 14,
-                    targetPokemonName: 'MinusTarget',
-                    targetPokemonIdForm: 14,
-                    recovery: 9,
-                },
-            ],
-        });
+	it("renders target icons for all single-target skill event types", () => {
+		const result = createTimeSlotResult({
+			skillTriggerCount: 1,
+			energizingCheerEvents: [
+				{
+					source: "cheer",
+					targetPokemonId: 11,
+					targetPokemonName: "CheerTarget",
+					targetPokemonIdForm: 11,
+					recovery: 18,
+				},
+			],
+			moonlightEvents: [
+				{
+					targetPokemonId: 12,
+					targetPokemonName: "MoonTarget",
+					targetPokemonIdForm: 12,
+					recovery: 12,
+				},
+			],
+			supportHelpEvents: [
+				{
+					source: "extraHelpful",
+					targetPokemonId: 13,
+					targetPokemonName: "SupportTarget2",
+					targetPokemonIdForm: 13,
+					helpCount: 1,
+					berryCount: 2,
+					berryEP: 420,
+					ingredients: [],
+				},
+			],
+			cookingMinusEvents: [
+				{
+					targetPokemonId: 14,
+					targetPokemonName: "MinusTarget",
+					targetPokemonIdForm: 14,
+					recovery: 9,
+				},
+			],
+		});
 
-        const { container } = render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		const { container } = render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const content = container.textContent ?? '';
-        expect(content).not.toContain('→');
-        expect(content).not.toContain('CheerTarget');
-        expect(content).not.toContain('MoonTarget');
-        expect(content).not.toContain('SupportTarget2');
-        expect(content).not.toContain('MinusTarget');
-        expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(4);
-        expect(container.querySelectorAll('[data-target-pokemon-icon="true"]')).toHaveLength(4);
-        expect(screen.getByTestId('timeline-cell-target-cheer-0').getAttribute('title')).toBe('CheerTarget');
-        expect(screen.getByTestId('timeline-cell-target-moonlight-0').getAttribute('title')).toBe('MoonTarget');
-        expect(screen.getByTestId('timeline-cell-target-support-0').getAttribute('title')).toBe('SupportTarget2');
-        expect(screen.getByTestId('timeline-cell-target-cooking-minus-0').getAttribute('title')).toBe('MinusTarget');
-    });
+		const content = container.textContent ?? "";
+		expect(content).not.toContain("→");
+		expect(content).not.toContain("CheerTarget");
+		expect(content).not.toContain("MoonTarget");
+		expect(content).not.toContain("SupportTarget2");
+		expect(content).not.toContain("MinusTarget");
+		expect(
+			container.querySelectorAll('[data-skill-prefix-icon="true"]'),
+		).toHaveLength(4);
+		expect(
+			container.querySelectorAll('[data-target-pokemon-icon="true"]'),
+		).toHaveLength(4);
+		expect(
+			screen.getByTestId("timeline-cell-target-cheer-0").getAttribute("title"),
+		).toBe("CheerTarget");
+		expect(
+			screen
+				.getByTestId("timeline-cell-target-moonlight-0")
+				.getAttribute("title"),
+		).toBe("MoonTarget");
+		expect(
+			screen
+				.getByTestId("timeline-cell-target-support-0")
+				.getAttribute("title"),
+		).toBe("SupportTarget2");
+		expect(
+			screen
+				.getByTestId("timeline-cell-target-cooking-minus-0")
+				.getAttribute("title"),
+		).toBe("MinusTarget");
+	});
 
-    it('falls back to target pokemon name without arrow when idForm is unavailable', () => {
-        const result = createTimeSlotResult({
-            skillTriggerCount: 1,
-            energizingCheerEvents: [
-                {
-                    source: 'cheer',
-                    targetPokemonId: 21,
-                    targetPokemonName: 'FallbackTarget',
-                    recovery: 15,
-                },
-            ],
-        });
+	it("falls back to target pokemon name without arrow when idForm is unavailable", () => {
+		const result = createTimeSlotResult({
+			skillTriggerCount: 1,
+			energizingCheerEvents: [
+				{
+					source: "cheer",
+					targetPokemonId: 21,
+					targetPokemonName: "FallbackTarget",
+					recovery: 15,
+				},
+			],
+		});
 
-        const { container } = render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		const { container } = render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const content = container.textContent ?? '';
-        expect(content).toContain('FallbackTarget');
-        expect(content).not.toContain('→FallbackTarget');
-        expect(container.querySelectorAll('[data-target-pokemon-icon="true"]')).toHaveLength(0);
-    });
+		const content = container.textContent ?? "";
+		expect(content).toContain("FallbackTarget");
+		expect(content).not.toContain("→FallbackTarget");
+		expect(
+			container.querySelectorAll('[data-target-pokemon-icon="true"]'),
+		).toHaveLength(0);
+	});
 
-    it('renders team-wide recovery as (ALL) instead of target count', () => {
-        const result = createTimeSlotResult({
-            skillTriggerCount: 1,
-            teamEnergyRecoveryGivenPerMember: 18,
-            teamEnergyRecoveryGivenTargetCount: 5,
-        });
+	it("renders team-wide recovery as (ALL) instead of target count", () => {
+		const result = createTimeSlotResult({
+			skillTriggerCount: 1,
+			teamEnergyRecoveryGivenPerMember: 18,
+			teamEnergyRecoveryGivenTargetCount: 5,
+		});
 
-        const { container } = render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		const { container } = render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const content = container.textContent ?? '';
-        expect(content).toContain('+18(ALL)');
-        expect(content).not.toContain('+18×5');
-        expect(container.querySelectorAll('[data-heal-icon="true"]').length).toBeGreaterThan(0);
-    });
+		const content = container.textContent ?? "";
+		expect(content).toContain("+18(ALL)");
+		expect(content).not.toContain("+18×5");
+		expect(
+			container.querySelectorAll('[data-heal-icon="true"]').length,
+		).toBeGreaterThan(0);
+	});
 
-    it('renders ingredient gain and tasty chance together for composite cooking support', () => {
-        const result = createTimeSlotResult({
-            skillTriggerCount: 1,
-            skillIngredients: [
-                { name: 'apple', count: 6 },
-                { name: 'honey', count: 3 },
-            ],
-            tastyChanceIncreasePercent: 17,
-        });
+	it("renders ingredient gain and tasty chance together for composite cooking support", () => {
+		const result = createTimeSlotResult({
+			skillTriggerCount: 1,
+			skillIngredients: [
+				{ name: "apple", count: 6 },
+				{ name: "honey", count: 3 },
+			],
+			tastyChanceIncreasePercent: 17,
+		});
 
-        const { container } = render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		const { container } = render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const content = container.textContent ?? '';
-        expect(content).toContain('apple6');
-        expect(content).toContain('honey3');
-        expect(content).toContain('料理大成功+17%');
-    });
+		const content = container.textContent ?? "";
+		expect(content).toContain("apple6");
+		expect(content).toContain("honey3");
+		expect(content).toContain("料理大成功+17%");
+	});
 
-    it('renders pokemon icon next to energy display when pokemonIdForm exists', () => {
-        const result = createTimeSlotResult({
-            energyEnd: 60,
-        });
+	it("renders pokemon icon next to energy display when pokemonIdForm exists", () => {
+		const result = createTimeSlotResult({
+			energyEnd: 60,
+		});
 
-        render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-                pokemonIdForm={25}
-            />
-        );
+		render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+				pokemonIdForm={25}
+			/>,
+		);
 
-        expect(screen.getByTestId('timeline-cell-pokemon-icon').textContent).toBe('25-14');
-    });
+		expect(screen.getByTestId("timeline-cell-pokemon-icon").textContent).toBe(
+			"25-14",
+		);
+	});
 
-    it('renders pokemon icon in a circular frame with thin outline', () => {
-        const result = createTimeSlotResult({
-            energyEnd: 60,
-        });
+	it("renders pokemon icon in a circular frame with thin outline", () => {
+		const result = createTimeSlotResult({
+			energyEnd: 60,
+		});
 
-        render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-                pokemonIdForm={25}
-            />
-        );
+		render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+				pokemonIdForm={25}
+			/>,
+		);
 
-        const iconFrame = screen.getByTestId('timeline-cell-pokemon-icon');
-        const frameStyle = getComputedStyle(iconFrame);
-        expect(frameStyle.borderRadius).toBe('50%');
-        expect(frameStyle.borderTopWidth).toBe('0.5px');
-        expect(frameStyle.borderTopColor).toBe('rgb(200, 200, 200)');
-    });
+		const iconFrame = screen.getByTestId("timeline-cell-pokemon-icon");
+		const frameStyle = getComputedStyle(iconFrame);
+		expect(frameStyle.borderRadius).toBe("50%");
+		expect(frameStyle.borderTopWidth).toBe("0.5px");
+		expect(frameStyle.borderTopColor).toBe("rgb(200, 200, 200)");
+	});
 
-    it('keeps pokemon icon visible for pre-simulation empty cell', () => {
-        render(
-            <TimelineCell
-                result={null}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-                pokemonIdForm={35}
-            />
-        );
+	it("keeps pokemon icon visible for pre-simulation empty cell", () => {
+		render(
+			<TimelineCell
+				result={null}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+				pokemonIdForm={35}
+			/>,
+		);
 
-        expect(screen.getByTestId('timeline-cell-pokemon-icon').textContent).toBe('35-14');
-    });
+		expect(screen.getByTestId("timeline-cell-pokemon-icon").textContent).toBe(
+			"35-14",
+		);
+	});
 
-    it('shows simple mode metrics and counts cooking from regular ingredients only', () => {
-        const result = createTimeSlotResult({
-            berryCount: 10,
-            skillTriggerCount: 2,
-            skillOverflowCount: 1,
-            ingredients: [
-                { name: 'apple', count: 2 },
-                { name: 'mushroom', count: 3 },
-            ],
-            skillIngredients: [
-                { name: 'honey', count: 9 },
-            ],
-            overflowIngredients: [
-                { name: 'egg', count: 4 },
-            ],
-        });
+	it("shows simple mode metrics and counts cooking from regular ingredients only", () => {
+		const result = createTimeSlotResult({
+			berryCount: 10,
+			skillTriggerCount: 2,
+			skillOverflowCount: 1,
+			ingredients: [
+				{ name: "apple", count: 2 },
+				{ name: "mushroom", count: 3 },
+			],
+			skillIngredients: [{ name: "honey", count: 9 }],
+			overflowIngredients: [{ name: "egg", count: 4 }],
+		});
 
-        render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-                displayMode="simple"
-            />
-        );
+		render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+				displayMode="simple"
+			/>,
+		);
 
-        expect(screen.getByTestId('timeline-cell-simple-berry').textContent).toContain('10');
-        expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).toContain('5');
-        expect(screen.getByTestId('timeline-cell-simple-cooking').textContent).not.toContain('14');
-        expect(screen.getByTestId('timeline-cell-simple-skill')).toBeDefined();
-        const simpleSkillOverflowIcon = screen.getByTestId('timeline-cell-simple-skill-none');
-        expect(simpleSkillOverflowIcon).toBeDefined();
-        expect(screen.queryByTestId('timeline-cell-help-icon-work')).toBeNull();
-    });
+		expect(
+			screen.getByTestId("timeline-cell-simple-berry").textContent,
+		).toContain("10");
+		expect(
+			screen.getByTestId("timeline-cell-simple-cooking").textContent,
+		).toContain("5");
+		expect(
+			screen.getByTestId("timeline-cell-simple-cooking").textContent,
+		).not.toContain("14");
+		expect(screen.getByTestId("timeline-cell-simple-skill")).toBeDefined();
+		const simpleSkillOverflowIcon = screen.getByTestId(
+			"timeline-cell-simple-skill-none",
+		);
+		expect(simpleSkillOverflowIcon).toBeDefined();
+		expect(screen.queryByTestId("timeline-cell-help-icon-work")).toBeNull();
+	});
 
-    it.each([
-        { energyEnd: 80, expectedColor: 'rgb(98, 213, 64)' },
-        { energyEnd: 79, expectedColor: 'rgb(52, 203, 191)' },
-        { energyEnd: 60, expectedColor: 'rgb(52, 203, 191)' },
-        { energyEnd: 59, expectedColor: 'rgb(78, 159, 242)' },
-        { energyEnd: 40, expectedColor: 'rgb(78, 159, 242)' },
-        { energyEnd: 39, expectedColor: 'rgb(183, 146, 242)' },
-        { energyEnd: 20, expectedColor: 'rgb(183, 146, 242)' },
-        { energyEnd: 19, expectedColor: 'rgb(169, 169, 169)' },
-        { energyEnd: 0, expectedColor: 'rgb(169, 169, 169)' },
-    ])('applies range color to detailed energy bar (energyEnd=$energyEnd)', ({ energyEnd, expectedColor }) => {
-        const result = createTimeSlotResult({
-            energyEnd,
-        });
+	it.each([
+		{ energyEnd: 80, expectedColor: "rgb(98, 213, 64)" },
+		{ energyEnd: 79, expectedColor: "rgb(52, 203, 191)" },
+		{ energyEnd: 60, expectedColor: "rgb(52, 203, 191)" },
+		{ energyEnd: 59, expectedColor: "rgb(78, 159, 242)" },
+		{ energyEnd: 40, expectedColor: "rgb(78, 159, 242)" },
+		{ energyEnd: 39, expectedColor: "rgb(183, 146, 242)" },
+		{ energyEnd: 20, expectedColor: "rgb(183, 146, 242)" },
+		{ energyEnd: 19, expectedColor: "rgb(169, 169, 169)" },
+		{ energyEnd: 0, expectedColor: "rgb(169, 169, 169)" },
+	])("applies range color to detailed energy bar (energyEnd=$energyEnd)", ({
+		energyEnd,
+		expectedColor,
+	}) => {
+		const result = createTimeSlotResult({
+			energyEnd,
+		});
 
-        render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        expect(getComputedStyle(screen.getByTestId('timeline-cell-energy-bar-fill')).backgroundColor).toBe(expectedColor);
-    });
+		expect(
+			getComputedStyle(screen.getByTestId("timeline-cell-energy-bar-fill"))
+				.backgroundColor,
+		).toBe(expectedColor);
+	});
 
-    it.each([
-        { energyEnd: 79, expectedColor: 'rgb(52, 203, 191)' },
-        { energyEnd: 59, expectedColor: 'rgb(78, 159, 242)' },
-        { energyEnd: 39, expectedColor: 'rgb(183, 146, 242)' },
-        { energyEnd: 19, expectedColor: 'rgb(169, 169, 169)' },
-    ])('applies range color to simple energy bar (energyEnd=$energyEnd)', ({ energyEnd, expectedColor }) => {
-        const result = createTimeSlotResult({
-            energyEnd,
-        });
+	it.each([
+		{ energyEnd: 79, expectedColor: "rgb(52, 203, 191)" },
+		{ energyEnd: 59, expectedColor: "rgb(78, 159, 242)" },
+		{ energyEnd: 39, expectedColor: "rgb(183, 146, 242)" },
+		{ energyEnd: 19, expectedColor: "rgb(169, 169, 169)" },
+	])("applies range color to simple energy bar (energyEnd=$energyEnd)", ({
+		energyEnd,
+		expectedColor,
+	}) => {
+		const result = createTimeSlotResult({
+			energyEnd,
+		});
 
-        render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-                displayMode="simple"
-            />
-        );
+		render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+				displayMode="simple"
+			/>,
+		);
 
-        expect(getComputedStyle(screen.getByTestId('timeline-cell-energy-bar-fill')).backgroundColor).toBe(expectedColor);
-    });
+		expect(
+			getComputedStyle(screen.getByTestId("timeline-cell-energy-bar-fill"))
+				.backgroundColor,
+		).toBe(expectedColor);
+	});
 
-    it('uses very light gray color for energy bar track', () => {
-        const result = createTimeSlotResult({
-            energyEnd: 60,
-        });
+	it("uses very light gray color for energy bar track", () => {
+		const result = createTimeSlotResult({
+			energyEnd: 60,
+		});
 
-        render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const fill = screen.getByTestId('timeline-cell-energy-bar-fill');
-        expect(fill.parentElement).not.toBeNull();
-        expect(getComputedStyle(fill.parentElement as HTMLElement).backgroundColor).toBe('rgb(243, 244, 246)');
-    });
+		const fill = screen.getByTestId("timeline-cell-energy-bar-fill");
+		expect(fill.parentElement).not.toBeNull();
+		expect(
+			getComputedStyle(fill.parentElement as HTMLElement).backgroundColor,
+		).toBe("rgb(243, 244, 246)");
+	});
 
-    it('hides simple mode skill icons when trigger and overflow are zero', () => {
-        const result = createTimeSlotResult({
-            skillTriggerCount: 0,
-            skillOverflowCount: 0,
-            ingredients: [{ name: 'apple', count: 1 }],
-        });
+	it("hides simple mode skill icons when trigger and overflow are zero", () => {
+		const result = createTimeSlotResult({
+			skillTriggerCount: 0,
+			skillOverflowCount: 0,
+			ingredients: [{ name: "apple", count: 1 }],
+		});
 
-        render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-                displayMode="simple"
-            />
-        );
+		render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+				displayMode="simple"
+			/>,
+		);
 
-        expect(screen.queryByTestId('timeline-cell-simple-skill')).toBeNull();
-        expect(screen.queryByTestId('timeline-cell-simple-skill-none')).toBeNull();
-    });
+		expect(screen.queryByTestId("timeline-cell-simple-skill")).toBeNull();
+		expect(screen.queryByTestId("timeline-cell-simple-skill-none")).toBeNull();
+	});
 
-    it('does not add skill prefix icons before 料理大成功 line in aggregate view', () => {
-        const result = createTimeSlotResult({
-            skillTriggerCount: 2,
-            skillIngredients: [
-                { name: 'apple', count: 8 },
-                { name: 'egg', count: 8 },
-            ],
-            tastyChanceIncreasePercent: 10,
-        });
+	it("does not add skill prefix icons before 料理大成功 line in aggregate view", () => {
+		const result = createTimeSlotResult({
+			skillTriggerCount: 2,
+			skillIngredients: [
+				{ name: "apple", count: 8 },
+				{ name: "egg", count: 8 },
+			],
+			tastyChanceIncreasePercent: 10,
+		});
 
-        const { container } = render(
-            <TimelineCell
-                result={result}
-                isSleeping={false}
-                slotId="slot-1"
-                teamIndex={0}
-            />
-        );
+		const { container } = render(
+			<TimelineCell
+				result={result}
+				isSleeping={false}
+				slotId="slot-1"
+				teamIndex={0}
+			/>,
+		);
 
-        const ingredientPrefix = screen.getByTestId('timeline-cell-skill-prefix-ingredients');
-        expect(ingredientPrefix.getAttribute('data-skill-prefix-count')).toBe('2');
-        expect(screen.queryByTestId('timeline-cell-skill-prefix-aggregate')).toBeNull();
-        expect(container.textContent).toContain('料理大成功+10%');
-        expect(container.querySelectorAll('[data-skill-prefix-icon="true"]')).toHaveLength(2);
-    });
+		const ingredientPrefix = screen.getByTestId(
+			"timeline-cell-skill-prefix-ingredients",
+		);
+		expect(ingredientPrefix.getAttribute("data-skill-prefix-count")).toBe("2");
+		expect(
+			screen.queryByTestId("timeline-cell-skill-prefix-aggregate"),
+		).toBeNull();
+		expect(container.textContent).toContain("料理大成功+10%");
+		expect(
+			container.querySelectorAll('[data-skill-prefix-icon="true"]'),
+		).toHaveLength(2);
+	});
 });
