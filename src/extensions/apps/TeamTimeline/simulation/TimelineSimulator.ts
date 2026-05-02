@@ -241,7 +241,8 @@ function buildPokemonBonusContext(
             skillTriggerBonus: bonus.skillTrigger,
             berryBonus: bonus.berry,
             ingredientBonus: bonus.ingredient,
-            carryLimitBonus: bonus.carryLimit,
+            carryLimitAdd: bonus.carryLimitAdd,
+            carryLimitMultiplier: bonus.carryLimitMul,
             isGoodCampTicketSet: bonusSettings.isGoodCampTicketSet,
             isMainBerry,
             isNonFavoriteBerry: isExpertMode && !isFavoriteBerry,
@@ -252,8 +253,8 @@ function buildPokemonBonusContext(
             ingredientMagnetMultiplier: bonus.ingredientMagnet,
             ingredientDrawMultiplier: bonus.ingredientDraw,
             skillIngredientMultiplier: bonus.skillIngredient,
-            dreamShardMultiplier: bonus.dreamShard,
-            mainSkillDreamShardMultiplier: bonus.dreamShard2,
+            dreamShardMultiplier: 1,
+            mainSkillDreamShardMultiplier: bonus.dreamShard,
             berryBurstMultiplier: bonus.berryBurst,
             berryStrengthBonus: strength.berryStrengthBonus,
         },
@@ -1015,7 +1016,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
             const helpBonusContext = getPokemonBonusContext(state.pokemon).help;
             const effectiveMaxInventory = getEffectiveMaxInventory(
                 state.maxInventory,
-                helpBonusContext.carryLimitBonus ?? 0,
+                helpBonusContext.carryLimitAdd ?? helpBonusContext.carryLimitBonus ?? 0,
+                helpBonusContext.carryLimitMultiplier ?? 1,
                 helpBonusContext.isGoodCampTicketSet,
             );
 

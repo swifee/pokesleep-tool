@@ -19,6 +19,10 @@ export interface HelpBonusContext {
     /** 食材追加数（イベント/EX） */
     ingredientBonus: number;
     /** 最大所持数追加（イベント） */
+    carryLimitAdd?: number;
+    /** 最大所持数倍率（イベント） */
+    carryLimitMultiplier?: number;
+    /** 最大所持数追加（旧設定互換） */
     carryLimitBonus?: number;
     /** いいキャンプチケット */
     isGoodCampTicketSet: boolean;
@@ -94,11 +98,16 @@ export interface SkillEffect {
 
 export function getEffectiveMaxInventory(
     maxInventory: number,
-    carryLimitBonus: number = 0,
+    carryLimitAdd: number = 0,
+    carryLimitMultiplier: number = 1,
     isGoodCampTicketSet: boolean = false,
 ): number {
-    const adjustedMaxInventory = Math.max(0, maxInventory + carryLimitBonus);
-    return Math.ceil(adjustedMaxInventory * (isGoodCampTicketSet ? 1.2 : 1));
+    const adjustedMaxInventory = Math.max(0, maxInventory + carryLimitAdd);
+    return Math.ceil(
+        adjustedMaxInventory *
+        Math.max(1, carryLimitMultiplier) *
+        (isGoodCampTicketSet ? 1.2 : 1),
+    );
 }
 
 /**
@@ -215,11 +224,19 @@ export function calculateHelp(input: HelpInput): HelpOutput {
     const skillTriggerBonus = bonusContext?.skillTriggerBonus ?? 1;
     const berryBonus = Math.max(0, bonusContext?.berryBonus ?? 0);
     const ingredientBonus = Math.max(0, bonusContext?.ingredientBonus ?? 0);
-    const carryLimitBonus = Math.max(0, bonusContext?.carryLimitBonus ?? 0);
+    const carryLimitAdd = Math.max(
+        0,
+        bonusContext?.carryLimitAdd ?? bonusContext?.carryLimitBonus ?? 0,
+    );
+    const carryLimitMultiplier = Math.max(
+        1,
+        bonusContext?.carryLimitMultiplier ?? 1,
+    );
     const isGoodCampTicketSet = bonusContext?.isGoodCampTicketSet ?? false;
     const effectiveMaxInventory = getEffectiveMaxInventory(
         maxInventory,
-        carryLimitBonus,
+        carryLimitAdd,
+        carryLimitMultiplier,
         isGoodCampTicketSet,
     );
     const isMainBerry = bonusContext?.isMainBerry ?? false;

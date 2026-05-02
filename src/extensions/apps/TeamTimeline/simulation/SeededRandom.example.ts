@@ -105,8 +105,9 @@ function averageSimulation(runs: number, baseSeed: number) {
 // ===== 実行例 =====
 
 // vitest実行時はスキップ
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-if (typeof (import.meta as any).vitest === 'undefined') {
+const hasVitest = typeof globalThis === 'object' && 'vitest' in globalThis;
+
+if (!hasVitest) {
     console.log('\n===== 基本的な使い方 =====');
     basicUsage();
 
