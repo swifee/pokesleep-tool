@@ -4,6 +4,7 @@
  */
 
 import i18next from "i18next";
+import { getEventBonus } from "../../../../data/events";
 import { isExpertField } from "../../../../data/fields";
 import type {
 	IngredientName,
@@ -120,6 +121,16 @@ function sumIngredientCounts(
 
 function normalizeDiscreteCount(value: number): number {
 	return Math.max(0, Math.round(value));
+}
+
+function getCookingEventBonusPercent(
+	bonusSettings: TimelineBonusSettings,
+): number {
+	const dishBonus = getEventBonus(
+		bonusSettings.event,
+		bonusSettings.customEventBonus,
+	).dish;
+	return Math.round((dishBonus - 1) * 100);
 }
 
 export interface SimulationAnalysisOptions {
@@ -475,7 +486,7 @@ function runCookingPostProcess(
 ): CookingSimulationResult {
 	const bag = createIngredientBag(cookingSettings.initialIngredients);
 	const cookingRandom = new SeededRandom(baseSeed + 9999);
-	const cookingEventBonus = 0; // TODO: extract event bonus from bonusSettings
+	const cookingEventBonus = getCookingEventBonusPercent(bonusSettings);
 	const disabledRecipeSet = new Set<string>(
 		Object.entries(cookingSettings.disabledRecipes)
 			.filter(([, disabled]) => disabled === true)

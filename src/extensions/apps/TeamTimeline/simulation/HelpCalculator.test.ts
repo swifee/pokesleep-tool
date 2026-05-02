@@ -15,6 +15,21 @@ function createTestPokemon(): PokemonBoxItem {
 	);
 }
 
+function mockBerryOnlyHelps(pokemon: PokemonBoxItem, berryCount: number): void {
+	Object.defineProperty(pokemon.iv, "ingredientRate", {
+		configurable: true,
+		get: () => 0,
+	});
+	Object.defineProperty(pokemon.iv, "skillRate", {
+		configurable: true,
+		get: () => 0,
+	});
+	Object.defineProperty(pokemon.iv, "berryCount", {
+		configurable: true,
+		get: () => berryCount,
+	});
+}
+
 describe("HelpCalculator bonus behavior", () => {
 	it("いいキャンプチケット有効時はおてつだい回数が増える", () => {
 		const pokemon = createTestPokemon();
@@ -245,5 +260,95 @@ describe("HelpCalculator bonus behavior", () => {
 		expect(withoutCamp.newInventory).toBe(18);
 		expect(withCamp.newInventory).toBeGreaterThan(18);
 		expect(withCamp.ingredients.length).toBeGreaterThan(0);
+	});
+
+	it("所持数が上限に達している時はberryBonusが発動しない", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 2);
+
+		const result = calculateHelp({
+			pokemon,
+			durationMinutes: 300,
+			startEnergy: 50,
+			isSleeping: false,
+			random: new SeededRandom(505),
+			teamHelpingBonusCount: 0,
+			currentSkillStock: 0,
+			maxSkillStock: 1,
+			currentInventory: 10,
+			maxInventory: 10,
+			bankedTimeSeconds: 0,
+			bonusContext: {
+				skillTriggerBonus: 1,
+				berryBonus: 1,
+				ingredientBonus: 0,
+				isGoodCampTicketSet: false,
+				isMainBerry: false,
+				isNonFavoriteBerry: false,
+			},
+		});
+
+		expect(result.helpCount).toBeGreaterThan(0);
+		expect(result.berryCount).toBe(result.helpCount * 2);
+	});
+
+	it("今回のきのみ取得で上限到達する時はberryBonusが発動しない", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 2);
+
+		const result = calculateHelp({
+			pokemon,
+			durationMinutes: 300,
+			startEnergy: 50,
+			isSleeping: false,
+			random: new SeededRandom(606),
+			teamHelpingBonusCount: 0,
+			currentSkillStock: 0,
+			maxSkillStock: 1,
+			currentInventory: 7,
+			maxInventory: 10,
+			bankedTimeSeconds: 0,
+			bonusContext: {
+				skillTriggerBonus: 1,
+				berryBonus: 1,
+				ingredientBonus: 0,
+				isGoodCampTicketSet: false,
+				isMainBerry: false,
+				isNonFavoriteBerry: false,
+			},
+		});
+
+		expect(result.helpCount).toBeGreaterThan(0);
+		expect(result.berryCount).toBe(result.helpCount * 2);
+	});
+
+	it("上限未達の通常ケースではberryBonusが発動する", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 2);
+
+		const result = calculateHelp({
+			pokemon,
+			durationMinutes: 300,
+			startEnergy: 50,
+			isSleeping: false,
+			random: new SeededRandom(707),
+			teamHelpingBonusCount: 0,
+			currentSkillStock: 0,
+			maxSkillStock: 1,
+			currentInventory: 0,
+			maxInventory: 999,
+			bankedTimeSeconds: 0,
+			bonusContext: {
+				skillTriggerBonus: 1,
+				berryBonus: 1,
+				ingredientBonus: 0,
+				isGoodCampTicketSet: false,
+				isMainBerry: false,
+				isNonFavoriteBerry: false,
+			},
+		});
+
+		expect(result.helpCount).toBeGreaterThan(0);
+		expect(result.berryCount).toBe(result.helpCount * 3);
 	});
 });
