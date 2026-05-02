@@ -247,14 +247,14 @@ export function calculateHelp(input: HelpInput): HelpOutput {
     let inventory = currentInventory;
     let skillTriggerCount = 0;
     let skillOverflowCount = 0;
-    let berryHelpCount = 0;
+    let totalBerryCount = 0;
 
     const ingredientMap = new Map<IngredientName, number>();
     const overflowIngredientMap = new Map<IngredientName, number>();
 
     const ingredientRate = pokemon.iv.ingredientRate;
     const skillRate = Math.min(1, pokemon.iv.skillRate * skillTriggerBonus);
-    const berryCountPerHelp = pokemon.iv.berryCount + berryBonus;
+    const baseBerryCount = pokemon.iv.berryCount;
     const ingredientBonusBase = Math.floor(ingredientBonus);
     const ingredientBonusFraction = Math.max(0, ingredientBonus - ingredientBonusBase);
 
@@ -263,6 +263,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
         const isInventoryFull = inventory >= effectiveMaxInventory;
 
         if (isInventoryFull) {
+            const berryCountForHelp = baseBerryCount;
             // いつのまに育成状態
             if (random.chance(ingredientRate)) {
                 // 食材判定成功 → 溢れ食材としてカウント、きのみを代わりに取得
@@ -271,10 +272,10 @@ export function calculateHelp(input: HelpInput): HelpOutput {
                 const ingredientCount = ing.count + extraCount;
                 const current = overflowIngredientMap.get(ing.name) || 0;
                 overflowIngredientMap.set(ing.name, current + ingredientCount);
-                berryHelpCount++;
+                totalBerryCount += berryCountForHelp;
             } else {
                 // きのみ判定 → 通常通り取得
-                berryHelpCount++;
+                totalBerryCount += berryCountForHelp;
             }
             // inventoryは増えない（溢れるため）
 
@@ -294,8 +295,12 @@ export function calculateHelp(input: HelpInput): HelpOutput {
                 inventory += ingredientCount;
             } else {
                 // きのみ取得
-                berryHelpCount++;
-                inventory += berryCountPerHelp;
+                const berryCountForHelp =
+                    inventory + baseBerryCount + berryBonus >= effectiveMaxInventory
+                        ? baseBerryCount
+                        : baseBerryCount + berryBonus;
+                totalBerryCount += berryCountForHelp;
+                inventory += berryCountForHelp;
             }
 
             // スキル発動判定
@@ -309,9 +314,6 @@ export function calculateHelp(input: HelpInput): HelpOutput {
             }
         }
     }
-
-    // きのみ総数
-    const totalBerryCount = berryHelpCount * berryCountPerHelp;
 
     // 食材リストを配列に変換
     const ingredients: IngredientResult[] = [];
