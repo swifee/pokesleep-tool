@@ -42,7 +42,11 @@ const TeamSlot = React.memo(({ item, onClick, onRemove }: TeamSlotProps) => {
 					<span>{item.iv.level}</span>
 				</span>
 				<span className="icon-area">
-					<PokemonIcon idForm={item.iv.idForm} size={30} />
+					<PokemonIcon
+						idForm={item.iv.idForm}
+						shiny={item.iv.shiny}
+						size={30}
+					/>
 				</span>
 				<span className="name-line">{item.filledNickname(t)}</span>
 			</ButtonBase>

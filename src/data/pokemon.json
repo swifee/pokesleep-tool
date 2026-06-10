@@ -999,14 +999,14 @@
 		"specialty": "Skills",
 		"skill": "Energy for Everyone S",
 		"fp": 16,
-		"frequency": 2900,
-		"ingRate": 17.4,
+		"frequency": 2750,
+		"ingRate": 19.1,
 		"skillRate": 4,
 		"ancestor": 174,
 		"evolutionCount": 2,
 		"evolutionLeft": 0,
 		"isFullyEvolved": true,
-		"carryLimit": 13,
+		"carryLimit": 22,
 		"ing1": {
 			"name": "honey",
 			"c1": 1,
@@ -5309,6 +5309,40 @@
 		}
 	},
 	{
+		"id": 381,
+		"name": "Latios",
+		"arrival": "2026-06-08",
+		"sleepType": "dozing",
+		"exp": 1080,
+		"type": "dragon",
+		"specialty": "Skills",
+		"skill": "Berry Burst (Draco Meteor)",
+		"fp": 30,
+		"frequency": 2800,
+		"ingRate": 19.8,
+		"skillRate": 3,
+		"ancestor": null,
+		"evolutionCount": -1,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 19,
+		"ing1": {
+			"name": "tomato",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "egg",
+			"c2": 2,
+			"c3": 3
+		},
+		"ing3": {
+			"name": "milk",
+			"c3": 4
+		}
+	},
+	{
 		"id": 403,
 		"name": "Shinx",
 		"arrival": "2024-10-02",
@@ -6333,31 +6367,31 @@
 		"sleepType": "slumbering",
 		"exp": 600,
 		"type": "rock",
-		"specialty": "unknown",
-		"skill": "unknown",
-		"fp": 0,
-		"frequency": 0,
-		"ingRate": 0,
-		"skillRate": 0,
+		"specialty": "Berries",
+		"skill": "Cooking Power-Up S",
+		"fp": 5,
+		"frequency": 5200,
+		"ingRate": 20.3,
+		"skillRate": 2.4,
 		"ancestor": 696,
 		"evolutionCount": 0,
 		"evolutionLeft": 1,
 		"isFullyEvolved": false,
-		"carryLimit": 0,
+		"carryLimit": 11,
 		"ing1": {
-			"name": "unknown1",
+			"name": "sausage",
 			"c1": 1,
 			"c2": 2,
 			"c3": 4
 		},
 		"ing2": {
-			"name": "unknown2",
-			"c2": 0,
-			"c3": 0
+			"name": "apple",
+			"c2": 3,
+			"c3": 4
 		},
 		"ing3": {
-			"name": "unknown3",
-			"c3": 0
+			"name": "potato",
+			"c3": 3
 		}
 	},
 	{
@@ -6367,31 +6401,31 @@
 		"sleepType": "slumbering",
 		"exp": 600,
 		"type": "rock",
-		"specialty": "unknown",
-		"skill": "unknown",
-		"fp": 0,
-		"frequency": 0,
-		"ingRate": 0,
-		"skillRate": 0,
+		"specialty": "Berries",
+		"skill": "Cooking Power-Up S",
+		"fp": 20,
+		"frequency": 2800,
+		"ingRate": 17.8,
+		"skillRate": 2.9,
 		"ancestor": 696,
 		"evolutionCount": 1,
 		"evolutionLeft": 0,
 		"isFullyEvolved": true,
-		"carryLimit": 0,
+		"carryLimit": 23,
 		"ing1": {
-			"name": "unknown1",
+			"name": "sausage",
 			"c1": 1,
 			"c2": 2,
 			"c3": 4
 		},
 		"ing2": {
-			"name": "unknown2",
-			"c2": 0,
-			"c3": 0
+			"name": "apple",
+			"c2": 3,
+			"c3": 4
 		},
 		"ing3": {
-			"name": "unknown3",
-			"c3": 0
+			"name": "potato",
+			"c3": 3
 		}
 	},
 	{
@@ -7148,6 +7182,40 @@
 		"ing3": {
 			"name": "mushroom",
 			"c3": 2
+		}
+	},
+	{
+		"id": 780,
+		"name": "Drampa",
+		"arrival": "2026-05-25",
+		"sleepType": "dozing",
+		"exp": 600,
+		"type": "dragon",
+		"specialty": "Ingredients",
+		"skill": "Tasty Chance S",
+		"fp": 16,
+		"frequency": 3500,
+		"ingRate": 29.4,
+		"skillRate": 4.6,
+		"ancestor": null,
+		"evolutionCount": -1,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 25,
+		"ing1": {
+			"name": "soy",
+			"c1": 2,
+			"c2": 5,
+			"c3": 7
+		},
+		"ing2": {
+			"name": "avocado",
+			"c2": 3,
+			"c3": 4
+		},
+		"ing3": {
+			"name": "sausage",
+			"c3": 7
 		}
 	},
 	{

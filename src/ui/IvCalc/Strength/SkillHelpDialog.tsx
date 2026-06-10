@@ -32,6 +32,7 @@ import {
 } from "../../../util/MainSkill";
 import Nature from "../../../util/Nature";
 import {
+	clamp,
 	formatNice,
 	formatWithComma,
 	round1,
@@ -75,7 +76,8 @@ const SkillHelpDialog = React.memo(
 		const { t } = useTranslation();
 		const [berryStrengthOpen, setBerryStrengthOpen] = React.useState(false);
 		const [berryIv, setBerryIv] = React.useState(strength.pokemonIv);
-		const [berryBonus, setBerryBonus] = React.useState(1);
+		const [berryStrengthMultiplier, setBerryStrengthMultiplier] =
+			React.useState(1);
 		const [pityProcOpen, setPityProcOpen] = React.useState(false);
 		const onBerryInfoClick = React.useCallback(
 			(type: PokemonType, level: number) => {
@@ -86,7 +88,7 @@ const SkillHelpDialog = React.memo(
 					level,
 				});
 				setBerryIv(iv);
-				setBerryBonus(
+				setBerryStrengthMultiplier(
 					new PokemonStrength(iv, strength.parameter).berryStrengthBonus,
 				);
 			},
@@ -372,7 +374,7 @@ const SkillHelpDialog = React.memo(
 						{round1(result.overallSkillRate * 100)}%
 					</section>
 
-					{getBerryBurstConfigHtml(strength, dispatch, onBerryInfoClick, t)}
+					{getConfigHtml(strength, dispatch, onBerryInfoClick, t)}
 					{footnote !== "" && <div className="footnote">{footnote}</div>}
 				</DialogContent>
 				<DialogActions>
@@ -383,7 +385,7 @@ const SkillHelpDialog = React.memo(
 					onClose={onBerryStrenthClose}
 					iv={berryIv}
 					fieldBonus={settings.fieldBonus}
-					berryBonus={berryBonus}
+					berryStrengthMultiplier={berryStrengthMultiplier}
 				/>
 				<SkillPityProcDialog
 					open={pityProcOpen}
@@ -871,6 +873,7 @@ function getBerryBurstValueText(
 	const bonus = getEventBonus(param.event, param.customEventBonus).berryBurst;
 	const result = calculateBerryBurstStrength(
 		strength.pokemonIv,
+		getBerryBurstTeam(strength.pokemonIv, param),
 		strength.parameter,
 		bonus,
 		skillLevel,
@@ -880,31 +883,33 @@ function getBerryBurstValueText(
 			{text}
 			<br />
 			<div className="bbgrid">
-				<span>{t(`pokemons.${strength.pokemonIv.pokemon.name}`)}:</span>
+				<span className="lbl">
+					{t(`pokemons.${strength.pokemonIv.pokemon.name}`)}:
+				</span>
 				<span>{formatWithComma(result.members[0].total)}</span>
 				<small>
 					({result.members[0].perBerry} × {result.members[0].count})
 				</small>
 
-				<span>{t("other team member")} 1:</span>
+				<span className="lbl">{t("other team member")} 1:</span>
 				<span>{formatWithComma(result.members[1].total)}</span>
 				<small>
 					({result.members[1].perBerry} × {result.members[1].count})
 				</small>
 
-				<span>{t("other team member")} 2:</span>
+				<span className="lbl">{t("other team member")} 2:</span>
 				<span>{formatWithComma(result.members[2].total)}</span>
 				<small>
 					({result.members[2].perBerry} × {result.members[2].count})
 				</small>
 
-				<span>{t("other team member")} 3:</span>
+				<span className="lbl">{t("other team member")} 3:</span>
 				<span>{formatWithComma(result.members[3].total)}</span>
 				<small>
 					({result.members[3].perBerry} × {result.members[3].count})
 				</small>
 
-				<span>{t("other team member")} 4:</span>
+				<span className="lbl">{t("other team member")} 4:</span>
 				<span>{formatWithComma(result.members[4].total)}</span>
 				<small>
 					({result.members[4].perBerry} × {result.members[4].count})
@@ -922,28 +927,81 @@ function getNormalSkillValueText(
 	return [t("value per skill", { value: valueText }), null];
 }
 
+function getConfigHtml(
+	strength: PokemonStrength,
+	dispatch: React.Dispatch<IvAction>,
+	onBerryInfoClick: (type: PokemonType, level: number) => void,
+	t: typeof i18next.t,
+): React.ReactNode {
+	const iv = strength.pokemonIv;
+
+	if (iv.pokemon.skill === "Energizing Cheer S (Heal Pulse)") {
+		return getLatiTwinsConfigHtml(strength, dispatch, t);
+	}
+
+	if (
+		iv.versatileSkill.startsWith("Berry Burst") ||
+		iv.pokemon.skill === "Energy for Everyone S (Lunar Blessing)"
+	) {
+		return getBerryBurstConfigHtml(strength, dispatch, onBerryInfoClick, t);
+	}
+
+	return null;
+}
+
+function getLatiTwinsConfigHtml(
+	strength: PokemonStrength,
+	dispatch: React.Dispatch<IvAction>,
+	t: typeof i18next.t,
+): React.ReactElement {
+	const settings = strength.parameter;
+	const onLatiTwinsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		dispatch({
+			type: "changeParameter",
+			payload: {
+				parameter: {
+					...settings,
+					latiTwins: e.target.checked,
+				},
+			},
+		});
+	};
+
+	const label = t("pokemon on your team", {
+		pokemon:
+			strength.pokemonIv.pokemon.id === 380
+				? t("pokemons.Latios")
+				: t("pokemons.Latias"),
+	});
+
+	return (
+		<section style={{ marginTop: "0.5rem" }}>
+			<span className="lbl">{label}:</span>
+			<Switch
+				checked={settings.latiTwins}
+				size="small"
+				onChange={onLatiTwinsChange}
+			/>
+		</section>
+	);
+}
+
 function getBerryBurstConfigHtml(
 	strength: PokemonStrength,
 	dispatch: React.Dispatch<IvAction>,
 	onBerryInfoClick: (type: PokemonType, level: number) => void,
 	t: typeof i18next.t,
-) {
+): React.ReactNode {
 	const settings = strength.parameter;
-
-	const showBurstConfig =
-		strength.pokemonIv.versatileSkill.startsWith("Berry Burst") ||
-		strength.pokemonIv.pokemon.skill ===
-			"Energy for Everyone S (Lunar Blessing)";
-	if (!showBurstConfig) {
-		return null;
-	}
-
 	const iv = strength.pokemonIv;
 	const auto = settings.berryBurstTeam.auto;
 	const burstTeam = getBerryBurstTeam(iv, settings);
 	const maxSpecies =
-		burstTeam.filter((x) => x.type === iv.pokemon.type).length + 1;
-	const species = auto ? maxSpecies : settings.berryBurstTeam.species;
+		burstTeam.members.filter((x) => x.type === iv.pokemon.type).length + 1;
+	const minSpecies = maxSpecies >= 2 ? 2 : 1;
+	const species = auto
+		? maxSpecies
+		: clamp(minSpecies, settings.berryBurstTeam.species, maxSpecies);
 
 	const onBerryBurstAutoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		dispatch({
@@ -1008,10 +1066,15 @@ function getBerryBurstConfigHtml(
 		});
 	};
 
+	const twins =
+		iv.pokemon.skill === "Berry Burst (Draco Meteor)"
+			? getLatiTwinsConfigHtml(strength, dispatch, t)
+			: null;
+
 	return (
 		<>
 			<section style={{ marginTop: "0.5rem" }}>
-				<span>{t("events.advanced")}:</span>
+				<span className="lbl">{t("events.advanced")}:</span>
 				<Switch
 					checked={!auto}
 					size="small"
@@ -1019,7 +1082,9 @@ function getBerryBurstConfigHtml(
 				/>
 			</section>
 			<section style={{ paddingLeft: "1rem" }}>
-				<span>{t(`pokemons.${strength.pokemonIv.pokemon.name}`)}:</span>
+				<span className="lbl">
+					{t(`pokemons.${strength.pokemonIv.pokemon.name}`)}:
+				</span>
 				<span style={{ color: "#999" }}>
 					<TypeSelect
 						size="small"
@@ -1036,22 +1101,22 @@ function getBerryBurstConfigHtml(
 			</section>
 			{[0, 1, 2, 3].map((i) => (
 				<section key={i} style={{ paddingLeft: "1rem" }}>
-					<span>
+					<span className="lbl">
 						{t("other team member")} {i + 1}:
 					</span>
 					<span style={{ color: auto ? "#999" : "inherit" }}>
 						<TypeSelect
 							size="small"
 							disabled={auto}
-							type={burstTeam[i].type}
+							type={burstTeam.members[i].type}
 							onChange={(type) => onBerryBurstTypeChange(i, type)}
 						/>
 						<span style={{ padding: "0 0.2rem 0 0.6rem" }}>Lv.</span>
 						{auto ? (
-							burstTeam[i].level
+							burstTeam.members[i].level
 						) : (
 							<LevelInput
-								value={burstTeam[i].level}
+								value={burstTeam.members[i].level}
 								sx={{ width: "1.2rem", fontSize: "0.9rem" }}
 								showSlider
 								onChange={(level) => onBerryBurstLevelChange(i, level)}
@@ -1059,15 +1124,18 @@ function getBerryBurstConfigHtml(
 						)}
 						<InfoButton
 							onClick={() =>
-								onBerryInfoClick(burstTeam[i].type, burstTeam[i].level)
+								onBerryInfoClick(
+									burstTeam.members[i].type,
+									burstTeam.members[i].level,
+								)
 							}
 						/>
 					</span>
 				</section>
 			))}
-			{iv.pokemon.name === "Cresselia" && (
+			{iv.pokemon.exp === 1080 && (
 				<section style={{ paddingLeft: "1rem" }}>
-					<span>{t("different species")}:</span>
+					<span className="lbl">{t("different species")}:</span>
 					<span style={{ color: "#999" }}>
 						{auto ? (
 							species
@@ -1077,9 +1145,11 @@ function getBerryBurstConfigHtml(
 								sx={{ padding: "0 0.5rem" }}
 								onChange={onBerryBurstSpeciesChange}
 							>
-								<MenuItem dense value="1">
-									1
-								</MenuItem>
+								{minSpecies === 1 && (
+									<MenuItem dense value="1">
+										1
+									</MenuItem>
+								)}
 								{maxSpecies > 1 && (
 									<MenuItem dense value="2">
 										2
@@ -1105,6 +1175,7 @@ function getBerryBurstConfigHtml(
 					</span>
 				</section>
 			)}
+			{twins}
 		</>
 	);
 }

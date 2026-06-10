@@ -9,6 +9,7 @@ import {
 	type PokemonType,
 } from "../../../../data/pokemons";
 import {
+	getDracoMeteorBerryCount,
 	getLunarBlessingBerryCount,
 	getMaxSkillLevel,
 	getSkillRandomRange,
@@ -56,6 +57,7 @@ const BAD_DREAMS_DAMAGE_PER_HIT = 12;
 const NUZZLE_MAX_CHAIN_TRIGGERS = 20;
 const BERRY_JUICE_RATE = 0.2;
 const BERRY_BURST_DISGUISE_SUCCESS_RATE = 0.18;
+const HEAL_PULSE_TARGET_COUNT = 2;
 const BERRY_STRENGTH_BY_TYPE: Record<PokemonType, number> = {
 	normal: 28,
 	fire: 27,
@@ -111,6 +113,7 @@ const METRONOME_SKILL_POOL: readonly MainSkillName[] = [
 	"Dream Shard Magnet S",
 	"Dream Shard Magnet S (Random)",
 	"Berry Burst",
+	"Berry Burst (Draco Meteor)",
 ];
 
 export interface PokemonSkillBonusContext {
@@ -216,10 +219,47 @@ function calculateDistributedBerryEp(
 	return totalEp;
 }
 
+function hasPokemonName(
+	members: readonly PokemonBoxItem[],
+	pokemonName: string,
+): boolean {
+	return members.some(
+		(member) =>
+			member.iv.pokemonName === pokemonName ||
+			member.iv.pokemon.name === pokemonName,
+	);
+}
+
+function countSpeciesByType(
+	members: readonly PokemonBoxItem[],
+	type: PokemonType,
+): number {
+	return new Set(
+		members
+			.filter((member) => member.iv.pokemon.type === type)
+			.map((member) => member.iv.pokemonName),
+	).size;
+}
+
+function getHealPulseHelpCount(
+	skillLevel: number,
+	activeTeam: readonly PokemonBoxItem[],
+): number {
+	const baseHelpCount = getSkillSubValue(
+		"Energizing Cheer S (Heal Pulse)",
+		skillLevel,
+	);
+	if (!hasPokemonName(activeTeam, "Latios")) {
+		return baseHelpCount;
+	}
+	const latiBonus = skillLevel <= 2 ? 1 : skillLevel <= 5 ? 2 : 3;
+	return baseHelpCount + latiBonus;
+}
+
 export interface TargetRecoveryEvent {
 	targetPokemonId: number;
 	recovery: number;
-	source: "cheer" | "nuzzle";
+	source: "cheer" | "nuzzle" | "healPulse";
 }
 
 export interface NuzzleTriggeredSkillEvent {
@@ -228,7 +268,7 @@ export interface NuzzleTriggeredSkillEvent {
 }
 
 export interface SupportHelpEvent {
-	source: "extraHelpful" | "helperBoost";
+	source: "extraHelpful" | "helperBoost" | "healPulse";
 	targetPokemonId: number;
 	helpCount: number;
 	berryCount: number;
@@ -366,7 +406,8 @@ export function classifySkill(
 	}
 	if (
 		skillName === "Energizing Cheer S" ||
-		skillName === "Energizing Cheer S (Nuzzle)"
+		skillName === "Energizing Cheer S (Nuzzle)" ||
+		skillName === "Energizing Cheer S (Heal Pulse)"
 	) {
 		return "targetEnergy";
 	}
@@ -379,7 +420,8 @@ export function classifySkill(
 		skillName === "Charge Strength S (Random)" ||
 		skillName === "Charge Strength S (Stockpile)" ||
 		skillName === "Berry Burst" ||
-		skillName === "Berry Burst (Disguise)"
+		skillName === "Berry Burst (Disguise)" ||
+		skillName === "Berry Burst (Draco Meteor)"
 	) {
 		return "directEP";
 	}
@@ -749,15 +791,30 @@ export function processSkillTriggers(
 			}
 		} else if (
 			skillName === "Berry Burst" ||
-			skillName === "Berry Burst (Disguise)"
+			skillName === "Berry Burst (Disguise)" ||
+			skillName === "Berry Burst (Draco Meteor)"
 		) {
 			const activeTeam = activeTeamMembers;
 			const berryBurstMultiplier = pokemonBonus?.berryBurstMultiplier ?? 1;
+			const berryCounts =
+				skillName === "Berry Burst (Draco Meteor)"
+					? getDracoMeteorBerryCount(
+							skillLevel,
+							Math.min(
+								Math.max(countSpeciesByType(activeTeam, "dragon"), 1),
+								5,
+							),
+							hasPokemonName(activeTeam, "Latias"),
+						)
+					: {
+							myBerryCount: getSkillValue(skillName, skillLevel),
+							othersBerryCount: getSkillSubValue(skillName, skillLevel),
+						};
 			const selfBerryCount = Math.ceil(
-				getSkillValue(skillName, skillLevel) * berryBurstMultiplier,
+				berryCounts.myBerryCount * berryBurstMultiplier,
 			);
 			const otherBerryCount = Math.ceil(
-				getSkillSubValue(skillName, skillLevel) * berryBurstMultiplier,
+				berryCounts.othersBerryCount * berryBurstMultiplier,
 			);
 
 			for (let i = 0; i < skillTriggerCount; i++) {
@@ -833,11 +890,62 @@ export function processSkillTriggers(
 			}
 		}
 	} else if (category === "targetEnergy") {
-		// Energizing Cheer S / Nuzzle: チーム内のランダム1体を回復
 		const recoveryPerTrigger = getSkillValue(skillName, skillLevel);
 		const activeTeam = targetableTeamMembers;
 		if (activeTeam.length > 0) {
 			for (let i = 0; i < skillTriggerCount; i++) {
+				if (skillName === "Energizing Cheer S (Heal Pulse)") {
+					const targets = random
+						.shuffle(activeTeam)
+						.slice(0, Math.min(HEAL_PULSE_TARGET_COUNT, activeTeam.length));
+					const helpCount = getHealPulseHelpCount(
+						skillLevel,
+						activeTeamMembers,
+					);
+
+					for (const target of targets) {
+						if (!suppressEnergyDelta) {
+							addNumberToMap(
+								energizingCheerTargets,
+								target.id,
+								recoveryPerTrigger,
+							);
+						}
+						energizingCheerEvents.push({
+							targetPokemonId: target.id,
+							recovery: suppressEnergyDelta ? 0 : recoveryPerTrigger,
+							source: "healPulse",
+						});
+
+						const supportResult = simulateSupportHelps(
+							target,
+							helpCount,
+							random,
+							bonusContext,
+							activeTeamMemberIds,
+						);
+						totalSupportBerryCount += supportResult.berryCount;
+						totalSupportBerryEP += supportResult.berryEP;
+						totalDirectEP += supportResult.berryEP;
+						for (const ingredient of supportResult.ingredients) {
+							addIngredientCount(
+								skillIngredientMap,
+								ingredient.name,
+								ingredient.count,
+							);
+						}
+						supportHelpEvents.push({
+							source: "healPulse",
+							targetPokemonId: target.id,
+							helpCount,
+							berryCount: supportResult.berryCount,
+							berryEP: supportResult.berryEP,
+							ingredients: supportResult.ingredients,
+						});
+					}
+					continue;
+				}
+
 				const targetIndex = random.nextInt(0, activeTeam.length - 1);
 				const target = activeTeam[targetIndex];
 				if (!target) continue;

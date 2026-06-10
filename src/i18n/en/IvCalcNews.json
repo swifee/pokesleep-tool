@@ -1,6 +1,22 @@
 {
 	"IvCalc": {
 		"news": {
+			"add latios": {
+				"headline": "Added data for $t(pokemons.Latios).",
+				"detail": "$t(rp collection)"
+			},
+			"add drampa": {
+				"headline": "Added data for $t(pokemons.Drampa). Also, shiny Pokémon can now be added to $t(box).",
+				"detail": "$t(own research note)"
+			},
+			"v3.5.0": {
+				"headline": "Updated the data with balance adjustments in version 3.5.0",
+				"detail": "$t(own research note)"
+			},
+			"add tyrunt": {
+				"headline": "Added data for $t(pokemons.Tyrunt) and $t(pokemons.Tyrantrum).",
+				"detail": "$t(rp collection)"
+			},
 			"add sandshrew": {
 				"headline": "Added data for $t(pokemons.Sandshrew) and $t(pokemons.Sandslash), and updated $t(pokemons.Togedemaru)'s data. $t(pity proc) and $t(tap frequency) simulation are now supported (<a href='https://youtu.be/kEX2myG-wS8'>Tutorial video</a>).",
 				"detail": "$t(rp collection) $t(movie detail)"
@@ -254,5 +270,8 @@
 				"detail": "$t(IvCalc.description)"
 			}
 		}
-	}
+	},
+	"own research note": "The ingredient% and skill% are calculated based on our own research.",
+	"rp collection": "The ingredient% and skill% are based on RP Collection values.",
+	"movie detail": "Your subscriptions, likes, comments, and hypes are greatly appreciated!"
 }

@@ -6,7 +6,8 @@ import events, {
 	loadHelpEventBonus,
 } from "../data/events";
 import fields, { getFavoriteBerries, isExpertField } from "../data/fields";
-import pokemons, { type PokemonType, PokemonTypes } from "../data/pokemons";
+import { type PokemonType, PokemonTypes } from "../data/pokemons";
+import { getBerryStrength } from "./Berry";
 import Energy, {
 	AlwaysTap,
 	type EnergyParameter,
@@ -22,6 +23,7 @@ import {
 } from "./HelpCount";
 import type { MainSkillName } from "./MainSkill";
 import {
+	getDracoMeteorBerryCount,
 	getIngredientDrawIngredients,
 	getLunarBlessingBerryCount,
 	getMaxSkillLevel,
@@ -33,7 +35,8 @@ import {
 	superLuckShard5Rate,
 	superLuckShardRate,
 } from "./MainSkill";
-import PokemonIv, { type IngredientSlot } from "./PokemonIv";
+import type PokemonIv from "./PokemonIv";
+import type { IngredientSlot } from "./PokemonIv";
 import PokemonRp, {
 	averageIngredientStrength,
 	ingredientStrength,
@@ -135,22 +138,31 @@ export interface StrengthParameter extends EnergyParameter {
 	helperBoostSpecies: number;
 
 	/** Berry burst team configuration */
-	berryBurstTeam: {
+	berryBurstTeam: BerryBurstTeam & {
 		/** Whether to calculate automatically using the default team */
 		auto: boolean;
-		/**
-		 * Number of different Pokémon species of the same type on the team.
-		 *
-		 * - Used only when the main skill is "Energy for Everyone S (Lunar Blessing)".
-		 * - Ignored if `auto` is set to true.
-		 */
-		species: number;
-		/** Custom team members (0 - 4) */
-		members: BerryBurstTeamMember[];
 	};
 
 	/** Mew config overwrite */
 	mew: MewParameter;
+
+	/** Latias/Latios twins are on the team */
+	latiTwins: boolean;
+}
+
+/**
+ * Berry burst team configuration.
+ */
+export interface BerryBurstTeam {
+	/**
+	 * Number of different Pokémon species of the same type on the team.
+	 *
+	 * - Used only when the main skill is "Energy for Everyone S (Lunar Blessing)".
+	 * - Ignored if `auto` is set to true.
+	 */
+	species: number;
+	/** Custom team members (0 - 4) */
+	members: BerryBurstTeamMember[];
 }
 
 /** Custom team member to calculate berry burst */
@@ -467,11 +479,16 @@ class PokemonStrength {
 		// calc berry
 		const berryCountWithBonus = this.iv.berryCount + bonus.berry;
 		const berryRawStrength = rp.berryStrength;
-		const berryStrength = Math.ceil(
-			berryRawStrength * (1 + param.fieldBonus / 100),
+		const berryStrength = getBerryStrength(
+			this.iv.pokemon.type,
+			this.iv.level,
+			param.fieldBonus,
 		);
-		const berryStrengthWithBonus = Math.ceil(
-			berryStrength * this.berryStrengthBonus,
+		const berryStrengthWithBonus = getBerryStrength(
+			this.iv.pokemon.type,
+			this.iv.level,
+			param.fieldBonus,
+			this.berryStrengthBonus,
 		);
 		const berryTotalStrength =
 			berryStrengthWithBonus *
@@ -664,7 +681,10 @@ class PokemonStrength {
 					skillValuePerTrigger2: 0,
 				};
 			case "Energizing Cheer S (Heal Pulse)": {
-				const helpCount = getSkillSubValue(mainSkill, skillLevel);
+				const bonus = skillLevel <= 2 ? 1 : skillLevel <= 5 ? 2 : 3;
+				const helpCount =
+					getSkillSubValue(mainSkill, skillLevel) +
+					(param.latiTwins ? bonus : 0);
 				const skillValuePerTrigger2 = helpCount;
 				const skillValue2 = helpCount * skillCount;
 				const skillStrength2 = skillValue2 * strengthPerHelp * 2;
@@ -691,6 +711,7 @@ class PokemonStrength {
 			case "Energy for Everyone S (Lunar Blessing)": {
 				const ret = calculateBerryBurstStrength(
 					this.iv,
+					getBerryBurstTeam(this.iv, param),
 					param,
 					bonus.berryBurst,
 					skillLevel,
@@ -754,6 +775,7 @@ class PokemonStrength {
 			case "Berry Burst (Disguise)": {
 				const ret = calculateBerryBurstStrength(
 					this.iv,
+					getBerryBurstTeam(this.iv, param),
 					param,
 					bonus.berryBurst,
 					skillLevel,
@@ -773,9 +795,11 @@ class PokemonStrength {
 					skillValuePerTrigger2: 0,
 				};
 			}
-			case "Berry Burst": {
+			case "Berry Burst":
+			case "Berry Burst (Draco Meteor)": {
 				const ret = calculateBerryBurstStrength(
 					this.iv,
+					getBerryBurstTeam(this.iv, param),
 					param,
 					bonus.berryBurst,
 					skillLevel,
@@ -992,7 +1016,7 @@ class PokemonStrength {
 			isExpertMode && param.favoriteType.includes(this.iv.pokemon.type);
 		const expertSkillLevel =
 			isExpertMode && isMainBerry ? expertMainSkillLevelBonus : 0;
-		const expertIngredientAdditionalEffect =
+		const expertIngredientAdditionalEffect: 0 | 0.5 =
 			isExpertMode &&
 			isFavoriteBerry &&
 			this.param.expertEffect === "ing" &&
@@ -1000,9 +1024,11 @@ class PokemonStrength {
 				this.iv.pokemon.specialty === "All")
 				? expertFavoriteIngredientAdditionalBonus
 				: 0;
-		const expertIngredient =
+		const expertIngredient: 0 | 1 | 1.5 =
 			isExpertMode && isFavoriteBerry && this.param.expertEffect === "ing"
-				? expertFavoriteIngredientBonus + expertIngredientAdditionalEffect
+				? ((expertFavoriteIngredientBonus + expertIngredientAdditionalEffect) as
+						| 1
+						| 1.5)
 				: 0;
 		const expertSkillTrigger =
 			isExpertMode && isFavoriteBerry && this.param.expertEffect === "skill"
@@ -1029,7 +1055,8 @@ class PokemonStrength {
 						? "ex"
 						: "event",
 			berry: targetEventBonus.berry,
-			ingredient: Math.max(expertIngredient, eventIngredient) as 0 | 1,
+			ingredient:
+				expertIngredient > eventIngredient ? expertIngredient : eventIngredient,
 			carryLimitAdd: targetEventBonus.carryLimitAdd,
 			carryLimitMul: targetEventBonus.carryLimitMul,
 			ingredientReason: expertIngredient > eventIngredient ? "ex" : "event",
@@ -1049,16 +1076,7 @@ class PokemonStrength {
 	 * Gets the multiplier for berry strength.
 	 */
 	get berryStrengthBonus(): number {
-		const isExpertMode = isExpertField(this.param.fieldIndex);
-		if (
-			isExpertMode &&
-			this.param.expertEffect === "berry" &&
-			this.param.favoriteType.includes(this.iv.pokemon.type)
-		) {
-			return expertFavoriteBerryBonus;
-		}
-
-		return this.isFavoriteBerry ? 2 : 1;
+		return calcBerryStrengthBonus(this.iv.pokemon.type, this.param);
 	}
 
 	/**
@@ -1076,6 +1094,32 @@ class PokemonStrength {
 		const { types } = getCurrentFavoriteBerries(this.param);
 		return types.includes(this.iv.pokemon.type);
 	}
+}
+
+/**
+ * Calculates the berry strength bonus multiplier for a given Pokémon type.
+ */
+export function calcBerryStrengthBonus(
+	type: PokemonType,
+	param: StrengthParameter,
+): number {
+	const isExpertMode = isExpertField(param.fieldIndex);
+	if (
+		isExpertMode &&
+		param.expertEffect === "berry" &&
+		param.favoriteType.includes(type)
+	) {
+		return expertFavoriteBerryBonus;
+	}
+
+	if (param.fieldIndex === noFavoriteFieldIndex) {
+		return 1;
+	}
+	if (param.fieldIndex === allFavoriteFieldIndex) {
+		return 2;
+	}
+	const { types } = getCurrentFavoriteBerries(param);
+	return types.includes(type) ? 2 : 1;
 }
 
 /**
@@ -1242,6 +1286,7 @@ export function createStrengthParameter(
 			skill3: 3.2,
 			success: 30,
 		},
+		latiTwins: false,
 	};
 	return { ...defaultParameters, ...param };
 }
@@ -1255,10 +1300,13 @@ export function createStrengthParameter(
 export function getBerryBurstTeam(
 	iv: PokemonIv,
 	param: StrengthParameter,
-): BerryBurstTeamMember[] {
+): BerryBurstTeam {
 	// Return custom team if auto is disabled
 	if (!param.berryBurstTeam.auto) {
-		return param.berryBurstTeam.members;
+		return {
+			species: param.berryBurstTeam.species,
+			members: param.berryBurstTeam.members,
+		};
 	}
 
 	// Auto-generate team based on current Pokémon and preferences
@@ -1280,7 +1328,7 @@ export function getBerryBurstTeam(
 		) ?? "psychic";
 
 	// Return the generated team
-	return [
+	const members: BerryBurstTeamMember[] = [
 		// Member 1: Same type as the current Pokémon
 		{ type: iv.pokemon.type, level },
 
@@ -1299,12 +1347,15 @@ export function getBerryBurstTeam(
 		// Member 4: Healer type
 		{ type: healerType, level },
 	];
+	const species = members.filter((x) => x.type === iv.pokemon.type).length;
+	return { species, members };
 }
 
 /**
  * Calculates the total Berry Burst strength for a Pokémon and its team.
  *
  * @param iv The Pokémon's IV and level information.
+ * @param team The team member information.
  * @param param Additional parameters including team composition and config flags.
  * @param bonus Berry burst effect bonus.
  * @param skillLevel The skill level to use, overriding the default if necessary.
@@ -1319,6 +1370,7 @@ export function getBerryBurstTeam(
  */
 export function calculateBerryBurstStrength(
 	iv: PokemonIv,
+	team: BerryBurstTeam,
 	param: StrengthParameter,
 	bonus: number,
 	skillLevel?: number,
@@ -1332,7 +1384,6 @@ export function calculateBerryBurstStrength(
 
 	// Get berry count
 	// Bonus is ceiled.
-	const team = getBerryBurstTeam(iv, param);
 	let myBerryCount: number, othersBerryCount: number;
 	switch (skill) {
 		case "Berry Burst":
@@ -1343,14 +1394,19 @@ export function calculateBerryBurstStrength(
 			);
 			break;
 		case "Energy for Everyone S (Lunar Blessing)": {
-			const cnt = getLunarBlessingBerryCount(
-				_skillLevel,
-				param.berryBurstTeam.auto
-					? team.filter((x) => x.type === iv.pokemon.type).length
-					: param.berryBurstTeam.species,
-			);
+			const cnt = getLunarBlessingBerryCount(_skillLevel, team.species);
 			// NOTE: berry burst bonus is not applied to Lunar Blessing
 			// in buncha berries week part 1, but it was applied in part 2
+			myBerryCount = Math.ceil(bonus * cnt.myBerryCount);
+			othersBerryCount = Math.ceil(bonus * cnt.othersBerryCount);
+			break;
+		}
+		case "Berry Burst (Draco Meteor)": {
+			const cnt = getDracoMeteorBerryCount(
+				_skillLevel,
+				team.species,
+				param.latiTwins,
+			);
 			myBerryCount = Math.ceil(bonus * cnt.myBerryCount);
 			othersBerryCount = Math.ceil(bonus * cnt.othersBerryCount);
 			break;
@@ -1362,32 +1418,28 @@ export function calculateBerryBurstStrength(
 	// Get the Berry Burst team members (types and levels)
 	const levels: number[] = [
 		iv.level,
-		team[0].level,
-		team[1].level,
-		team[2].level,
-		team[3].level,
+		team.members[0].level,
+		team.members[1].level,
+		team.members[2].level,
+		team.members[3].level,
 	];
 	const types: PokemonType[] = [
 		iv.pokemon.type,
-		team[0].type,
-		team[1].type,
-		team[2].type,
-		team[3].type,
+		team.members[0].type,
+		team.members[1].type,
+		team.members[2].type,
+		team.members[3].type,
 	];
 	const ret = {
 		total: 0,
 		members: [] as { total: number; perBerry: number; count: number }[],
 	};
 	for (let i = 0; i < 5; i++) {
-		const ivMember = new PokemonIv({
-			pokemonName:
-				pokemons.find((x) => x.type === types[i])?.name ?? "Bulbasaur",
-			level: levels[i],
-		});
-		const berryRawStrength = new PokemonRp(ivMember).berryStrength;
-		const perBerry = Math.ceil(
-			Math.ceil(berryRawStrength * (1 + param.fieldBonus / 100)) *
-				new PokemonStrength(ivMember, param).berryStrengthBonus,
+		const perBerry = getBerryStrength(
+			types[i],
+			levels[i],
+			param.fieldBonus,
+			calcBerryStrengthBonus(types[i], param),
 		);
 		const count = i === 0 ? myBerryCount : othersBerryCount;
 		const total = perBerry * count;
@@ -1642,6 +1694,9 @@ export function loadStrengthParameter(): StrengthParameter {
 		if (typeof json.berryBurstTeam.auto === "boolean") {
 			ret.berryBurstTeam.auto = json.berryBurstTeam.auto;
 		}
+		if (typeof json.berryBurstTeam.species === "number") {
+			ret.berryBurstTeam.species = json.berryBurstTeam.species;
+		}
 		if (Array.isArray(json.berryBurstTeam.members)) {
 			for (let i = 0; i < 4; i++) {
 				if (typeof json.berryBurstTeam.members[i] !== "object") {
@@ -1710,6 +1765,10 @@ export function loadStrengthParameter(): StrengthParameter {
 		) {
 			ret.mew.success = json.mew.success;
 		}
+	}
+
+	if (typeof json.latiTwins === "boolean") {
+		ret.latiTwins = json.latiTwins;
 	}
 
 	return ret;

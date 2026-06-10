@@ -199,7 +199,7 @@ const TrialResultSelector = React.memo(
 			}
 
 			const binCount = resolveHistogramBinCount(results.length);
-			const bins = new Array<number>(binCount).fill(0);
+			const bins = Array.from({ length: binCount }, () => 0);
 			const epValues = results.map((result) => result.grandTotalEP);
 
 			const minEp = Math.min(...epValues);

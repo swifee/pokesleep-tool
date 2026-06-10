@@ -22,6 +22,11 @@ We're happy to help guide you!
 - Use `feature/*` only when parallel or isolated work is needed.
 - Merge via Pull Request.
 
+## Before sending Pull Request
+
+- Run `npm run lint:fix`
+- Run `npm run test`
+
 ## Questions?
 
 If you have any questions or are unsure about something,  

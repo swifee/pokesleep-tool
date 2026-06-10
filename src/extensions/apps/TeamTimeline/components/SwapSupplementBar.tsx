@@ -154,7 +154,11 @@ const SwapSupplementBar = React.memo(
 														justifyContent: "center",
 													}}
 												>
-													<PokemonIcon idForm={entry.pokemonIdForm} size={20} />
+													<PokemonIcon
+														idForm={entry.pokemonIdForm}
+														shiny={entry.pokemonShiny}
+														size={20}
+													/>
 												</Box>
 												<Typography
 													data-testid="swap-supplement-hours"

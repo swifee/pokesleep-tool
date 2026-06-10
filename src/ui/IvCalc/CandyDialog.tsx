@@ -348,7 +348,11 @@ const LevelForm = React.memo(
 		return (
 			<>
 				<StyledIcon>
-					<PokemonIcon idForm={levelInfo.iv.idForm} size={80} />
+					<PokemonIcon
+						idForm={levelInfo.iv.idForm}
+						shiny={levelInfo.iv.shiny}
+						size={80}
+					/>
 				</StyledIcon>
 				<StyledLevel>
 					<div className="level">
@@ -915,7 +919,7 @@ const DetailCandyForm = React.memo(
 							</SelectEx>
 						</section>
 						<section>
-							<span>
+							<span className="lbl">
 								<SelectEx
 									onChange={onBoostPolicyChange}
 									value={config.boostPolicy}

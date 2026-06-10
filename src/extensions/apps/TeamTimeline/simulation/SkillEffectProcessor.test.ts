@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import pokemons, { type PokemonType } from "../../../../data/pokemons";
 import {
+	getDracoMeteorBerryCount,
 	getLunarBlessingBerryCount,
 	getSkillRandomRange,
 	getSkillSubValue,
@@ -88,6 +89,10 @@ function createNuzzlePokemon(skillLevel: number): PokemonBoxItem {
 	return createPokemonBySkill("Energizing Cheer S (Nuzzle)", skillLevel);
 }
 
+function createHealPulsePokemon(skillLevel: number): PokemonBoxItem {
+	return createPokemonBySkill("Energizing Cheer S (Heal Pulse)", skillLevel);
+}
+
 function createEnergyForEveryonePokemon(skillLevel: number): PokemonBoxItem {
 	return createPokemonBySkill("Energy for Everyone S", skillLevel);
 }
@@ -132,6 +137,10 @@ function createBerryBurstPokemon(skillLevel: number): PokemonBoxItem {
 
 function createBerryBurstDisguisePokemon(skillLevel: number): PokemonBoxItem {
 	return createPokemonBySkill("Berry Burst (Disguise)", skillLevel);
+}
+
+function createDracoMeteorPokemon(skillLevel: number): PokemonBoxItem {
+	return createPokemonBySkill("Berry Burst (Draco Meteor)", skillLevel);
 }
 
 function createDreamShardMagnetPokemon(skillLevel: number): PokemonBoxItem {
@@ -461,6 +470,12 @@ describe("SkillEffectProcessor", () => {
 		expect(classifySkill("Energizing Cheer S (Nuzzle)")).toBe("targetEnergy");
 	});
 
+	it("Energizing Cheer S (Heal Pulse)をtargetEnergyカテゴリに分類する", () => {
+		expect(classifySkill("Energizing Cheer S (Heal Pulse)")).toBe(
+			"targetEnergy",
+		);
+	});
+
 	it("Energy for Everyone SをteamEnergyカテゴリに分類する", () => {
 		expect(classifySkill("Energy for Everyone S")).toBe("teamEnergy");
 	});
@@ -515,6 +530,10 @@ describe("SkillEffectProcessor", () => {
 
 	it("Berry Burst (Disguise)をdirectEPカテゴリに分類する", () => {
 		expect(classifySkill("Berry Burst (Disguise)")).toBe("directEP");
+	});
+
+	it("Berry Burst (Draco Meteor)をdirectEPカテゴリに分類する", () => {
+		expect(classifySkill("Berry Burst (Draco Meteor)")).toBe("directEP");
 	});
 
 	it("MetronomeをproxySkillカテゴリに分類する", () => {
@@ -1147,6 +1166,39 @@ describe("SkillEffectProcessor", () => {
 		expect(result.berryBurstDisguiseLockedAfter).toBe(true);
 	});
 
+	it("Berry Burst (Draco Meteor): ドラゴン種族数とラティアス補正でEPを計算する", () => {
+		const caster = createDracoMeteorPokemon(4);
+		const latias = createHealPulsePokemon(4);
+		const teamMembers = [caster, latias];
+		const triggerCount = 2;
+		const { myBerryCount, othersBerryCount } = getDracoMeteorBerryCount(
+			caster.iv.skillLevel,
+			2,
+			true,
+		);
+		const expectedPerTrigger = teamMembers.reduce((sum, member) => {
+			const berryCount =
+				member.id === caster.id ? myBerryCount : othersBerryCount;
+			return (
+				sum +
+				calculateBerryStrength(member.iv.pokemon.type, member.iv.level) *
+					berryCount
+			);
+		}, 0);
+
+		const result = processSkillTriggers(
+			caster,
+			triggerCount,
+			50,
+			new SeededRandom(45458),
+			[latias],
+			0,
+			teamMembers,
+		);
+
+		expect(result.directEP).toBe(expectedPerTrigger * triggerCount);
+	});
+
 	it("Ingredient Magnet S 1回発動で合計個数がスキル値と一致する", () => {
 		const pokemon = createIngredientMagnetPokemon(4);
 		const random = new SeededRandom(12345);
@@ -1628,6 +1680,69 @@ describe("SkillEffectProcessor", () => {
 		);
 
 		expect(result.nuzzleTriggeredSkillEvents.length).toBe(20);
+	});
+
+	it("Heal Pulse: 2体を回復し、対象ごとに追加おてつだいを適用する", () => {
+		const caster = createHealPulsePokemon(6);
+		const teammate1 = createPokemonByType("grass", 6);
+		const teammate2 = createPokemonByType("water", 6);
+		const teamMembers = [caster, teammate1, teammate2];
+
+		const result = processSkillTriggers(
+			caster,
+			1,
+			50,
+			new SeededRandom(77773),
+			[teammate1, teammate2],
+			0,
+			teamMembers,
+		);
+
+		expect(result.energizingCheerEvents).toHaveLength(2);
+		expect(
+			result.energizingCheerEvents.every(
+				(event) =>
+					event.source === "healPulse" &&
+					event.recovery ===
+						getSkillValue("Energizing Cheer S (Heal Pulse)", 6),
+			),
+		).toBe(true);
+		expect(result.supportHelpEvents).toHaveLength(2);
+		expect(
+			result.supportHelpEvents.every(
+				(event) =>
+					event.source === "healPulse" &&
+					event.helpCount ===
+						getSkillSubValue("Energizing Cheer S (Heal Pulse)", 6),
+			),
+		).toBe(true);
+		expect(result.supportSkillBerryEP).toBe(result.directEP);
+	});
+
+	it("Heal Pulse: ラティオスがいる場合は追加おてつだい回数を増やす", () => {
+		const caster = createHealPulsePokemon(6);
+		const latios = createDracoMeteorPokemon(6);
+		const teammate = createPokemonByType("water", 6);
+		const teamMembers = [caster, latios, teammate];
+
+		const result = processSkillTriggers(
+			caster,
+			1,
+			50,
+			new SeededRandom(77774),
+			[latios, teammate],
+			0,
+			teamMembers,
+		);
+
+		expect(result.supportHelpEvents).toHaveLength(2);
+		expect(
+			result.supportHelpEvents.every(
+				(event) =>
+					event.helpCount ===
+					getSkillSubValue("Energizing Cheer S (Heal Pulse)", 6) + 3,
+			),
+		).toBe(true);
 	});
 
 	it("Energy for Everyone S: 全員回復量がスキル値×発動回数と一致する", () => {

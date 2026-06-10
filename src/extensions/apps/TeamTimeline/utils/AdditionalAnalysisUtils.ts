@@ -25,6 +25,7 @@ const SELF_ENERGY_SKILLS = new Set<string>([
 const TEAM_ENERGY_SKILLS = new Set<string>([
 	"Energizing Cheer S",
 	"Energizing Cheer S (Nuzzle)",
+	"Energizing Cheer S (Heal Pulse)",
 	"Energy for Everyone S",
 	"Energy for Everyone S (Lunar Blessing)",
 	"Energy for Everyone S (Berry Juice)",

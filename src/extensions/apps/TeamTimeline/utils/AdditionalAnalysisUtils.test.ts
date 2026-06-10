@@ -143,6 +143,9 @@ describe("AdditionalAnalysisUtils", () => {
 		const minusMember = createPokemonBySkill("Cooking Power-Up S (Minus)");
 		const selfMember = createPokemonBySkill("Charge Energy S");
 		const teamMember = createPokemonBySkill("Energy for Everyone S");
+		const healPulseMember = createPokemonBySkill(
+			"Energizing Cheer S (Heal Pulse)",
+		);
 		const nightmareMember = createPokemonBySkill(
 			"Charge Strength M (Bad Dreams)",
 		);
@@ -162,6 +165,7 @@ describe("AdditionalAnalysisUtils", () => {
 			createPokemonBySkill("Ingredient Magnet S (Plus)"),
 			selfMember,
 			teamMember,
+			healPulseMember,
 			nightmareMember,
 		]);
 
@@ -171,6 +175,7 @@ describe("AdditionalAnalysisUtils", () => {
 		expect(byId.get(minusMember.id)?.category).toBe("team");
 		expect(byId.get(selfMember.id)?.category).toBe("self");
 		expect(byId.get(teamMember.id)?.category).toBe("team");
+		expect(byId.get(healPulseMember.id)?.category).toBe("team");
 		expect(byId.get(nightmareMember.id)?.category).toBe("nightmare");
 	});
 

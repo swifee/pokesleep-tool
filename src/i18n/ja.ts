@@ -13,6 +13,7 @@ export default {
 		...common,
 		...ResearchCalc,
 		...IvCalc,
+		...IvCalcNews,
 		TeamTimeline: legacy.translation.TeamTimeline,
 		IvCalc: {
 			...IvCalc.IvCalc,

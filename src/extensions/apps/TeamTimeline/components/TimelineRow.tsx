@@ -243,17 +243,16 @@ const TimelineRow = React.memo(
 					const noCollectEnabled = !hasSwap && hasNoCollectSetting;
 					const resultPokemon = result ? box.getById(result.pokemonId) : null;
 					const latestPriorSwap = getLatestPriorSwap(index);
-					const priorSwapPokemonIdForm =
-						latestPriorSwap === undefined
-							? undefined
-							: latestPriorSwap.newPokemonId === SWAP_NONE_POKEMON_ID
-								? undefined
-								: box.getById(latestPriorSwap.newPokemonId)?.iv.idForm;
-					const pokemonIdForm =
-						resultPokemon?.iv.idForm ??
-						(latestPriorSwap !== undefined
-							? priorSwapPokemonIdForm
-							: item?.iv.idForm);
+					const priorSwapPokemon =
+						latestPriorSwap === undefined ||
+						latestPriorSwap.newPokemonId === SWAP_NONE_POKEMON_ID
+							? null
+							: box.getById(latestPriorSwap.newPokemonId);
+					const displayPokemon =
+						resultPokemon ??
+						(latestPriorSwap !== undefined ? priorSwapPokemon : item);
+					const pokemonIdForm = displayPokemon?.iv.idForm;
+					const pokemonShiny = displayPokemon?.iv.shiny ?? false;
 					const isDragSource =
 						swapDragSource !== null &&
 						swapDragSource.slotId === originalSlotId &&
@@ -303,6 +302,7 @@ const TimelineRow = React.memo(
 							compactFirstSlot={isFirstTimelineSlot}
 							disableSwapUi={isFirstTimelineSlot}
 							pokemonIdForm={pokemonIdForm}
+							pokemonShiny={pokemonShiny}
 							fitToViewport={fitToViewport}
 							swapSlotId={originalSlotId}
 							dayIndex={dayIndex}

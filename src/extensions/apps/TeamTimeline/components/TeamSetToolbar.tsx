@@ -220,6 +220,7 @@ const TeamSetToolbar = React.memo(
 														>
 															<PokemonIcon
 																idForm={member.iv.idForm}
+																shiny={member.iv.shiny}
 																size={18}
 															/>
 														</Box>

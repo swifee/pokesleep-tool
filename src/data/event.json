@@ -1,28 +1,58 @@
 {
 	"drowsy": [
 		{
-			"name": "LatiasResearch",
-			"day": "2026-04-19",
+			"name": "Latios",
+			"day": "2026-06-22",
 			"bonus": 1.5
 		},
 		{
 			"name": "GSD",
-			"day": "2026-05-01",
+			"day": "2026-05-30",
 			"bonus": 1.5
 		},
 		{
 			"name": "GSD",
-			"day": "2026-05-02",
+			"day": "2026-05-31",
 			"memo": "Mon: 4, Tue: 3, Wed: 2.5, Others: 2",
 			"bonus": 2
 		},
 		{
 			"name": "GSD",
-			"day": "2026-05-03",
+			"day": "2026-06-01",
 			"bonus": 1.5
 		}
 	],
 	"bonus": [
+		{
+			"name": "latios and the soul dew 2nd week",
+			"start": "2026-06-15T04:00:00",
+			"end": "2026-06-22T04:00:00",
+			"target": {
+				"type": ["dragon"]
+			},
+			"effects": {
+				"ingredient": 1,
+				"skillTrigger": 1.5,
+				"skillLevel": 5,
+				"fixedBerries": ["dragon", null, null],
+				"fixedAreas": [0, 4, 6, 7]
+			}
+		},
+		{
+			"name": "latios and the soul dew 1st week",
+			"start": "2026-06-08T04:00:00",
+			"end": "2026-06-15T04:00:00",
+			"target": {
+				"type": ["dragon"]
+			},
+			"effects": {
+				"ingredient": 1,
+				"skillTrigger": 1.5,
+				"skillLevel": 2,
+				"fixedBerries": ["dragon", null, null],
+				"fixedAreas": [0, 4, 6, 7]
+			}
+		},
 		{
 			"name": "buncha berries week part 2",
 			"start": "2026-05-11T04:00:00",
