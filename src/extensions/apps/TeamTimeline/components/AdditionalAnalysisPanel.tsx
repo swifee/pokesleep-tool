@@ -410,7 +410,7 @@ const AdditionalAnalysisPanel = React.memo(
 				energySkillTargets.map((target) => {
 					const result = energySkillResults.get(target.pokemonId);
 					const skillLabel = formatEnergySkillDisplayName(
-						t(`skills.${target.skillName}`, target.skillName),
+						t(`skills.${target.skillName}.name`, target.skillName),
 					);
 					const showSelf = result ? result.category !== "nightmare" : true;
 					const showTeam = result ? result.category !== "self" : true;
