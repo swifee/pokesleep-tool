@@ -1,10 +1,10 @@
-import { TimeSlot } from '../types/TimeSlotTypes';
-import { sortTimeSlots } from './TimeSlotUtils';
+import type { TimeSlot } from "../types/TimeSlotTypes";
+import { sortTimeSlots } from "./TimeSlotUtils";
 
 export type TimeSlotValidationErrorType =
-    | 'consecutiveWake'
-    | 'wakeSleepCountMismatch'
-    | 'tooManyWakeSleepPairs';
+	| "consecutiveWake"
+	| "wakeSleepCountMismatch"
+	| "tooManyWakeSleepPairs";
 
 /**
  * 時間帯設定における起床/就寝の入力エラーを判定する。
@@ -15,41 +15,42 @@ export type TimeSlotValidationErrorType =
  * 3. 起床/就寝ペア数が 3 回以上
  */
 export function getTimeSlotValidationError(
-    timeSlots: readonly TimeSlot[]
+	timeSlots: readonly TimeSlot[],
 ): TimeSlotValidationErrorType | null {
-    const sortedSlots = sortTimeSlots([...timeSlots]);
-    let previousSleepState: 'sleep' | 'wake' | null = null;
-    let explicitWakeCount = 0;
-    let sleepCount = 0;
-    let impliedWakeCountFromConsecutiveSleep = 0;
+	const sortedSlots = sortTimeSlots([...timeSlots]);
+	let previousSleepState: "sleep" | "wake" | null = null;
+	let explicitWakeCount = 0;
+	let sleepCount = 0;
+	let impliedWakeCountFromConsecutiveSleep = 0;
 
-    for (const slot of sortedSlots) {
-        if (slot.sleepState === 'wake') {
-            if (previousSleepState === 'wake') {
-                return 'consecutiveWake';
-            }
-            explicitWakeCount += 1;
-            previousSleepState = 'wake';
-            continue;
-        }
+	for (const slot of sortedSlots) {
+		if (slot.sleepState === "wake") {
+			if (previousSleepState === "wake") {
+				return "consecutiveWake";
+			}
+			explicitWakeCount += 1;
+			previousSleepState = "wake";
+			continue;
+		}
 
-        if (slot.sleepState === 'sleep') {
-            if (previousSleepState === 'sleep') {
-                impliedWakeCountFromConsecutiveSleep += 1;
-            }
-            sleepCount += 1;
-            previousSleepState = 'sleep';
-        }
-    }
+		if (slot.sleepState === "sleep") {
+			if (previousSleepState === "sleep") {
+				impliedWakeCountFromConsecutiveSleep += 1;
+			}
+			sleepCount += 1;
+			previousSleepState = "sleep";
+		}
+	}
 
-    const effectiveWakeCount = explicitWakeCount + impliedWakeCountFromConsecutiveSleep;
-    if (effectiveWakeCount !== sleepCount) {
-        return 'wakeSleepCountMismatch';
-    }
+	const effectiveWakeCount =
+		explicitWakeCount + impliedWakeCountFromConsecutiveSleep;
+	if (effectiveWakeCount !== sleepCount) {
+		return "wakeSleepCountMismatch";
+	}
 
-    if (sleepCount >= 3) {
-        return 'tooManyWakeSleepPairs';
-    }
+	if (sleepCount >= 3) {
+		return "tooManyWakeSleepPairs";
+	}
 
-    return null;
+	return null;
 }
