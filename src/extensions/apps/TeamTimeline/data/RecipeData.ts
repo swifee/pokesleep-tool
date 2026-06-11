@@ -471,6 +471,17 @@ export const RECIPES: readonly RecipeDefinition[] = [
 		],
 		recipeBonus: 0.78,
 	},
+	{
+		name: "rollingScaldSalad",
+		category: "salad",
+		ingredients: [
+			{ name: "potato", count: 30 },
+			{ name: "mushroom", count: 27 },
+			{ name: "corn", count: 18 },
+			{ name: "pumpkin", count: 20 },
+		],
+		recipeBonus: 0.61,
+	},
 
 	// ========================================================================
 	// デザート・ドリンク (dessert) - 23 recipes
