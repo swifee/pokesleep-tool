@@ -48,6 +48,7 @@ interface TimelineCellProps {
 	alwaysShowSwapButton?: boolean; // Show swap button without hover
 	disableSwapUi?: boolean; // Hide swap UI entirely for this cell
 	pokemonIdForm?: number;
+	pokemonShiny?: boolean;
 	fitToViewport?: boolean;
 	swapSlotId?: string; // Original (non-day-suffixed) slot ID used for swap operations
 	dayIndex?: number; // Current day index in expanded timeline
@@ -136,6 +137,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 		alwaysShowSwapButton = false,
 		disableSwapUi = false,
 		pokemonIdForm,
+		pokemonShiny = false,
 		fitToViewport = false,
 		swapSlotId,
 		dayIndex,
@@ -555,7 +557,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 					data-testid={testId}
 					data-target-pokemon-icon="true"
 				>
-					<PokemonIcon idForm={targetPokemonIdForm} size={14} />
+					<PokemonIcon idForm={targetPokemonIdForm} shiny={false} size={14} />
 				</PokemonIconFrame>
 			);
 		},
@@ -633,7 +635,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 		}
 		return (
 			<PokemonIconFrame data-testid="timeline-cell-pokemon-icon">
-				<PokemonIcon idForm={pokemonIdForm} size={14} />
+				<PokemonIcon idForm={pokemonIdForm} shiny={pokemonShiny} size={14} />
 			</PokemonIconFrame>
 		);
 	};

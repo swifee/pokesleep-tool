@@ -153,7 +153,7 @@ export interface EnergizingCheerEvent {
 	targetPokemonName: string;
 	targetPokemonIdForm?: number;
 	recovery: number;
-	source: "cheer" | "nuzzle";
+	source: "cheer" | "nuzzle" | "healPulse";
 }
 
 export interface NuzzleTriggeredSkillEvent {
@@ -170,7 +170,7 @@ export interface MoonlightEvent {
 }
 
 export interface SupportHelpEvent {
-	source: "extraHelpful" | "helperBoost";
+	source: "extraHelpful" | "helperBoost" | "healPulse";
 	targetPokemonId: number;
 	targetPokemonName: string;
 	targetPokemonIdForm?: number;

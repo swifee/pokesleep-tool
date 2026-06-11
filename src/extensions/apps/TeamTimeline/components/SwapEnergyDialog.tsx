@@ -20,6 +20,7 @@ interface SwapEnergyDialogProps {
 	open: boolean;
 	pokemonName: string;
 	pokemonIdForm?: number;
+	pokemonShiny?: boolean;
 	defaultEnergy?: number;
 	disableEnergySetting?: boolean;
 	onConfirm: (energy: number, repeat?: boolean) => void;
@@ -30,6 +31,7 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
 	open,
 	pokemonName,
 	pokemonIdForm,
+	pokemonShiny = false,
 	defaultEnergy = 100,
 	disableEnergySetting = false,
 	onConfirm,
@@ -77,7 +79,11 @@ export const SwapEnergyDialog: React.FC<SwapEnergyDialogProps> = ({
 					}}
 				>
 					{pokemonIdForm !== undefined && (
-						<PokemonIcon idForm={pokemonIdForm} size={64} />
+						<PokemonIcon
+							idForm={pokemonIdForm}
+							shiny={pokemonShiny}
+							size={64}
+						/>
 					)}
 					<Typography variant="subtitle1">{pokemonName}</Typography>
 

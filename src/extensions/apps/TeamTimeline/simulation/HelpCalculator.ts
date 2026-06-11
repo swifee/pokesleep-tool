@@ -270,7 +270,6 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 	let inventory = currentInventory;
 	let skillTriggerCount = 0;
 	let skillOverflowCount = 0;
-	let berryHelpCount = 0;
 	let totalBerryCount = 0;
 
 	const ingredientMap = new Map<IngredientName, number>();
@@ -303,11 +302,9 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 				const ingredientCount = ing.count + extraCount;
 				const current = overflowIngredientMap.get(ing.name) || 0;
 				overflowIngredientMap.set(ing.name, current + ingredientCount);
-				berryHelpCount++;
 				totalBerryCount += berryCountForHelp;
 			} else {
 				// きのみ判定 → 通常通り取得
-				berryHelpCount++;
 				totalBerryCount += berryCountForHelp;
 			}
 			// inventoryは増えない（溢れるため）
@@ -336,7 +333,6 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 					inventory + baseBerryCount + berryBonus >= effectiveMaxInventory
 						? baseBerryCount
 						: baseBerryCount + berryBonus;
-				berryHelpCount++;
 				totalBerryCount += berryCountForHelp;
 				inventory += berryCountForHelp;
 			}

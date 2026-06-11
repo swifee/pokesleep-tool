@@ -21,8 +21,8 @@
 		"build": "vite build",
 		"typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.script.json",
 		"fmt": "biome format --write",
-		"lint": "oxlint && biome check",
-		"lint:fix": "oxlint --fix && biome check --write",
+		"lint": "oxlint && biome check --error-on-warnings",
+		"lint:fix": "oxlint --fix && biome check --write --error-on-warnings",
 		"verify": "npm run typecheck && npm run lint && npm run test -- run && npm run build",
 		"preview": "vite preview",
 		"rpfit": "npx ts-node --project tsconfig.script.json scripts/rpfit.ts",
@@ -43,6 +43,7 @@
 		"jsdom": "^27.0.0",
 		"lefthook": "^2.1.6",
 		"oxlint": "^1.62.0",
+		"typescript": "^5",
 		"vite": ">=7.1.11",
 		"vitest": "^3.2.4"
 	},

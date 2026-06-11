@@ -1679,6 +1679,14 @@ export default function TeamTimelineApp() {
 		return pokemon.iv.idForm;
 	}, [state.pendingSwapPokemonId]);
 
+	const getPendingPokemonShiny = useCallback((): boolean => {
+		if (!state.pendingSwapPokemonId) return false;
+		const pokemon = userBoxRef.current?.items.find(
+			(item: PokemonBoxItem) => item.id === state.pendingSwapPokemonId,
+		);
+		return pokemon?.iv.shiny ?? false;
+	}, [state.pendingSwapPokemonId]);
+
 	const disableSwapEnergySetting = useMemo(
 		() =>
 			isSwapReassignment({
@@ -3515,6 +3523,7 @@ export default function TeamTimelineApp() {
 				open={state.energyDialogOpen}
 				pokemonName={getPendingPokemonName()}
 				pokemonIdForm={getPendingPokemonIdForm()}
+				pokemonShiny={getPendingPokemonShiny()}
 				defaultEnergy={100}
 				disableEnergySetting={disableSwapEnergySetting}
 				onConfirm={handleEnergyConfirm}

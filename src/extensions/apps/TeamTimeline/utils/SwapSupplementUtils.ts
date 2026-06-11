@@ -11,6 +11,7 @@ import { buildExpandedTimeline } from "./TimelineDayExpansion";
 export interface SwapSupplementPokemonEntry {
 	pokemonId: number;
 	pokemonIdForm: number;
+	pokemonShiny: boolean;
 	activeMinutes: number;
 	activeRatioPercent: number;
 }
@@ -28,17 +29,19 @@ interface BuildSwapSupplementSequencesInput {
 	box?: PokemonBox;
 }
 
-function resolvePokemonIdForm(
+function resolvePokemonIconDetails(
 	pokemonId: number,
 	team: readonly (PokemonBoxItem | null)[],
 	box?: PokemonBox,
-): number | null {
+): { idForm: number; shiny: boolean } | null {
 	const fromBox = box?.getById(pokemonId);
 	if (fromBox) {
-		return fromBox.iv.idForm;
+		return { idForm: fromBox.iv.idForm, shiny: fromBox.iv.shiny };
 	}
 	const fromTeam = team.find((member) => member?.id === pokemonId) ?? null;
-	return fromTeam?.iv.idForm ?? null;
+	return fromTeam
+		? { idForm: fromTeam.iv.idForm, shiny: fromTeam.iv.shiny }
+		: null;
 }
 
 export function buildSwapSupplementSequences(
@@ -104,8 +107,8 @@ export function buildSwapSupplementSequences(
 
 			const entries = orderedPokemonIds
 				.map((pokemonId): SwapSupplementPokemonEntry | null => {
-					const pokemonIdForm = resolvePokemonIdForm(pokemonId, team, box);
-					if (pokemonIdForm === null) {
+					const iconDetails = resolvePokemonIconDetails(pokemonId, team, box);
+					if (iconDetails === null) {
 						return null;
 					}
 					const activeMinutes =
@@ -116,7 +119,8 @@ export function buildSwapSupplementSequences(
 							: 0;
 					return {
 						pokemonId,
-						pokemonIdForm,
+						pokemonIdForm: iconDetails.idForm,
+						pokemonShiny: iconDetails.shiny,
 						activeMinutes,
 						activeRatioPercent,
 					};

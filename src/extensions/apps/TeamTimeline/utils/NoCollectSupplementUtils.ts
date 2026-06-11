@@ -11,6 +11,7 @@ import { buildExpandedTimeline } from "./TimelineDayExpansion";
 export interface NoCollectSupplementEntry {
 	pokemonId: number;
 	pokemonIdForm: number;
+	pokemonShiny: boolean;
 	count: number;
 }
 
@@ -35,17 +36,19 @@ function toSlotKey(dayIndex: number, slotId: string): string {
 	return `${dayIndex}:${slotId}`;
 }
 
-function resolvePokemonIdForm(
+function resolvePokemonIconDetails(
 	pokemonId: number,
 	team: readonly (PokemonBoxItem | null)[],
 	box?: PokemonBox,
-): number | null {
+): { idForm: number; shiny: boolean } | null {
 	const fromBox = box?.getById(pokemonId);
 	if (fromBox) {
-		return fromBox.iv.idForm;
+		return { idForm: fromBox.iv.idForm, shiny: fromBox.iv.shiny };
 	}
 	const fromTeam = team.find((member) => member?.id === pokemonId) ?? null;
-	return fromTeam?.iv.idForm ?? null;
+	return fromTeam
+		? { idForm: fromTeam.iv.idForm, shiny: fromTeam.iv.shiny }
+		: null;
 }
 
 function buildSwapCellKeySet(swaps: readonly PokemonSwap[]): Set<string> {
@@ -168,13 +171,14 @@ export function buildNoCollectSupplementEntries(
 
 	return orderedPokemonIds
 		.map((pokemonId): NoCollectSupplementEntry | null => {
-			const pokemonIdForm = resolvePokemonIdForm(pokemonId, team, box);
-			if (pokemonIdForm === null) {
+			const iconDetails = resolvePokemonIconDetails(pokemonId, team, box);
+			if (iconDetails === null) {
 				return null;
 			}
 			return {
 				pokemonId,
-				pokemonIdForm,
+				pokemonIdForm: iconDetails.idForm,
+				pokemonShiny: iconDetails.shiny,
 				count: countByPokemonId.get(pokemonId) ?? 0,
 			};
 		})

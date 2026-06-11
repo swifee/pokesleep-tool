@@ -333,7 +333,7 @@ const BoxItem = React.memo(({ item, onClick }: BoxItemProps) => {
 					<span className="lv">Lv.</span>
 					{item.iv.level}
 				</header>
-				<PokemonIcon idForm={item.iv.idForm} size={32} />
+				<PokemonIcon idForm={item.iv.idForm} shiny={item.iv.shiny} size={32} />
 				<footer data-testid="team-timeline-box-item-name">
 					{item.filledNickname(t)}
 				</footer>

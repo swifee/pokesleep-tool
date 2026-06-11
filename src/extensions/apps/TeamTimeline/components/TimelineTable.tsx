@@ -589,7 +589,11 @@ const TimelineTable = React.memo(
 						<span>{pokemon.iv.level}</span>
 					</PokemonLevelLine>
 					<PokemonIconBox>
-						<PokemonIcon idForm={pokemon.iv.idForm} size={30} />
+						<PokemonIcon
+							idForm={pokemon.iv.idForm}
+							shiny={pokemon.iv.shiny}
+							size={30}
+						/>
 					</PokemonIconBox>
 					<PokemonNameLine>{pokemon.filledNickname(t)}</PokemonNameLine>
 				</>

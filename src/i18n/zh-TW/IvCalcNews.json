@@ -1,6 +1,22 @@
 {
 	"IvCalc": {
 		"news": {
+			"add latios": {
+				"headline": "新增了$t(pokemons.Latios)的資料。",
+				"detail": "$t(rp collection)"
+			},
+			"add drampa": {
+				"headline": "新增了$t(pokemons.Drampa)的資料。另外，現在可以將$t(shiny)寶可夢登錄到$t(box)了。",
+				"detail": "$t(own research note)"
+			},
+			"v3.5.0": {
+				"headline": "已因應 v3.5.0 的平衡性調整。",
+				"detail": "$t(own research note)"
+			},
+			"add tyrunt": {
+				"headline": "新增了$t(pokemons.Tyrunt)和$t(pokemons.Tyrantrum)的資料。",
+				"detail": "$t(rp collection)"
+			},
 			"add sandshrew": {
 				"headline": "新增了$t(pokemons.Sandshrew)和$t(pokemons.Sandslash)的資料，並更新了$t(pokemons.Togedemaru)的資料。支援了$t(pity proc)・$t(tap frequency)的模擬（<a href='https://youtu.be/kEX2myG-wS8'>講解影片</a>）。",
 				"detail": "$t(rp collection)$t(movie detail)"
@@ -254,5 +270,8 @@
 				"detail": "$t(IvCalc.description)"
 			}
 		}
-	}
+	},
+	"own research note": "食材機率、技能機率是通過獨自的調查計算的。",
+	"rp collection": "食材機率、技能機率參考了 RP Collection 的資料。",
+	"movie detail": "訂閱頻道・按讚・留言・Hype等都會給我帶來很大的鼓勵！"
 }

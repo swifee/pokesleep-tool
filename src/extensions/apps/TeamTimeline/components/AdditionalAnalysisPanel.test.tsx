@@ -186,7 +186,12 @@ vi.mock("@mui/material", async () => {
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, defaultValue?: string) => defaultValue ?? key,
+		t: (key: string, defaultValue?: string) => {
+			if (key.startsWith("skills.") && !key.endsWith(".name")) {
+				return { name: defaultValue ?? key };
+			}
+			return defaultValue ?? key;
+		},
 	}),
 }));
 
@@ -628,6 +633,28 @@ describe("AdditionalAnalysisPanel", () => {
 		expect(
 			screen.queryByText("Energy for Everyone S (Berry Juice)"),
 		).toBeNull();
+	});
+
+	it("renders object-backed skill translation names for energy skill rows", () => {
+		const member = createPokemonBySkill("Energizing Cheer S (Heal Pulse)");
+		const energyTargets: EnergySkillContributionTarget[] = [
+			{
+				pokemonId: member.id,
+				pokemonName: member.iv.pokemonName,
+				skillName: member.iv.pokemon.skill,
+				category: "team",
+			},
+		];
+
+		renderPanel({
+			contributionMembers: [member],
+			energySkillTargets: energyTargets,
+		});
+		fireEvent.click(screen.getByRole("button", { name: "追加分析" }));
+
+		const content = document.body.textContent ?? "";
+		expect(content).toContain("Energizing Cheer S");
+		expect(content).not.toContain("[object Object]");
 	});
 
 	it("shows empty target message and disables run-all button when no energy skill target exists", () => {

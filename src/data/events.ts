@@ -262,7 +262,7 @@ export interface BonusEffects {
 	/** Boosted main skill level */
 	skillLevel: 0 | 1 | 2 | 3 | 5;
 	/** Boosted ingredient count */
-	ingredient: 0 | 1;
+	ingredient: 0 | 1 | 1.5;
 	/** Dream Shard bonus obtained through main skills */
 	dreamShard: 1 | 1.5 | 2;
 	/** Ingredient Magnet S bonus */
@@ -481,6 +481,14 @@ export function loadHelpEventBonus(data: unknown): HelpEventBonus {
 		}
 	}
 	return ret;
+}
+
+export function isInLatiosEvent() {
+	const now = new Date();
+	return (
+		new Date("2026-06-08T04:00:00") <= now &&
+		now <= new Date("2026-06-22T04:00:00")
+	);
 }
 
 export default events;

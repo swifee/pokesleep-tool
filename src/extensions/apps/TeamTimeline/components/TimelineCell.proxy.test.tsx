@@ -14,7 +14,7 @@ vi.mock("react-i18next", () => ({
 	}),
 }));
 
-const METRONOME_POOL_LAST_INDEX = 22;
+const METRONOME_POOL_LAST_INDEX = 23;
 
 function createPokemonBySkill(
 	skillName: string,
@@ -199,6 +199,7 @@ describe("TimelineCell proxy display", () => {
 			expect(text.includes("(Super Luck)")).toBe(false);
 			expect(text.includes("(Hyper Cutter)")).toBe(false);
 			expect(text.includes("(Disguise)")).toBe(false);
+			expect(text.includes("(Draco Meteor)")).toBe(false);
 		}
 	});
 

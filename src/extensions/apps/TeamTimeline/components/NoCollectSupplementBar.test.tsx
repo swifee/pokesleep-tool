@@ -28,8 +28,8 @@ describe("NoCollectSupplementBar", () => {
 	it("renders no-collect summary and calls clear handler", () => {
 		const onClear = vi.fn();
 		const entries: NoCollectSupplementEntry[] = [
-			{ pokemonId: 10, pokemonIdForm: 10, count: 2 },
-			{ pokemonId: 25, pokemonIdForm: 25, count: 1 },
+			{ pokemonId: 10, pokemonIdForm: 10, pokemonShiny: false, count: 2 },
+			{ pokemonId: 25, pokemonIdForm: 25, pokemonShiny: true, count: 1 },
 		];
 
 		render(

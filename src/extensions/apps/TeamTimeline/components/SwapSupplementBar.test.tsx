@@ -30,12 +30,14 @@ describe("SwapSupplementBar", () => {
 					{
 						pokemonId: 10,
 						pokemonIdForm: 10,
+						pokemonShiny: false,
 						activeMinutes: 600,
 						activeRatioPercent: 41.7,
 					},
 					{
 						pokemonId: 25,
 						pokemonIdForm: 25,
+						pokemonShiny: true,
 						activeMinutes: 840,
 						activeRatioPercent: 58.3,
 					},

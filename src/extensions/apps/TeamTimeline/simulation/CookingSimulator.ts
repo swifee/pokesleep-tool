@@ -230,7 +230,12 @@ export function planExtraIngredientsByEvent(
 		return slackMap;
 	});
 
-	const minSuffixSlack: IngredientCountMap[] = new Array(events.length);
+	const minSuffixSlack: IngredientCountMap[] = Array.from(
+		{
+			length: events.length,
+		},
+		() => new Map<IngredientName, number>(),
+	);
 	for (let i = events.length - 1; i >= 0; i--) {
 		const current = slacks[i] ?? new Map();
 		if (i === events.length - 1) {
