@@ -490,13 +490,22 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 	const stripDerivedSuffix = (skillLabel: string): string =>
 		skillLabel.replace(/\s*\([^)]*\)\s*$/, "");
 	const SkillPrefixIcons = React.useCallback(
-		({ count = 1, testId }: { count?: number; testId?: string }) => {
+		({
+			count = 1,
+			testId,
+			hidden,
+		}: {
+			count?: number;
+			testId?: string;
+			hidden?: boolean;
+		}) => {
 			const normalizedCount = Math.max(1, Math.round(count));
 			return (
 				<span
 					className="skill-prefix-icons"
 					data-testid={testId}
 					data-skill-prefix-count={normalizedCount}
+					style={hidden ? { visibility: "hidden" } : undefined}
 				>
 					{Array.from(
 						{ length: normalizedCount },
@@ -849,12 +858,25 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 	const skillDetailLines: React.ReactNode[] = [];
 	if (hasEventStyleSkill) {
 		if (!hasProxyEventStyle) {
-			result.energizingCheerEvents.forEach((event, index) => {
+			const healPulseCheerEvents = result.energizingCheerEvents.filter(
+				(e) => e.source === "healPulse",
+			);
+			const nonHealPulseCheerEvents = result.energizingCheerEvents.filter(
+				(e) => e.source !== "healPulse",
+			);
+			const healPulseSupportEvents = result.supportHelpEvents.filter(
+				(e) => e.source === "healPulse",
+			);
+			const nonHealPulseSupportEvents = result.supportHelpEvents.filter(
+				(e) => e.source !== "healPulse",
+			);
+
+			nonHealPulseCheerEvents.forEach((event, index) => {
 				const eventKey = buildOccurrenceKey(
 					"cheer",
 					[event.targetPokemonId, event.recovery, event.source],
 					countPreviousMatchingItems(
-						result.energizingCheerEvents,
+						nonHealPulseCheerEvents,
 						index,
 						(candidate) =>
 							candidate.targetPokemonId === event.targetPokemonId &&
@@ -877,6 +899,73 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 					</SkillDetailLine>,
 				);
 			});
+
+			// healPulse: 回復効果とおてつだいサポートを1行にまとめ、！はスキル発動回数分のみ表示
+			const HEAL_PULSE_TARGETS_PER_ACTIVATION = 2;
+			healPulseCheerEvents.forEach((cheerEvent, pairIndex) => {
+				const supportEvent = healPulseSupportEvents[pairIndex];
+				const isFirstInActivation =
+					pairIndex % HEAL_PULSE_TARGETS_PER_ACTIVATION === 0;
+				const ingredients = supportEvent
+					? sortIngredientsByCountDesc(
+							supportEvent.ingredients.filter(
+								(ingredient) => ingredient.count > 0,
+							),
+						)
+					: [];
+				const eventKey = buildOccurrenceKey(
+					"heal-pulse",
+					[cheerEvent.targetPokemonId, cheerEvent.recovery],
+					countPreviousMatchingItems(
+						healPulseCheerEvents,
+						pairIndex,
+						(candidate) =>
+							candidate.targetPokemonId === cheerEvent.targetPokemonId &&
+							candidate.recovery === cheerEvent.recovery,
+					),
+				);
+				skillDetailLines.push(
+					<SkillDetailLine key={eventKey}>
+						<SkillPrefixIcons hidden={!isFirstInActivation} />
+						{renderTargetPokemonIndicator(
+							cheerEvent.targetPokemonName,
+							cheerEvent.targetPokemonIdForm,
+							`timeline-cell-target-heal-pulse-${pairIndex}`,
+						)}{" "}
+						{renderTextWithHealIcon(
+							`❇️+${Math.round(cheerEvent.recovery)}`,
+							`heal-pulse-cheer-${pairIndex}`,
+						)}
+						{supportEvent && (
+							<>
+								{" "}
+								<SupportBerryEPBadge>
+									<TeamTimelineIcon name="berry" />
+									<EpValue
+										value={Math.round(supportEvent.berryEP).toLocaleString()}
+									/>
+								</SupportBerryEPBadge>
+								{ingredients.map((ingredient, ingredientIndex) => (
+									<React.Fragment
+										key={buildIngredientKey(
+											`${eventKey}-ingredient`,
+											ingredients,
+											ingredientIndex,
+										)}
+									>
+										{" "}
+										<SupportIngredientBadge>
+											<IngredientIcon name={ingredient.name} />
+											{formatIngredientCount(ingredient.count)}
+										</SupportIngredientBadge>
+									</React.Fragment>
+								))}
+							</>
+						)}
+					</SkillDetailLine>,
+				);
+			});
+
 			moonlightEvents.forEach((event, index) => {
 				const eventKey = buildOccurrenceKey(
 					"moonlight",
@@ -904,7 +993,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 					</SkillDetailLine>,
 				);
 			});
-			result.supportHelpEvents.forEach((event, eventIndex) => {
+			nonHealPulseSupportEvents.forEach((event, eventIndex) => {
 				const ingredients = sortIngredientsByCountDesc(
 					event.ingredients.filter((ingredient) => ingredient.count > 0),
 				);
@@ -918,7 +1007,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 						event.berryEP,
 					],
 					countPreviousMatchingItems(
-						result.supportHelpEvents,
+						nonHealPulseSupportEvents,
 						eventIndex,
 						(candidate) =>
 							candidate.source === event.source &&
