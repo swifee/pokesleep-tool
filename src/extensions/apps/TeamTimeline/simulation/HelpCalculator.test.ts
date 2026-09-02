@@ -476,3 +476,120 @@ describe("HelpCalculator 未実装データの扱い", () => {
 		expect(result.newBankedTimeSeconds).toBe(12);
 	});
 });
+
+describe("HelpCalculator とてもおおきなマゴのみ", () => {
+	function createHelpInput(
+		pokemon: PokemonBoxItem,
+		overrides: {
+			hugeMagoBerryPickupRate?: number;
+			currentInventory?: number;
+			maxInventory?: number;
+		} = {},
+	) {
+		return {
+			pokemon,
+			durationMinutes: 600,
+			startEnergy: 100,
+			isSleeping: false,
+			random: new SeededRandom(777),
+			teamHelpingBonusCount: 0,
+			currentSkillStock: 0,
+			maxSkillStock: 1,
+			currentInventory: overrides.currentInventory ?? 0,
+			maxInventory: overrides.maxInventory ?? pokemon.iv.carryLimit,
+			bankedTimeSeconds: 0,
+			bonusContext: {
+				skillTriggerBonus: 1,
+				berryBonus: 0,
+				ingredientBonus: 0,
+				isGoodCampTicketSet: false,
+				isMainBerry: false,
+				isNonFavoriteBerry: false,
+				hugeMagoBerryPickupRate: overrides.hugeMagoBerryPickupRate ?? 0,
+			},
+		};
+	}
+
+	it("確率100%ならおてつだい1回につき1個拾う", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 1);
+
+		const output = calculateHelp(
+			createHelpInput(pokemon, {
+				hugeMagoBerryPickupRate: 1,
+				maxInventory: 1000,
+			}),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(0);
+		expect(output.hugeMagoBerryCount).toBe(output.helpCount);
+	});
+
+	it("きのみの数Sを持っていても1回1個のまま", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 3);
+
+		const output = calculateHelp(
+			createHelpInput(pokemon, {
+				hugeMagoBerryPickupRate: 1,
+				maxInventory: 1000,
+			}),
+		);
+
+		expect(output.berryCount).toBe(output.helpCount * 3);
+		expect(output.hugeMagoBerryCount).toBe(output.helpCount);
+	});
+
+	it("所持数が満タンなら拾わない（いつのまに育成では取得できない）", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 1);
+
+		const output = calculateHelp(
+			createHelpInput(pokemon, {
+				hugeMagoBerryPickupRate: 1,
+				currentInventory: 20,
+				maxInventory: 20,
+			}),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(0);
+		expect(output.hugeMagoBerryCount).toBe(0);
+	});
+
+	it("拾った分だけ所持数を消費する", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 1);
+
+		const without = calculateHelp(
+			createHelpInput(pokemon, { maxInventory: 1000 }),
+		);
+		const withPickup = calculateHelp(
+			createHelpInput(pokemon, {
+				hugeMagoBerryPickupRate: 1,
+				maxInventory: 1000,
+			}),
+		);
+
+		expect(withPickup.newInventory).toBe(
+			without.newInventory + withPickup.hugeMagoBerryCount,
+		);
+	});
+
+	it("確率0なら乱数を消費せず従来と同じ結果になる", () => {
+		const pokemon = createTestPokemon();
+		const withoutContext = calculateHelp({
+			...createHelpInput(pokemon),
+			bonusContext: undefined,
+		});
+		const withZeroRate = calculateHelp(
+			createHelpInput(pokemon, { hugeMagoBerryPickupRate: 0 }),
+		);
+
+		expect(withZeroRate.hugeMagoBerryCount).toBe(0);
+		expect(withZeroRate.berryCount).toBe(withoutContext.berryCount);
+		expect(withZeroRate.newInventory).toBe(withoutContext.newInventory);
+		expect(withZeroRate.skillTriggerCount).toBe(
+			withoutContext.skillTriggerCount,
+		);
+	});
+});

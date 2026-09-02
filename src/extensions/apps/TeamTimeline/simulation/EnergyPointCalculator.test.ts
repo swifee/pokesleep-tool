@@ -13,6 +13,7 @@ import {
 	calculateBerryEP,
 	calculateBerryStrength,
 	calculateDailySummary,
+	calculateHugeMagoBerryEP,
 	calculateIngredientEP,
 	calculateTeamSummary,
 } from "./EnergyPointCalculator";
@@ -1097,5 +1098,147 @@ describe("きのみゾーンのきのみEP", () => {
 		const summary = calculateDailySummary(1, pokemon, results, bonusContext);
 
 		expect(summary.berryEP).toBe(calculateBerryEP(pokemon, 20, bonusContext));
+	});
+});
+
+describe("とてもおおきなマゴのみのEP", () => {
+	function createSlotResult(
+		overrides: Partial<TimeSlotResult> = {},
+	): TimeSlotResult {
+		return {
+			slotId: "slot-1",
+			pokemonId: 1,
+			teamIndex: 0,
+			durationMinutes: 300,
+			isSleeping: false,
+			helpCount: 0,
+			skillTriggerCount: 0,
+			berryCount: 0,
+			ingredients: [],
+			energyStart: 100,
+			energyEnd: 100,
+			mealRecovery: 0,
+			skillRecovery: 0,
+			wakeRecovery: 0,
+			energyDecay: 0,
+			skillOverflowCount: 0,
+			overflowIngredients: [],
+			selfSkillRecovery: 0,
+			directSkillEP: 0,
+			moonlightGivenRecovery: 0,
+			moonlightReceivedRecovery: 0,
+			energizingCheerGivenRecovery: 0,
+			energizingCheerReceivedRecovery: 0,
+			energizingCheerEvents: [],
+			nuzzleTriggeredSkillEvents: [],
+			presentCandyCount: 0,
+			berryJuiceCount: 0,
+			supportSkillBerryCount: 0,
+			supportSkillBerryEP: 0,
+			supportHelpEvents: [],
+			stockpileStoreCount: 0,
+			stockpileSpitCount: 0,
+			badDreamsHitCount: 0,
+			badDreamsTotalDamageGiven: 0,
+			badDreamsDamageTaken: 0,
+			...overrides,
+		};
+	}
+
+	const bonusContext = {
+		fieldBonus: 0,
+		berryStrengthBonus: 1,
+		recipeBonus: 0,
+		recipeLevel: 1,
+		dishBonus: 1,
+	};
+
+	it("通常のマゴのみエナジーに倍率を掛ける", () => {
+		const magoStrength = calculateBerryStrength("psychic", 50);
+
+		expect(calculateHugeMagoBerryEP(50, 4, 3, bonusContext)).toBe(
+			Math.ceil(magoStrength * 3) * 4,
+		);
+	});
+
+	it("拾ったポケモンのタイプではなくマゴのみの強度を使う", () => {
+		expect(calculateHugeMagoBerryEP(50, 1, 1, bonusContext)).toBe(
+			calculateBerryStrength("psychic", 50),
+		);
+	});
+
+	it("個数か倍率が0なら0になる", () => {
+		expect(calculateHugeMagoBerryEP(50, 0, 3, bonusContext)).toBe(0);
+		expect(calculateHugeMagoBerryEP(50, 5, 0, bonusContext)).toBe(0);
+	});
+
+	it("きのみゾーンの倍率を重ねて適用できる", () => {
+		const magoStrength = calculateBerryStrength("psychic", 50);
+
+		expect(
+			calculateHugeMagoBerryEP(
+				50,
+				1,
+				3,
+				applyBerryZoneMultiplier(bonusContext, 1.5),
+			),
+		).toBe(Math.ceil(Math.ceil(magoStrength * 1.5) * 3));
+	});
+
+	it("一日合計のきのみEPに含まれ、個数も集計される", () => {
+		const pokemon = new PokemonBoxItem(
+			new PokemonIv({ pokemonName: "Pikachu", level: 30 }),
+		);
+		const results = [
+			createSlotResult({
+				slotId: "slot-1",
+				berryCount: 10,
+				hugeMagoBerryCount: 2,
+				hugeMagoBerryEP: 300,
+			}),
+			createSlotResult({
+				slotId: "slot-2",
+				berryCount: 5,
+				hugeMagoBerryCount: 1,
+				hugeMagoBerryEP: 150,
+			}),
+		];
+
+		const summary = calculateDailySummary(1, pokemon, results, bonusContext);
+
+		expect(summary.totalHugeMagoBerryCount).toBe(3);
+		expect(summary.hugeMagoBerryEP).toBe(450);
+		expect(summary.berryEP).toBe(
+			calculateBerryEP(pokemon, 15, bonusContext) + 450,
+		);
+		expect(summary.totalEP).toBe(
+			summary.berryEP + summary.ingredientEP + summary.skillEP,
+		);
+	});
+
+	it("チーム合計にも集計される", () => {
+		const pokemon = new PokemonBoxItem(
+			new PokemonIv({ pokemonName: "Pikachu", level: 30 }),
+		);
+		const summaries: DailySummary[] = [
+			calculateDailySummary(
+				1,
+				pokemon,
+				[createSlotResult({ hugeMagoBerryCount: 2, hugeMagoBerryEP: 300 })],
+				bonusContext,
+			),
+			calculateDailySummary(
+				2,
+				pokemon,
+				[createSlotResult({ hugeMagoBerryCount: 3, hugeMagoBerryEP: 450 })],
+				bonusContext,
+			),
+		];
+
+		const teamSummary = calculateTeamSummary(summaries);
+
+		expect(teamSummary.totalHugeMagoBerryCount).toBe(5);
+		expect(teamSummary.totalHugeMagoBerryEP).toBe(750);
+		expect(teamSummary.totalBerryEP).toBe(750);
 	});
 });

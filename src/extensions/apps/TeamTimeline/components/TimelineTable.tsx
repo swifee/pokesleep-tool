@@ -243,6 +243,7 @@ const TimelineTable = React.memo(
 							slotResult.berryZoneMultiplier,
 						),
 					);
+					cumulativeEp += slotResult.hugeMagoBerryEP ?? 0;
 					if (!shouldUseCookingTotals) {
 						const allIngredients =
 							slotResult.skillIngredients &&

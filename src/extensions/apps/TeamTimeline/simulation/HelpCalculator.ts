@@ -8,6 +8,7 @@ import type { IngredientName } from "../../../../data/pokemons";
 import { getSkillValue, type MainSkillName } from "../../../../util/MainSkill";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import type { IngredientResult } from "../types/TimeSlotTypes";
+import { HUGE_MAGO_BERRY_COUNT_PER_PICKUP } from "../utils/HugeMagoBerryUtils";
 import {
 	getEffectiveMainSkillName,
 	resolveBaseFrequency,
@@ -45,6 +46,11 @@ export interface HelpBonusContext {
 	 * 種族データが入るまでの仮設定で、通常のポケモンには影響しない。
 	 */
 	baseFrequencySecondsOverride?: number;
+	/**
+	 * おてつだい1回あたりに「とてもおおきなマゴのみ」を拾ってくる確率（0〜1）。
+	 * 0 のときは判定そのものを行わない（乱数を消費しない）。
+	 */
+	hugeMagoBerryPickupRate?: number;
 }
 
 /**
@@ -87,6 +93,8 @@ export interface HelpOutput {
 	skillTriggerCount: number;
 	/** きのみ取得個数 */
 	berryCount: number;
+	/** とてもおおきなマゴのみの取得個数 */
+	hugeMagoBerryCount: number;
 	/** 食材取得リスト */
 	ingredients: IngredientResult[];
 	/** スキル発動失敗（溢れ）回数 */
@@ -231,6 +239,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		helpCount: 0,
 		skillTriggerCount: 0,
 		berryCount: 0,
+		hugeMagoBerryCount: 0,
 		ingredients: [],
 		skillOverflowCount: 0,
 		overflowIngredients: [],
@@ -261,6 +270,10 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		carryLimitAdd,
 		carryLimitMultiplier,
 		isGoodCampTicketSet,
+	);
+	const hugeMagoBerryPickupRate = Math.max(
+		0,
+		bonusContext?.hugeMagoBerryPickupRate ?? 0,
 	);
 	const isMainBerry = bonusContext?.isMainBerry ?? false;
 	const isNonFavoriteBerry = bonusContext?.isNonFavoriteBerry ?? false;
@@ -298,6 +311,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 	let skillTriggerCount = 0;
 	let skillOverflowCount = 0;
 	let totalBerryCount = 0;
+	let totalHugeMagoBerryCount = 0;
 
 	const ingredientMap = new Map<IngredientName, number>();
 	const overflowIngredientMap = new Map<IngredientName, number>();
@@ -364,6 +378,16 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 				inventory += berryCountForHelp;
 			}
 
+			// とてもおおきなマゴのみの追加取得判定。
+			// 所持数が満タンのときは拾えないため、通常状態のみ判定する。
+			if (
+				hugeMagoBerryPickupRate > 0 &&
+				random.chance(hugeMagoBerryPickupRate)
+			) {
+				totalHugeMagoBerryCount += HUGE_MAGO_BERRY_COUNT_PER_PICKUP;
+				inventory += HUGE_MAGO_BERRY_COUNT_PER_PICKUP;
+			}
+
 			// スキル発動判定
 			if (random.chance(skillRate)) {
 				if (skillStock < maxSkillStock) {
@@ -392,6 +416,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		helpCount,
 		skillTriggerCount,
 		berryCount: totalBerryCount,
+		hugeMagoBerryCount: totalHugeMagoBerryCount,
 		ingredients,
 		skillOverflowCount,
 		overflowIngredients,

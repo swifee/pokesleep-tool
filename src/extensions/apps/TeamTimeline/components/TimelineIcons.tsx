@@ -4,6 +4,7 @@ import React from "react";
 export type TeamTimelineIconName =
 	| "bag"
 	| "berry"
+	| "berry_huge"
 	| "change"
 	| "cooking"
 	| "dream"
@@ -42,6 +43,25 @@ export const BerryIcon = React.memo((props: SvgIconProps) => (
 			d="M89.6857 33.0443C92.2804 20.9064 99.2989 10.8528 108.69 4.20598C114.542 14.1115 116.838 26.1556 114.243 38.2939C111.648 50.4323 104.629 60.486 95.238 67.1329C89.3854 57.2274 87.0909 45.1824 89.6857 33.0443Z"
 			fill="#FF8000"
 		/>
+	</SvgIcon>
+));
+
+/**
+ * とてもおおきなマゴのみ（イベント限定）のアイコン。
+ * 通常のきのみと区別できるよう、マゴのみらしい配色で一回り大きく描く。
+ */
+export const BerryHugeIcon = React.memo((props: SvgIconProps) => (
+	<SvgIcon {...props} viewBox="0 0 200 200">
+		<circle cx="92" cy="130" r="68" fill="#E5559E" />
+		<path
+			d="M142.947 31.6982C159.858 23.4874 178.403 22.4993 195.089 27.5203C188.715 43.7378 176.469 57.6992 159.559 65.91C142.647 74.121 124.103 75.1097 107.417 70.0884C113.79 53.8707 126.036 39.9092 142.947 31.6982Z"
+			fill="#E5559E"
+		/>
+		<path
+			d="M89.6857 33.0443C92.2804 20.9064 99.2989 10.8528 108.69 4.20598C114.542 14.1115 116.838 26.1556 114.243 38.2939C111.648 50.4323 104.629 60.486 95.238 67.1329C89.3854 57.2274 87.0909 45.1824 89.6857 33.0443Z"
+			fill="#E5559E"
+		/>
+		<circle cx="66" cy="108" r="18" fill="#FFB3D9" />
 	</SvgIcon>
 ));
 
@@ -206,6 +226,8 @@ const TeamTimelineIcon = React.memo(
 				return <BagIcon {...props} />;
 			case "berry":
 				return <BerryIcon {...props} />;
+			case "berry_huge":
+				return <BerryHugeIcon {...props} />;
 			case "change":
 				return <ChangeIcon {...props} />;
 			case "cooking":

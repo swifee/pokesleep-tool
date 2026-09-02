@@ -202,6 +202,9 @@ const DailySummaryRow = React.memo(
 						const totalHelpCount = convertByMode(summary.totalHelpCount);
 						const totalSkillCount = convertByMode(summary.totalSkillCount);
 						const totalBerryCount = convertByMode(summary.totalBerryCount);
+						const totalHugeMagoBerryCount = convertByMode(
+							summary.totalHugeMagoBerryCount ?? 0,
+						);
 						const skillEP = convertByMode(summary.skillEP);
 						const berryEP = convertByMode(summary.berryEP);
 						const ingredientEP = convertByMode(summary.ingredientEP);
@@ -324,6 +327,18 @@ const DailySummaryRow = React.memo(
 										/>
 										{formatSummaryNumber(totalBerryCount)}
 									</Line>
+									{totalHugeMagoBerryCount > 0 && (
+										<Line
+											data-testid={`daily-summary-count-huge-mago-berry-${summary.pokemonId}`}
+											title="とてもおおきなマゴのみ"
+										>
+											<TeamTimelineIcon
+												name="berry_huge"
+												data-testid={`daily-summary-count-icon-huge-mago-berry-${summary.pokemonId}`}
+											/>
+											{formatSummaryNumber(totalHugeMagoBerryCount)}
+										</Line>
+									)}
 									<Line
 										data-testid={`daily-summary-count-skill-${summary.pokemonId}`}
 									>

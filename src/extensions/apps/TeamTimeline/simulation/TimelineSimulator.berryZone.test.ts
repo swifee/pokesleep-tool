@@ -60,6 +60,7 @@ function createProvisionalSettings(
 			berryEnergyBonusPercent: 50,
 			snorlaxEnergyByLevel: [100, 200, 300, 400, 500, 3000],
 		},
+		hugeMagoBerry: { ...settings.hugeMagoBerry },
 		placeholderPokemon: {
 			...settings.placeholderPokemon,
 			enabled: overrides.placeholderEnabled ?? true,

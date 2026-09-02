@@ -14,6 +14,7 @@ import type PokemonBox from "../../../../util/PokemonBox";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import { ingredientStrength } from "../../../../util/PokemonRp";
 import PokemonStrength, {
+	calcBerryStrengthBonus,
 	type StrengthParameter,
 } from "../../../../util/PokemonStrength";
 import type {
@@ -42,6 +43,11 @@ import {
 	getBerryZoneMultiplierForType,
 	getInitialBerryZoneStackCount,
 } from "../utils/BerryZoneUtils";
+import {
+	getHugeMagoBerryEnergyMultiplier,
+	getHugeMagoBerryPickupRate,
+	HUGE_MAGO_BERRY_TYPE,
+} from "../utils/HugeMagoBerryUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import { buildExpandedTimeline } from "../utils/TimelineDayExpansion";
 import {
@@ -70,7 +76,9 @@ import {
 	type WakeRecoveryInput,
 } from "./EnergyCalculator";
 import {
+	applyBerryZoneMultiplier,
 	calculateDailySummary,
+	calculateHugeMagoBerryEP,
 	calculateTeamSummary,
 	type DailySummaryBonusContext,
 } from "./EnergyPointCalculator";
@@ -203,6 +211,8 @@ interface PokemonState {
 	inventoryCount: number;
 	/** 回収待ちのきのみ所持数 */
 	carriedBerryCount: number;
+	/** 回収待ちのとてもおおきなマゴのみ所持数 */
+	carriedHugeMagoBerryCount: number;
 	/** 回収待ちのおてつだい食材 */
 	carriedHelpIngredients: Map<IngredientName, number>;
 	/** 回収待ちのスキル食材 */
@@ -223,6 +233,11 @@ interface PokemonBonusContext {
 	help: HelpBonusContext;
 	skill: PokemonSkillBonusContext;
 	dailySummary: DailySummaryBonusContext;
+	/**
+	 * とてもおおきなマゴのみ用のボーナスコンテキスト。
+	 * 好みのきのみ補正はポケモン自身のタイプではなくマゴのみ（エスパー）で判定する。
+	 */
+	hugeMagoBerry: DailySummaryBonusContext;
 }
 
 /**
@@ -321,6 +336,10 @@ function buildPokemonBonusContext(
 				pokemon.iv,
 				provisionalSettings?.placeholderPokemon,
 			),
+			hugeMagoBerryPickupRate: getHugeMagoBerryPickupRate(
+				pokemon.iv.pokemon,
+				provisionalSettings?.hugeMagoBerry,
+			),
 		},
 		skill: {
 			skillTriggerBonus: bonus.skillTrigger,
@@ -336,6 +355,16 @@ function buildPokemonBonusContext(
 		dailySummary: {
 			fieldBonus: bonusSettings.fieldBonus,
 			berryStrengthBonus: strength.berryStrengthBonus,
+			recipeBonus: bonusSettings.recipeBonus,
+			recipeLevel: bonusSettings.recipeLevel,
+			dishBonus: bonus.dish,
+		},
+		hugeMagoBerry: {
+			fieldBonus: bonusSettings.fieldBonus,
+			berryStrengthBonus: calcBerryStrengthBonus(
+				HUGE_MAGO_BERRY_TYPE,
+				strengthParameter,
+			),
 			recipeBonus: bonusSettings.recipeBonus,
 			recipeLevel: bonusSettings.recipeLevel,
 			dishBonus: bonus.dish,
@@ -643,6 +672,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		provisionalSettings,
 	} = input;
 	const berryZoneSettings = provisionalSettings?.berryZone;
+	const hugeMagoBerryEnergyMultiplier = getHugeMagoBerryEnergyMultiplier(
+		provisionalSettings?.hugeMagoBerry,
+	);
 	const placeholderStats = provisionalSettings?.placeholderPokemon;
 	const disabledPokemonIds = new Set<number>(
 		analysisOptions?.disabledPokemonIds ?? [],
@@ -776,6 +808,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			skillStock: 0,
 			inventoryCount: 0,
 			carriedBerryCount: 0,
+			carriedHugeMagoBerryCount: 0,
 			carriedHelpIngredients: new Map<IngredientName, number>(),
 			carriedSkillIngredients: new Map<IngredientName, number>(),
 			bankedTimeSeconds: 0,
@@ -1197,6 +1230,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			const skillIngredientsFromSkill = skillResult.skillIngredients ?? [];
 
 			state.carriedBerryCount += helpOutput.berryCount;
+			state.carriedHugeMagoBerryCount += helpOutput.hugeMagoBerryCount;
 			addIngredientResultsToMap(
 				state.carriedHelpIngredients,
 				helpOutput.ingredients,
@@ -1218,6 +1252,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			);
 
 			let collectedBerryCount = 0;
+			let collectedHugeMagoBerryCount = 0;
 			let collectedHelpIngredients: { name: IngredientName; count: number }[] =
 				[];
 			let collectedSkillIngredients: { name: IngredientName; count: number }[] =
@@ -1236,8 +1271,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 					state.carriedBerryCount -= collectedBerryCount;
 					state.inventoryCount -= collectedBerryCount;
 				}
+				// とてもおおきなマゴのみは「いつのまに育成」でカビゴンに渡せないため、
+				// 所持数が溢れても回収されず、そのまま持ち越す。
 			} else {
 				collectedBerryCount = state.carriedBerryCount;
+				collectedHugeMagoBerryCount = state.carriedHugeMagoBerryCount;
 				collectedHelpIngredients = ingredientMapToResultArray(
 					state.carriedHelpIngredients,
 				);
@@ -1245,6 +1283,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 					state.carriedSkillIngredients,
 				);
 				state.carriedBerryCount = 0;
+				state.carriedHugeMagoBerryCount = 0;
 				state.carriedHelpIngredients.clear();
 				state.carriedSkillIngredients.clear();
 				state.inventoryCount = 0;
@@ -1260,6 +1299,20 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				helpCount: helpOutput.helpCount,
 				skillTriggerCount: helpOutput.skillTriggerCount,
 				berryCount: collectedBerryCount,
+				hugeMagoBerryCount: collectedHugeMagoBerryCount,
+				hugeMagoBerryEP: calculateHugeMagoBerryEP(
+					state.pokemon.iv.level,
+					collectedHugeMagoBerryCount,
+					hugeMagoBerryEnergyMultiplier,
+					applyBerryZoneMultiplier(
+						getPokemonBonusContext(state.pokemon).hugeMagoBerry,
+						getBerryZoneMultiplierForType(
+							HUGE_MAGO_BERRY_TYPE,
+							berryZoneSettings,
+							berryZoneStackCountAtSlotStart,
+						),
+					),
+				),
 				ingredients: collectedHelpIngredients,
 				skillIngredients: collectedSkillIngredients,
 				energyStart: state.currentEnergy, // 開始時のげんき（時間減少前）
@@ -1471,6 +1524,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				skillStock: 0,
 				inventoryCount: 0,
 				carriedBerryCount: 0,
+				carriedHugeMagoBerryCount: 0,
 				carriedHelpIngredients: new Map<IngredientName, number>(),
 				carriedSkillIngredients: new Map<IngredientName, number>(),
 				bankedTimeSeconds: 0,
