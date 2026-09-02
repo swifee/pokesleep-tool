@@ -20,6 +20,9 @@ import {
 	BERRY_ZONE_MAX_SNORLAX_ENERGY,
 	BERRY_ZONE_MAX_STACK_LIMIT,
 	type BerryZoneProvisionalSettings,
+	HUGE_MAGO_BERRY_MAX_ENERGY_MULTIPLIER,
+	HUGE_MAGO_BERRY_MAX_PICKUP_RATE_PERCENT,
+	type HugeMagoBerryProvisionalSettings,
 	PLACEHOLDER_MAX_CARRY_LIMIT,
 	PLACEHOLDER_MAX_FREQUENCY_SECONDS,
 	PLACEHOLDER_MAX_SKILL_RATE_PERCENT,
@@ -152,7 +155,7 @@ const ProvisionalSettingsPanel = React.memo(function ProvisionalSettingsPanel({
 	onChange,
 }: ProvisionalSettingsPanelProps) {
 	const { t } = useTranslation();
-	const { berryZone, placeholderPokemon } = settings;
+	const { berryZone, hugeMagoBerry, placeholderPokemon } = settings;
 
 	const applyBerryZone = useCallback(
 		(patch: Partial<BerryZoneProvisionalSettings>) => {
@@ -164,6 +167,18 @@ const ProvisionalSettingsPanel = React.memo(function ProvisionalSettingsPanel({
 			);
 		},
 		[berryZone, onChange, settings],
+	);
+
+	const applyHugeMagoBerry = useCallback(
+		(patch: Partial<HugeMagoBerryProvisionalSettings>) => {
+			onChange(
+				normalizeProvisionalSettings({
+					...settings,
+					hugeMagoBerry: { ...hugeMagoBerry, ...patch },
+				}),
+			);
+		},
+		[hugeMagoBerry, onChange, settings],
 	);
 
 	const applyPlaceholderPokemon = useCallback(
@@ -347,6 +362,128 @@ const ProvisionalSettingsPanel = React.memo(function ProvisionalSettingsPanel({
 							)}
 						</Typography>
 					</Box>
+				</AccordionDetails>
+			</Accordion>
+
+			<Accordion disableGutters>
+				<AccordionSummary expandIcon={<ExpandMoreIcon />}>
+					<Typography variant="body2">
+						{t(
+							"TeamTimeline.provisional huge mago berry",
+							"とてもおおきなマゴのみ（イベント）",
+						)}
+					</Typography>
+				</AccordionSummary>
+				<AccordionDetails>
+					<FormControlLabel
+						control={
+							<Switch
+								checked={hugeMagoBerry.enabled}
+								onChange={(event) =>
+									applyHugeMagoBerry({ enabled: event.target.checked })
+								}
+							/>
+						}
+						label={t(
+							"TeamTimeline.provisional use huge mago berry",
+							"とてもおおきなマゴのみをシミュレートする",
+						)}
+					/>
+
+					<SettingRow>
+						<Typography variant="body2">
+							{t(
+								"TeamTimeline.provisional huge mago berry energy multiplier",
+								"通常のマゴのみに対するエナジー倍率",
+							)}
+						</Typography>
+						<NumberField
+							label="×"
+							testId="provisional-huge-mago-energy-multiplier"
+							value={hugeMagoBerry.energyMultiplier}
+							min={0}
+							max={HUGE_MAGO_BERRY_MAX_ENERGY_MULTIPLIER}
+							step={0.5}
+							disabled={!hugeMagoBerry.enabled}
+							onCommit={(value) =>
+								applyHugeMagoBerry({ energyMultiplier: value })
+							}
+						/>
+					</SettingRow>
+
+					<Typography variant="caption" color="text.secondary" component="p">
+						{t(
+							"TeamTimeline.provisional huge mago berry pickup rate",
+							"おてつだい1回あたりに拾ってくる確率(%)",
+						)}
+					</Typography>
+
+					<SettingRow>
+						<Typography variant="body2">
+							{t(
+								"TeamTimeline.provisional huge mago berry legendary",
+								"ミュウ / ミュウツー",
+							)}
+						</Typography>
+						<NumberField
+							label="%"
+							testId="provisional-huge-mago-rate-legendary"
+							value={hugeMagoBerry.legendaryPickupRatePercent}
+							min={0}
+							max={HUGE_MAGO_BERRY_MAX_PICKUP_RATE_PERCENT}
+							step={1}
+							disabled={!hugeMagoBerry.enabled}
+							onCommit={(value) =>
+								applyHugeMagoBerry({ legendaryPickupRatePercent: value })
+							}
+						/>
+					</SettingRow>
+
+					<SettingRow>
+						<Typography variant="body2">
+							{t(
+								"TeamTimeline.provisional huge mago berry psychic",
+								"エスパータイプ",
+							)}
+						</Typography>
+						<NumberField
+							label="%"
+							testId="provisional-huge-mago-rate-psychic"
+							value={hugeMagoBerry.psychicPickupRatePercent}
+							min={0}
+							max={HUGE_MAGO_BERRY_MAX_PICKUP_RATE_PERCENT}
+							step={1}
+							disabled={!hugeMagoBerry.enabled}
+							onCommit={(value) =>
+								applyHugeMagoBerry({ psychicPickupRatePercent: value })
+							}
+						/>
+					</SettingRow>
+
+					<SettingRow>
+						<Typography variant="body2">
+							{t("TeamTimeline.provisional huge mago berry other", "その他")}
+						</Typography>
+						<NumberField
+							label="%"
+							testId="provisional-huge-mago-rate-other"
+							value={hugeMagoBerry.otherPickupRatePercent}
+							min={0}
+							max={HUGE_MAGO_BERRY_MAX_PICKUP_RATE_PERCENT}
+							step={1}
+							disabled={!hugeMagoBerry.enabled}
+							onCommit={(value) =>
+								applyHugeMagoBerry({ otherPickupRatePercent: value })
+							}
+						/>
+					</SettingRow>
+
+					<Typography variant="caption" color="text.secondary" component="p">
+						{t(
+							"TeamTimeline.provisional huge mago berry note",
+							"サブスキル「きのみの数S」やイベントのきのみ追加数は適用されず、1回につき1個拾います。所持数が満タンのときは拾えません（「いつのまに育成」でカビゴンに渡せないため、溢れても回収されません）。きのみゾーン展開中はエナジーが上昇します。「秘境の奥へ進むほど多く見つかる」効果は再現していません。",
+						)}
+					</Typography>
 				</AccordionDetails>
 			</Accordion>
 

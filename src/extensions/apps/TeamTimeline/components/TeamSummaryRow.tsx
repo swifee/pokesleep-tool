@@ -168,7 +168,11 @@ const TeamSummaryRow = React.memo(
 		const totalTastyChanceIncreasePercent = convertByMode(
 			teamSummary.totalTastyChanceIncreasePercent,
 		);
+		const totalHugeMagoBerryCount = convertByMode(
+			teamSummary.totalHugeMagoBerryCount ?? 0,
+		);
 		const hasOtherMeta =
+			totalHugeMagoBerryCount > 0 ||
 			totalPresentCandyCount > 0 ||
 			totalCookingPotCapacityIncrease > 0 ||
 			totalDreamShardCount > 0 ||
@@ -289,6 +293,14 @@ const TeamSummaryRow = React.memo(
 							/>
 						)}
 						{hasOtherMeta && <MetaLineBreak aria-hidden />}
+						{totalHugeMagoBerryCount > 0 && (
+							<MetaItem data-testid="team-summary-huge-mago-berry">
+								とてもおおきなマゴのみ :{" "}
+								<span className="value">
+									{formatSummaryNumber(totalHugeMagoBerryCount)}
+								</span>
+							</MetaItem>
+						)}
 						{totalPresentCandyCount > 0 && (
 							<MetaItem>
 								🍬{formatSummaryNumber(totalPresentCandyCount)}

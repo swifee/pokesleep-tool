@@ -1397,6 +1397,15 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 						{result.berryCount}
 					</BerryBadge>
 				)}
+				{(result.hugeMagoBerryCount ?? 0) > 0 && (
+					<BerryBadge
+						data-testid="timeline-cell-huge-mago-berry"
+						title="とてもおおきなマゴのみ"
+					>
+						<TeamTimelineIcon name="berry_huge" />
+						{result.hugeMagoBerryCount}
+					</BerryBadge>
+				)}
 			</ResourceLine>
 
 			{/* Line 4: Ingredients */}

@@ -15,10 +15,12 @@ vi.mock("react-i18next", () => ({
 function createSettings(
 	overrides: Partial<ProvisionalSettings["berryZone"]> = {},
 	placeholderOverrides: Partial<ProvisionalSettings["placeholderPokemon"]> = {},
+	hugeMagoBerryOverrides: Partial<ProvisionalSettings["hugeMagoBerry"]> = {},
 ): ProvisionalSettings {
 	const defaults = createDefaultProvisionalSettings();
 	return {
 		berryZone: { ...defaults.berryZone, enabled: true, ...overrides },
+		hugeMagoBerry: { ...defaults.hugeMagoBerry, ...hugeMagoBerryOverrides },
 		placeholderPokemon: {
 			...defaults.placeholderPokemon,
 			...placeholderOverrides,
@@ -142,5 +144,68 @@ describe("ProvisionalSettingsPanel", () => {
 		expect(
 			screen.getByTestId("provisional-placeholder-targets").textContent,
 		).toContain("Mewtwo");
+	});
+});
+
+describe("ProvisionalSettingsPanel とてもおおきなマゴのみ", () => {
+	it("仮パラメータを有効にできる", () => {
+		const onChange = vi.fn();
+		render(
+			<ProvisionalSettingsPanel
+				settings={createSettings()}
+				onChange={onChange}
+			/>,
+		);
+
+		fireEvent.click(
+			screen.getByLabelText("とてもおおきなマゴのみをシミュレートする"),
+		);
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange.mock.calls[0][0].hugeMagoBerry.enabled).toBe(true);
+	});
+
+	it("エナジー倍率と区分別の確率を変更できる", () => {
+		const onChange = vi.fn();
+		render(
+			<ProvisionalSettingsPanel
+				settings={createSettings({}, {}, { enabled: true })}
+				onChange={onChange}
+			/>,
+		);
+
+		commit("provisional-huge-mago-energy-multiplier", "4.5");
+		commit("provisional-huge-mago-rate-legendary", "40");
+		commit("provisional-huge-mago-rate-psychic", "25");
+		commit("provisional-huge-mago-rate-other", "5");
+
+		expect(onChange).toHaveBeenCalledTimes(4);
+		expect(onChange.mock.calls[0][0].hugeMagoBerry.energyMultiplier).toBe(4.5);
+		expect(
+			onChange.mock.calls[1][0].hugeMagoBerry.legendaryPickupRatePercent,
+		).toBe(40);
+		expect(
+			onChange.mock.calls[2][0].hugeMagoBerry.psychicPickupRatePercent,
+		).toBe(25);
+		expect(onChange.mock.calls[3][0].hugeMagoBerry.otherPickupRatePercent).toBe(
+			5,
+		);
+	});
+
+	it("無効なときは入力欄を操作できない", () => {
+		render(
+			<ProvisionalSettingsPanel
+				settings={createSettings({}, {}, { enabled: false })}
+				onChange={vi.fn()}
+			/>,
+		);
+
+		expect(
+			(
+				screen.getByTestId(
+					"provisional-huge-mago-rate-other",
+				) as HTMLInputElement
+			).disabled,
+		).toBe(true);
 	});
 });
