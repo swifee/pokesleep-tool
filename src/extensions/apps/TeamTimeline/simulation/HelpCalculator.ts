@@ -219,19 +219,21 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		bonusContext,
 	} = input;
 
+	const noHelpOutput: HelpOutput = {
+		helpCount: 0,
+		skillTriggerCount: 0,
+		berryCount: 0,
+		ingredients: [],
+		skillOverflowCount: 0,
+		overflowIngredients: [],
+		newSkillStock: currentSkillStock,
+		newInventory: currentInventory,
+		newBankedTimeSeconds: bankedTimeSeconds,
+	};
+
 	// 経過時間が0以下の場合は何もしない
 	if (durationMinutes <= 0) {
-		return {
-			helpCount: 0,
-			skillTriggerCount: 0,
-			berryCount: 0,
-			ingredients: [],
-			skillOverflowCount: 0,
-			overflowIngredients: [],
-			newSkillStock: currentSkillStock,
-			newInventory: currentInventory,
-			newBankedTimeSeconds: bankedTimeSeconds,
-		};
+		return noHelpOutput;
 	}
 
 	const skillTriggerBonus = bonusContext?.skillTriggerBonus ?? 1;
@@ -270,6 +272,13 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 
 	// おてつだい回数計算（持ち越し秒数を加算）
 	const effectiveFrequency = baseFrequency / efficiency;
+
+	// 未実装ポケモンは frequency が 0 のため、おてつだい回数が無限になる。
+	// 実装済みデータが入るまでは、おてつだいしないものとして扱う。
+	if (!Number.isFinite(effectiveFrequency) || effectiveFrequency <= 0) {
+		return noHelpOutput;
+	}
+
 	const totalSeconds = durationMinutes * 60 + bankedTimeSeconds;
 	const helpCount = Math.floor(totalSeconds / effectiveFrequency);
 	const newBankedTimeSeconds = totalSeconds % effectiveFrequency;

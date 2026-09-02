@@ -444,3 +444,35 @@ describe("HelpCalculator EXフィールド別のきのみ速度補正", () => {
 		expect(cbex.helpCount).toBe(ggex.helpCount);
 	});
 });
+
+describe("HelpCalculator 未実装データの扱い", () => {
+	it("おてつだいスピードが0のポケモンはおてつだいしない", () => {
+		// 上流はプレースホルダーのポケモンを frequency 0 で追加する。
+		// 0 で割るとおてつだい回数が無限になり、シミュレーションが停止しなくなる。
+		const pokemon = createTestPokemon();
+		Object.defineProperty(pokemon.iv, "frequencyWithHelpingBonus", {
+			configurable: true,
+			value: () => 0,
+		});
+
+		const result = calculateHelp({
+			pokemon,
+			durationMinutes: 600,
+			startEnergy: 50,
+			isSleeping: false,
+			random: new SeededRandom(31),
+			teamHelpingBonusCount: 0,
+			currentSkillStock: 0,
+			maxSkillStock: 1,
+			currentInventory: 3,
+			maxInventory: 0,
+			bankedTimeSeconds: 12,
+		});
+
+		expect(result.helpCount).toBe(0);
+		expect(result.berryCount).toBe(0);
+		expect(result.ingredients).toEqual([]);
+		expect(result.newInventory).toBe(3);
+		expect(result.newBankedTimeSeconds).toBe(12);
+	});
+});
