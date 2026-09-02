@@ -3,6 +3,7 @@
  * おてつだい回数、スキル発動、食材/きのみ取得を計算するモジュール
  */
 
+import { ggexFieldIndex } from "../../../../data/fields";
 import type { IngredientName } from "../../../../data/pokemons";
 import { getSkillValue, type MainSkillName } from "../../../../util/MainSkill";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
@@ -30,6 +31,12 @@ export interface HelpBonusContext {
 	isMainBerry: boolean;
 	/** EX非好みきのみ補正対象 */
 	isNonFavoriteBerry: boolean;
+	/**
+	 * フィールド index。
+	 * EXフィールドごとにきのみ速度補正が異なるため、おてつだい間隔の計算に用いる。
+	 * 省略時はグリーングラスEX（従来の補正値）として扱う。
+	 */
+	fieldIndex?: number;
 }
 
 /**
@@ -247,6 +254,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 	);
 	const isMainBerry = bonusContext?.isMainBerry ?? false;
 	const isNonFavoriteBerry = bonusContext?.isNonFavoriteBerry ?? false;
+	const fieldIndex = bonusContext?.fieldIndex ?? ggexFieldIndex;
 
 	// 基礎おてつだい間隔
 	const baseFrequency = pokemon.iv.getBaseFrequency(
@@ -254,6 +262,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		isGoodCampTicketSet,
 		isMainBerry,
 		isNonFavoriteBerry,
+		fieldIndex,
 	);
 
 	// 加重平均効率
