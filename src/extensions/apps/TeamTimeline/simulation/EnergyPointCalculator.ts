@@ -1,6 +1,7 @@
 import type { IngredientName, PokemonType } from "../../../../data/pokemons";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import { recipeLevelBonus } from "../../../../util/PokemonStrength";
+import { MAX_RECIPE_LEVEL, MIN_RECIPE_LEVEL } from "../types/CookingTypes";
 import type {
 	DailySummary,
 	IngredientResult,
@@ -63,8 +64,8 @@ function normalizeDailySummaryBonusContext(
 	}
 	const recipeLevel =
 		Number.isInteger(bonusContext.recipeLevel) &&
-		bonusContext.recipeLevel >= 1 &&
-		bonusContext.recipeLevel <= 65
+		bonusContext.recipeLevel >= MIN_RECIPE_LEVEL &&
+		bonusContext.recipeLevel <= MAX_RECIPE_LEVEL
 			? bonusContext.recipeLevel
 			: DEFAULT_DAILY_SUMMARY_BONUS_CONTEXT.recipeLevel;
 

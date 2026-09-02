@@ -25,6 +25,8 @@ import {
 	type CookingCategory,
 	type CookingSimulationSettings,
 	DEFAULT_RECIPE_LEVEL,
+	MAX_RECIPE_LEVEL,
+	MIN_RECIPE_LEVEL,
 } from "../types/CookingTypes";
 import TeamTimelineIcon from "./TimelineIcons";
 
@@ -36,8 +38,6 @@ interface CookingSettingsPanelProps {
 const MIN_POT_CAPACITY = 12;
 const MAX_POT_CAPACITY = 99;
 const POT_CAPACITY_STEP = 3;
-const MIN_RECIPE_LEVEL = 1;
-const MAX_RECIPE_LEVEL = 65;
 const LEVEL_INPUT_STEP = 1;
 const INGREDIENT_INPUT_STEP = 5;
 const NUMERIC_INPUT_WIDTH = "5ch";

@@ -5,8 +5,10 @@
 	"how to use": "つかいかた",
 	"about": "このツールについて",
 	"news": "お知らせ",
+	"faq": "よくある質問",
 	"settings": "設定",
 	"change language": "言語切り替え",
+	"tap ripple effect": "タップ時の波紋エフェクト",
 	"custom icon": "カスタム アイコン",
 	"custom icon summary": "ポケモンのアイコンを変更できます。",
 	"custom icon placeholder": "カスタム アイコンの URL",
@@ -34,10 +36,12 @@
 		"ラピスラズリ湖畔",
 		"ゴールド旧発電所",
 		"アンバー渓谷",
-		"ワカクサ本島 EX"
+		"ワカクサ本島 EX",
+		"シアンの砂浜 EX"
 	],
 	"none": "なし",
 	"enabled": "あり",
+	"unknown": "不明",
 	"multiplier": "倍率",
 	"range separator": "～",
 	"text separator": "、",
@@ -55,6 +59,6 @@
 	"profile": "http://tech.nitoyon.com/ja/about/",
 	"x username": "nitoyon",
 	"about2": "改善要望・不具合報告は、X (twitter) の <x>@nitoyon</x> または <github>GitHub</github> までお願いします。",
-	"about3": "利用しているデータは「<wiki>ポケモンスリープ攻略・検証Wiki</wiki>」「<rp>RP collection project</rp>」「<raenonx>RaenonX</raenonx>」を参照しています。",
-	"about4": "食材のアイコンは、ちゃんりわさんが作成してくれました。"
+	"about3": "利用しているデータは「<wiki>ポケモンスリープ攻略・検証Wiki</wiki>」「<rp>RP collection project</rp>」「<raenonx>RaenonX</raenonx>」を参照しています。食材のアイコンは、ちゃんりわさんが作成してくれました。",
+	"about4": "ツールのデータ・シミュレーション結果・スクリーンショットなどは自由にご利用いただけます。その際、当ツールを利用していることを記載していただけると嬉しいです。"
 }

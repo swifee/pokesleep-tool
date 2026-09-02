@@ -5,7 +5,6 @@ import {
 	DialogActions,
 	DialogContent,
 	DialogTitle,
-	FormControl,
 	MenuItem,
 	Select,
 	type SelectChangeEvent,
@@ -13,21 +12,22 @@ import {
 	Switch,
 	ToggleButton,
 	ToggleButtonGroup,
-	Typography,
 } from "@mui/material";
 import { styled } from "@mui/system";
 import React from "react";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { getActiveHelpBonus } from "../../../data/events";
 import { NoTap, whistlePeriod } from "../../../util/Energy";
+import type { PokemonBoxItem } from "../../../util/PokemonBox";
 import {
 	createStrengthParameter,
 	type StrengthParameter,
 } from "../../../util/PokemonStrength";
 import MessageDialog from "../../Dialog/MessageDialog";
 import InfoButton from "../InfoButton";
-import { LevelInput } from "../IvForm/LevelControl";
 import type { IvAction } from "../IvState";
+import OtherTeamMemberForm from "../Panel/OtherTeamMemberForm";
+import RecipeBonusLevelForm from "../Panel/RecipeBonusLevelForm";
 import AreaControlGroup from "./AreaControlGroup";
 import EventConfigDialog from "./EventConfigDialog";
 import FixedLevelSelect from "./FixedLevelSelect";
@@ -48,7 +48,7 @@ const StyledSettingForm = styled("div")({
 		"& > span.lbl": {
 			marginRight: "auto",
 			marginTop: 0,
-			textWrap: "nowrap",
+			textWrap: "wrap",
 		},
 		"& > span > button": {
 			marginRight: 0,
@@ -72,30 +72,41 @@ const StrengthSettingForm = React.memo(
 	({
 		dispatch,
 		value,
+		items,
 		hasHelpingBonus,
 	}: {
 		dispatch: React.Dispatch<IvAction>;
 		value: StrengthParameter;
+		items: PokemonBoxItem[];
 		hasHelpingBonus: boolean;
 	}) => {
 		const { t } = useTranslation();
-		const [pityProcHelpOpen, setPityProcHelpOpen] = React.useState(false);
-		const [recipeBonusHelpOpen, setRecipeBonusHelpOpen] = React.useState(false);
+		const [helpOpen, setHelpOpen] = React.useState(false);
+		const [helpMessage, setHelpMessage] = React.useState<React.ReactNode>(null);
 		const [eventDetailOpen, setEventDetailOpen] = React.useState(false);
 		const [initializeConfirmOpen, setInitializeConfirmOpen] =
 			React.useState(false);
 
 		const onPityProcHelpClick = React.useCallback(() => {
-			setPityProcHelpOpen(true);
-		}, []);
+			setHelpMessage(
+				<>
+					<p>{t("pity proc help")}</p>
+					<p>{t("pity proc help2")}</p>
+				</>,
+			);
+			setHelpOpen(true);
+		}, [t]);
+		const addHelpingBonusEffectInfoClick = React.useCallback(() => {
+			setHelpMessage(
+				<>
+					<p>{t("helping bonus addition desc")}</p>
+					<p>{t("other member calculation")}</p>
+				</>,
+			);
+			setHelpOpen(true);
+		}, [t]);
 		const onPityProcHelpClose = React.useCallback(() => {
-			setPityProcHelpOpen(false);
-		}, []);
-		const onRecipeBonusInfoClick = React.useCallback(() => {
-			setRecipeBonusHelpOpen(true);
-		}, []);
-		const onRecipeBonusHelpClose = React.useCallback(() => {
-			setRecipeBonusHelpOpen(false);
+			setHelpOpen(false);
 		}, []);
 
 		const onChange = React.useCallback(
@@ -111,6 +122,12 @@ const StrengthSettingForm = React.memo(
 					...value,
 					helpBonusCount: parseInt(e.target.value, 10) as 0 | 1 | 2 | 3 | 4,
 				});
+			},
+			[onChange, value],
+		);
+		const onAddHelpingBonusEffectChange = React.useCallback(
+			(e: React.ChangeEvent<HTMLInputElement>) => {
+				onChange({ ...value, addHelpingBonusEffect: e.target.checked });
 			},
 			[onChange, value],
 		);
@@ -165,18 +182,6 @@ const StrengthSettingForm = React.memo(
 		const onEditEnergyClick = React.useCallback(() => {
 			dispatch({ type: "openEnergyDialog" });
 		}, [dispatch]);
-		const onRecipeBonusChange = React.useCallback(
-			(e: SelectChangeEvent) => {
-				onChange({ ...value, recipeBonus: parseInt(e.target.value, 10) });
-			},
-			[onChange, value],
-		);
-		const onRecipeLevelChange = React.useCallback(
-			(recipeLevel: number) => {
-				onChange({ ...value, recipeLevel });
-			},
-			[onChange, value],
-		);
 		const onInitializeClick = React.useCallback(() => {
 			setInitializeConfirmOpen(true);
 		}, []);
@@ -274,8 +279,23 @@ const StrengthSettingForm = React.memo(
 						<MenuItem value={4}>{hasHelpingBonus ? "×5" : "×4"}</MenuItem>
 					</Select>
 				</section>
+				<section>
+					<span className="lbl">
+						{t("helping bonus addition label")}:
+						<InfoButton onClick={addHelpingBonusEffectInfoClick} />
+					</span>
+					<Switch
+						checked={value.addHelpingBonusEffect}
+						onChange={onAddHelpingBonusEffectChange}
+					/>
+				</section>
+				<OtherTeamMemberForm
+					parameter={value}
+					dispatch={dispatch}
+					items={items}
+				/>
 				<Collapse in={isNotWhistle}>
-					<section>
+					<section className="mt">
 						<span className="lbl">
 							{t("tap frequency")} ({t("awake")}):
 						</span>
@@ -304,82 +324,7 @@ const StrengthSettingForm = React.memo(
 						<Button onClick={onEditEnergyClick}>{t("edit")}</Button>
 					</section>
 				</Collapse>
-				<section className="mt">
-					<span className="lbl">
-						{t("recipe bonus")}:<InfoButton onClick={onRecipeBonusInfoClick} />
-					</span>
-					<FormControl size="small">
-						<Select
-							variant="standard"
-							value={value.recipeBonus.toString()}
-							onChange={onRecipeBonusChange}
-						>
-							<MenuItem value={0}>
-								0%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									({t("mixed recipe")})
-								</small>
-							</MenuItem>
-							<MenuItem value={19}>
-								19%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(7{t("range separator")}16 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-							<MenuItem value={20}>
-								20%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(20{t("range separator")}22 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-							<MenuItem value={21}>
-								21%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(23{t("range separator")}26 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-							<MenuItem value={25}>
-								25%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(17{t("range separator")}35 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-							<MenuItem value={35}>
-								35%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(35{t("range separator")}56 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-							<MenuItem value={48}>
-								48%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(49{t("range separator")}77 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-							<MenuItem value={61}>
-								61%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(78{t("range separator")}102 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-							<MenuItem value={78}>
-								78%{" "}
-								<small style={{ paddingLeft: "0.3rem" }}>
-									(103{t("range separator")}115 {t("ingredients unit")})
-								</small>
-							</MenuItem>
-						</Select>
-					</FormControl>
-				</section>
-				<section>
-					<span className="lbl">{t("average recipe level")}:</span>
-					<LevelInput
-						value={value.recipeLevel}
-						onChange={onRecipeLevelChange}
-						showSlider
-						sx={{ width: "2rem" }}
-					/>
-				</section>
+				<RecipeBonusLevelForm value={value} onChange={onChange} />
 				<section className="mt">
 					<Button onClick={onInitializeClick} variant="outlined">
 						{t("initialize all parameters")}
@@ -390,19 +335,10 @@ const StrengthSettingForm = React.memo(
 					onClose={onInitializeConfirmClose}
 					dispatch={dispatch}
 				/>
-				<RecipeBonusHelpDialog
-					open={recipeBonusHelpOpen}
-					onClose={onRecipeBonusHelpClose}
-				/>
 				<MessageDialog
-					open={pityProcHelpOpen}
+					open={helpOpen}
 					onClose={onPityProcHelpClose}
-					message={
-						<>
-							<p>{t("pity proc help")}</p>
-							<p>{t("pity proc help2")}</p>
-						</>
-					}
+					message={helpMessage}
 				/>
 				<EventConfigDialog
 					open={eventDetailOpen}
@@ -411,35 +347,6 @@ const StrengthSettingForm = React.memo(
 					onChange={onChange}
 				/>
 			</StyledSettingForm>
-		);
-	},
-);
-
-const RecipeBonusHelpDialog = React.memo(
-	({ open, onClose }: { open: boolean; onClose: () => void }) => {
-		const { t } = useTranslation();
-
-		return (
-			<Dialog open={open} onClose={onClose}>
-				<DialogContent>
-					<Typography
-						sx={{
-							marginBottom: "16px",
-						}}
-					>
-						<Trans
-							i18nKey="recipe bonus help"
-							components={{
-								raenonx: <a href={t("recipe bonus list")}>raenonx</a>,
-							}}
-						/>
-					</Typography>
-					<Typography variant="body2">{t("recipe strength help")}</Typography>
-				</DialogContent>
-				<DialogActions>
-					<Button onClick={onClose}>{t("close")}</Button>
-				</DialogActions>
-			</Dialog>
 		);
 	},
 );

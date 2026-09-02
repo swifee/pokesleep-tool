@@ -1,28 +1,156 @@
 {
 	"drowsy": [
 		{
-			"name": "Latios",
-			"day": "2026-06-22",
+			"name": "GSD",
+			"day": "2026-08-27",
 			"bonus": 1.5
 		},
 		{
 			"name": "GSD",
-			"day": "2026-05-30",
-			"bonus": 1.5
-		},
-		{
-			"name": "GSD",
-			"day": "2026-05-31",
+			"day": "2026-08-28",
 			"memo": "Mon: 4, Tue: 3, Wed: 2.5, Others: 2",
 			"bonus": 2
 		},
 		{
 			"name": "GSD",
-			"day": "2026-06-01",
+			"day": "2026-08-29",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-09-26",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-09-27",
+			"memo": "Mon: 4, Tue: 3, Wed: 2.5, Others: 2",
+			"bonus": 2
+		},
+		{
+			"name": "GSD",
+			"day": "2026-09-28",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-10-25",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-10-26",
+			"memo": "Mon: 4, Tue: 3, Wed: 2.5, Others: 2",
+			"bonus": 4
+		},
+		{
+			"name": "GSD",
+			"day": "2026-10-27",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-11-23",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-11-24",
+			"memo": "Mon: 4, Tue: 3, Wed: 2.5, Others: 2",
+			"bonus": 3
+		},
+		{
+			"name": "GSD",
+			"day": "2026-11-25",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-12-23",
+			"bonus": 1.5
+		},
+		{
+			"name": "GSD",
+			"day": "2026-12-24",
+			"memo": "Mon: 4, Tue: 3, Wed: 2.5, Others: 2",
+			"bonus": 2
+		},
+		{
+			"name": "GSD",
+			"day": "2026-12-25",
 			"bonus": 1.5
 		}
 	],
 	"bonus": [
+		{
+			"name": "pursue mewtwo 2nd week",
+			"start": "2026-09-21T04:00:00",
+			"end": "2026-09-28T04:00:00",
+			"target": {
+				"type": ["psychic"]
+			},
+			"effects": {
+				"ingredient": 1,
+				"skillTrigger": 1.5,
+				"skillLevel": 5,
+				"carryLimitAdd": 15,
+				"fixedBerries": ["psychic", null, null],
+				"fixedAreas": [0, 7]
+			}
+		},
+		{
+			"name": "pursue mewtwo 1st week",
+			"start": "2026-09-14T04:00:00",
+			"end": "2026-09-21T04:00:00",
+			"target": {
+				"type": ["psychic"]
+			},
+			"effects": {
+				"ingredient": 1,
+				"skillTrigger": 1.5,
+				"skillLevel": 2,
+				"carryLimitAdd": 8,
+				"fixedBerries": ["psychic", null, null],
+				"fixedAreas": [0, 7]
+			}
+		},
+		{
+			"name": "collaboration week",
+			"start": "2026-08-17T04:00:00",
+			"end": "2026-08-24T04:00:00",
+			"target": {},
+			"effects": {
+				"dish": 1.25,
+				"skillTrigger": 1.25
+			}
+		},
+		{
+			"name": "summer festival 2026",
+			"start": "2026-08-10T04:00:00",
+			"end": "2026-08-17T04:00:00",
+			"target": {},
+			"effects": {
+				"dish": 1.5
+			}
+		},
+		{
+			"name": "third anniversary fest week 2",
+			"start": "2026-07-20T04:00:00",
+			"end": "2026-07-27T04:00:00",
+			"target": {},
+			"effects": {
+				"dish": 1.5
+			}
+		},
+		{
+			"name": "third anniversary fest week 1",
+			"start": "2026-07-13T04:00:00",
+			"end": "2026-07-20T04:00:00",
+			"target": {},
+			"effects": {
+				"skillTrigger": 1.5
+			}
+		},
 		{
 			"name": "latios and the soul dew 2nd week",
 			"start": "2026-06-15T04:00:00",
@@ -194,7 +322,8 @@
 				"ingredientMagnet": 1.5,
 				"ingredientDraw": 1.5,
 				"dish": 1.25,
-				"energyFromDish": 5
+				"energyFromDish": 5,
+				"potSize": 2
 			}
 		},
 		{
@@ -314,7 +443,8 @@
 				"ingredientMagnet": 1.5,
 				"ingredientDraw": 1.5,
 				"dish": 1.5,
-				"energyFromDish": 5
+				"energyFromDish": 5,
+				"potSize": 1.6
 			}
 		},
 		{

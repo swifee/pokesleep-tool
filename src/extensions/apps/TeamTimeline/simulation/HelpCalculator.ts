@@ -3,6 +3,7 @@
  * おてつだい回数、スキル発動、食材/きのみ取得を計算するモジュール
  */
 
+import { ggexFieldIndex } from "../../../../data/fields";
 import type { IngredientName } from "../../../../data/pokemons";
 import { getSkillValue, type MainSkillName } from "../../../../util/MainSkill";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
@@ -30,6 +31,12 @@ export interface HelpBonusContext {
 	isMainBerry: boolean;
 	/** EX非好みきのみ補正対象 */
 	isNonFavoriteBerry: boolean;
+	/**
+	 * フィールド index。
+	 * EXフィールドごとにきのみ速度補正が異なるため、おてつだい間隔の計算に用いる。
+	 * 省略時はグリーングラスEX（従来の補正値）として扱う。
+	 */
+	fieldIndex?: number;
 }
 
 /**
@@ -212,19 +219,21 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		bonusContext,
 	} = input;
 
+	const noHelpOutput: HelpOutput = {
+		helpCount: 0,
+		skillTriggerCount: 0,
+		berryCount: 0,
+		ingredients: [],
+		skillOverflowCount: 0,
+		overflowIngredients: [],
+		newSkillStock: currentSkillStock,
+		newInventory: currentInventory,
+		newBankedTimeSeconds: bankedTimeSeconds,
+	};
+
 	// 経過時間が0以下の場合は何もしない
 	if (durationMinutes <= 0) {
-		return {
-			helpCount: 0,
-			skillTriggerCount: 0,
-			berryCount: 0,
-			ingredients: [],
-			skillOverflowCount: 0,
-			overflowIngredients: [],
-			newSkillStock: currentSkillStock,
-			newInventory: currentInventory,
-			newBankedTimeSeconds: bankedTimeSeconds,
-		};
+		return noHelpOutput;
 	}
 
 	const skillTriggerBonus = bonusContext?.skillTriggerBonus ?? 1;
@@ -247,6 +256,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 	);
 	const isMainBerry = bonusContext?.isMainBerry ?? false;
 	const isNonFavoriteBerry = bonusContext?.isNonFavoriteBerry ?? false;
+	const fieldIndex = bonusContext?.fieldIndex ?? ggexFieldIndex;
 
 	// 基礎おてつだい間隔
 	const baseFrequency = pokemon.iv.getBaseFrequency(
@@ -254,6 +264,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		isGoodCampTicketSet,
 		isMainBerry,
 		isNonFavoriteBerry,
+		fieldIndex,
 	);
 
 	// 加重平均効率
@@ -261,6 +272,13 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 
 	// おてつだい回数計算（持ち越し秒数を加算）
 	const effectiveFrequency = baseFrequency / efficiency;
+
+	// 未実装ポケモンは frequency が 0 のため、おてつだい回数が無限になる。
+	// 実装済みデータが入るまでは、おてつだいしないものとして扱う。
+	if (!Number.isFinite(effectiveFrequency) || effectiveFrequency <= 0) {
+		return noHelpOutput;
+	}
+
 	const totalSeconds = durationMinutes * 60 + bankedTimeSeconds;
 	const helpCount = Math.floor(totalSeconds / effectiveFrequency);
 	const newBankedTimeSeconds = totalSeconds % effectiveFrequency;

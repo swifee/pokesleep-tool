@@ -72,6 +72,12 @@
 			"desc": "$t(skills.Dream Shard Magnet S.desc)",
 			"detail": "$t(skills.random)"
 		},
+		"Dream Shard Magnet S (Aura Sphere)": {
+			"name": "꿈의조각 획득S (랜덤)",
+			"strength": "",
+			"desc": "꿈의조각을 획득하고 잠만보의 에너지를 증가시킵니다.",
+			"detail": "$t(skills.Dream Shard Magnet S.detail)"
+		},
 		"Energizing Cheer S": {
 			"name": "기력 응원S",
 			"strength": "스킬에 의한 활력 회복은 총 강도량에 포함되지 않습니다.",
@@ -110,13 +116,13 @@
 		},
 		"Energy for Everyone S (Berry Juice)": {
 			"name": "나무열매쥬스 (기력 올S)",
-			"strength": "$t(skills.Energy for Everyone S.strength)$t(berry juice assumption)",
+			"strength": "$t(skills.Energy for Everyone S.strength)나무열매쥬스 획득 확률은 RaenonX의 데이터(18.5%)를 기반으로 합니다.",
 			"desc": "$t(skills.Energy for Everyone S.desc) 가끔 나무열매쥬스를 추가로 획득한다.",
 			"detail": "$t(skills.Energy for Everyone S.detail) 나무열매 주스는 최대 5개까지 보유할 수 있습니다. 획득률은 약 20% 정도로 알려져 있습니다."
 		},
 		"Extra Helpful S": {
 			"name": "도우미 서포트S",
-			"strength": "스킬에 의해 활성화된 도움 횟수를 표시합니다. 총 강도량에 미치는 영향은 도움 1회당 300 (필드 보너스 없음)으로 추정됩니다.",
+			"strength": "스킬에 의해 활성화된 도움 횟수를 표시합니다. $t(other member calculation)",
 			"desc": "팀의 포켓몬 1마리의 도움을 즉시 완료합니다.",
 			"detail": "자신을 포함하여 대상이 무작위로 선택됩니다. 메인 스킬 추첨은 발생하지 않습니다. $t(expert mode)나 $t(event bonus)에 의한 나무열매·식재료 수 변화의 영향을 받지 않습니다."
 		},
@@ -140,7 +146,7 @@
 		},
 		"Helper Boost": {
 			"name": "도우미 부스트",
-			"strength": "같은 타입의 포켓몬 3마리를 가정하고 있습니다. 강도량에 미치는 영향은 도움 1회당 300 (필드 보너스 없음)으로 추정됩니다.",
+			"strength": "같은 타입의 포켓몬 3마리를 가정하고 있습니다. $t(other member calculation)",
 			"desc": "팀의 포켓몬 모두의 도움을 즉시 완료합니다. 팀에 같은 타입의 다른 종류 포켓몬이 많을수록 효과량이 올라갑니다.",
 			"detail": "도움 포켓몬은 $t(carry limit)를 초과하여 최대 999개까지 나무열매·식재료를 보유할 수 있습니다."
 		},
@@ -213,6 +219,16 @@
 			"strength": "",
 			"desc": "자신과 팀 내 포켓몬의 나무열매를 획득합니다. 팀에 다른 종류의 드래곤타입 포켓몬이 많을수록 획득하는 나무열매의 수가 증가합니다. 팀에 라티아스(이)가 있을 경우, 획득하는 자신의 나무열매 수가 증가합니다.",
 			"detail": ""
+		},
+		"Berry Zone": {
+			"name": "나무열매 존",
+			"strength": ""
+		},
+		"Berry Zone (Psystrike)": {
+			"name": "사이코브레이크(나무열매 존)",
+			"strength": "",
+			"desc": "잠만보의 에너지를 증가시키고 필드에 「나무열매 존」을 펼칩니다.",
+			"detail": "사이코브레이크(나무열매존)에 의해 「나무열매 존」이 펼쳐진 동안에는 마고열매(에스퍼타입)에서 획득하는 에너지가 증가합니다."
 		},
 		"unknown": {
 			"name": "(알 수 없음)",

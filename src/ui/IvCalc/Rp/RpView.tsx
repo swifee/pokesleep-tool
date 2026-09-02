@@ -17,6 +17,7 @@ import PokemonStrength, {
 	createStrengthParameter,
 	type StrengthParameter,
 } from "../../../util/PokemonStrength";
+import MarkdownBlockElement from "../../common/MarkdownBlockElement";
 import RaderChart from "../Chart/RaderChart";
 import IngredientIcon from "../IngredientIcon";
 import type IvState from "../IvState";
@@ -114,6 +115,8 @@ const RpView = React.memo(
 					/>
 					<RpInfoDialog
 						isError={isError}
+						level={state.parameter.level}
+						fieldIndex={state.parameter.fieldIndex}
 						open={rpInfoOpen}
 						onClose={onRpInfoClose}
 					/>
@@ -141,10 +144,14 @@ const RpView = React.memo(
 const RpInfoDialog = React.memo(
 	({
 		isError,
+		level,
+		fieldIndex,
 		open,
 		onClose,
 	}: {
 		isError: boolean;
+		level: number;
+		fieldIndex: number;
 		open: boolean;
 		onClose: () => void;
 	}) => {
@@ -156,7 +163,15 @@ const RpInfoDialog = React.memo(
 			return (
 				<StyledRpInfoDialog open={open} onClose={onClose}>
 					<article>
-						{t("go to strength tab to show the current condition values")}
+						{fieldIndex >= 0 && (
+							<p>
+								{t("rp tab warning field", { field: t(`area.${fieldIndex}`) })}
+							</p>
+						)}
+						{level > 0 && <p>{t("rp tab warning level", { level })}</p>}
+						<p>
+							{t("go to strength tab to show the current condition values")}
+						</p>
 					</article>
 					<DialogActions>
 						<Button onClick={onClose}>{t("close")}</Button>
@@ -184,35 +199,7 @@ const RpInfoDialog = React.memo(
 					<p>{t("estimated beyond level", { level: maxLevel })}</p>
 
 					<h2>{t("strength, ingredients, skill count")}</h2>
-					<p>{t("the amount under the following condition")}</p>
-					<ul>
-						<li>
-							{t("period")}: {t("1day")}
-						</li>
-						<li>
-							{t("favorite berry")}: {t("none")}
-						</li>
-						<li>
-							{t("good camp ticket")}: {t("none")}
-						</li>
-						<li>{t("area bonus")}: 0%</li>
-						<li>
-							{t("helping bonus other pokemon")}: {t("none")}
-						</li>
-						<li>{t("skills.Energy for Everyone S.name")}: 18 × 3</li>
-						<li>{t("sleep score")}: 100</li>
-						<li>
-							{t("tap frequency")} ({t("awake")}): {t("hour2", { count: 3 })}
-						</li>
-						<li>
-							{t("tap frequency")} ({t("asleep")}): {t("none")}
-						</li>
-						<li>
-							{t("include pity proc")}: {t("enabled")}
-						</li>
-					</ul>
-					<p>{t("use strength tab if you want to change these condition")}</p>
-					<p>{t("estimated beyond level", { level: maxLevel })}</p>
+					<MarkdownBlockElement text={t("rp tab condition list")} />
 				</article>
 				<DialogActions>
 					<Button onClick={onClose}>{t("close")}</Button>

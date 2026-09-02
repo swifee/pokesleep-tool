@@ -12,14 +12,15 @@ const totalExpToTheLevel: number[] = [
 	10598, 11284, 11992, 12721, 13469, 14235, 15020, 15823, 16644, 17483, 18340,
 	19215, 20108, 21018, 21946, 22891, 23854, 24834, 25831, 26846, 27878, 28927,
 	29993, 31355, 32917, 34664, 36610, 38805, 41084, 43488, 46021, 48687, 51493,
-	54358, 57280, 60257, 63286, 66363,
+	54358, 57280, 60257, 63286, 66363, 69458, 72574, 75718, 78907, 82162,
 ];
 
 const dreamShardsPerCandy: number[] = [
 	0, 0, 14, 18, 22, 27, 30, 34, 39, 44, 48, 50, 52, 53, 56, 59, 62, 66, 68, 71,
 	74, 78, 81, 85, 88, 92, 95, 100, 105, 111, 117, 122, 126, 130, 136, 143, 151,
 	160, 167, 174, 184, 192, 201, 211, 221, 227, 236, 250, 264, 279, 295, 309,
-	323, 338, 356, 372, 391, 437, 486, 538, 593, 651, 698, 750, 804, 866,
+	323, 338, 356, 372, 391, 437, 486, 538, 593, 651, 698, 750, 804, 866, 932,
+	1004, 1084, 1173, 1272,
 ];
 
 const expTypeRate: { [key in ExpType]: number } = {
@@ -78,6 +79,18 @@ export type CalcDayToGetSleepExpResult = {
 	days: number;
 	/** DateTime to get sleep EXP (local time) */
 	date: Date;
+};
+
+/** Result of calcDayToNapExp function. */
+export type CalcDayToGetNapExpResult = CalcDayToGetSleepExpResult & {
+	/** Total minutes required to get nap EXP */
+	minutes: number;
+	/** Days required to get nap EXP */
+	d: number;
+	/** Hours required to get nap EXP */
+	h: number;
+	/** Minutes required to get nap EXP */
+	m: number;
 };
 
 /**
@@ -190,12 +203,12 @@ function calcExpPerCandy(
 	const boostFactor = boost !== "none" ? 2 : 1;
 	if (level < 25) {
 		return (
-			(nature.isExpGainsUp ? 41 : nature.isExpGainsDown ? 29 : 35) * boostFactor
+			(nature.isExpGainsUp ? 47 : nature.isExpGainsDown ? 33 : 40) * boostFactor
 		);
 	}
 	if (level < 30) {
 		return (
-			(nature.isExpGainsUp ? 35 : nature.isExpGainsDown ? 25 : 30) * boostFactor
+			(nature.isExpGainsUp ? 41 : nature.isExpGainsDown ? 29 : 35) * boostFactor
 		);
 	}
 	return (
@@ -383,4 +396,53 @@ export function getMoonAge(date: Date): number {
 	const reference = new Date(Date.UTC(2000, 0, 6, 18, 14));
 	const days = (date.getTime() - reference.getTime()) / (1000 * 60 * 60 * 24);
 	return ((days % lunarCycle) + lunarCycle) % lunarCycle;
+}
+
+/**
+ * Calculate the number of days needed to earn the specified EXP
+ * through Nap Island.
+ * @param exp Target EXP to earn.
+ * @param accumulatedExp Accumulated EXP (Already earned).
+ * @param expGainRate The Pokémon's exp gain rate by its nature.
+ * @param today Today.
+ * @returns The number of days.
+ */
+export function calcDayToNapExp(
+	exp: number,
+	accumulatedExp: number,
+	expGainRate: number,
+	ticket: boolean,
+): CalcDayToGetNapExpResult {
+	const requiredExp = Math.max(0, exp - accumulatedExp);
+	const ret: CalcDayToGetNapExpResult = {
+		exp: requiredExp,
+		expExceeded: 0,
+		days: Number.POSITIVE_INFINITY,
+		minutes: Number.POSITIVE_INFINITY,
+		d: Number.POSITIVE_INFINITY,
+		h: Number.POSITIVE_INFINITY,
+		m: Number.POSITIVE_INFINITY,
+		date: new Date(8640000000000000),
+	};
+
+	const baseExp = 150 * Math.max(expGainRate, 1) * (ticket ? 4 : 1);
+
+	// before 7 days are over: only gain half EXP
+	if (exp < baseExp * 3.5) {
+		ret.days = requiredExp / (baseExp / 2);
+	} else if (exp < baseExp * 7) {
+		ret.days = 7;
+		ret.exp = baseExp * 7;
+		ret.expExceeded = baseExp * 7 - requiredExp;
+	} else {
+		ret.days = requiredExp / baseExp;
+	}
+	ret.minutes = Math.ceil(ret.days * 24 * 60);
+	ret.d = Math.floor(ret.minutes / 24 / 60);
+	ret.h = Math.floor(ret.minutes / 60) % 24;
+	ret.m = ret.minutes % 60;
+
+	ret.date = new Date();
+	ret.date.setTime(ret.date.getTime() + ret.minutes * 60 * 1000);
+	return ret;
 }

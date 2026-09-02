@@ -5,8 +5,10 @@
 	"how to use": "使用方法",
 	"about": "关于本工具",
 	"news": "消息",
+	"faq": "常见问题",
 	"settings": "设定",
 	"change language": "切换语言",
+	"tap ripple effect": "点击涟漪效果",
 	"custom icon": "自定义 图标",
 	"custom icon summary": "可以变更宝可梦的图标。",
 	"custom icon placeholder": "自定义 图标的 URL",
@@ -34,10 +36,12 @@
 		"宝蓝湖畔",
 		"黄金旧发电厂",
 		"琥褐溪谷",
-		"萌绿之岛EX"
+		"萌绿之岛EX",
+		"天青沙滩EX"
 	],
 	"none": "无",
 	"enabled": "启用",
+	"unknown": "未知",
 	"multiplier": "倍率",
 	"range separator": "～",
 	"text separator": "，",
@@ -55,6 +59,6 @@
 	"profile": "http://tech.nitoyon.com/ja/about/",
 	"x username": "nitoyon1",
 	"about2": "改善请求和错误报告请通过X (twitter) <x>@nitoyon1</x> 或者 <github>GitHub</github> 进行联系。",
-	"about3": "使用的数据参照了「<wiki>ポケモンスリープ攻略・検証Wiki</wiki>」，「<rp>RP collection project</rp>」，以及「<raenonx>RaenonX</raenonx>」。",
-	"about4": "食材图标由ちゃんりわさん制作。"
+	"about3": "使用的数据参照了「<wiki>ポケモンスリープ攻略・検証Wiki</wiki>」，「<rp>RP collection project</rp>」，以及「<raenonx>RaenonX</raenonx>」。食材图标由ちゃんりわさん制作。",
+	"about4": "本工具的数据、模拟结果、截图等欢迎自由使用。使用时，如能注明使用了本工具，将不胜感激。"
 }

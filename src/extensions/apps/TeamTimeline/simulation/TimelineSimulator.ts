@@ -133,6 +133,16 @@ function getCookingEventBonusPercent(
 	return Math.round((dishBonus - 1) * 100);
 }
 
+/**
+ * イベントによる鍋容量倍率を取得する。
+ */
+function getPotSizeEventMultiplier(
+	bonusSettings: TimelineBonusSettings,
+): number {
+	return getEventBonus(bonusSettings.event, bonusSettings.customEventBonus)
+		.potSize;
+}
+
 export interface SimulationAnalysisOptions {
 	disabledPokemonIds?: readonly number[];
 	keepDisabledPokemonTargetable?: boolean;
@@ -293,6 +303,7 @@ function buildPokemonBonusContext(
 			isGoodCampTicketSet: bonusSettings.isGoodCampTicketSet,
 			isMainBerry,
 			isNonFavoriteBerry: isExpertMode && !isFavoriteBerry,
+			fieldIndex: strengthParameter.fieldIndex,
 		},
 		skill: {
 			skillTriggerBonus: bonus.skillTrigger,
@@ -487,6 +498,7 @@ function runCookingPostProcess(
 	const bag = createIngredientBag(cookingSettings.initialIngredients);
 	const cookingRandom = new SeededRandom(baseSeed + 9999);
 	const cookingEventBonus = getCookingEventBonusPercent(bonusSettings);
+	const potSizeMultiplier = getPotSizeEventMultiplier(bonusSettings);
 	const disabledRecipeSet = new Set<string>(
 		Object.entries(cookingSettings.disabledRecipes)
 			.filter(([, disabled]) => disabled === true)
@@ -532,6 +544,7 @@ function runCookingPostProcess(
 				recipeLevels: cookingSettings.recipeLevels as Record<string, number>,
 				basePotCapacity: cookingSettings.basePotCapacity,
 				isGoodCampTicket: bonusSettings.isGoodCampTicketSet,
+				potSizeMultiplier,
 				cookingPowerUpBonus,
 				tastyChanceAccumulated,
 				fieldBonus: bonusSettings.fieldBonus,

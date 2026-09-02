@@ -7,6 +7,7 @@ import {
 	loadStrengthParameter,
 	type StrengthParameter,
 } from "../../../../util/PokemonStrength";
+import { MAX_RECIPE_LEVEL, MIN_RECIPE_LEVEL } from "../types/CookingTypes";
 import type {
 	TimelineBonusSettings,
 	TimelineFavoriteTypes,
@@ -162,7 +163,10 @@ export function normalizeTimelineBonusSettings(
 				: DEFAULT_BONUS_SETTINGS.recipeBonus,
 		recipeLevel:
 			typeof input.recipeLevel === "number"
-				? Math.min(65, Math.max(1, Math.floor(input.recipeLevel)))
+				? Math.min(
+						MAX_RECIPE_LEVEL,
+						Math.max(MIN_RECIPE_LEVEL, Math.floor(input.recipeLevel)),
+					)
 				: DEFAULT_BONUS_SETTINGS.recipeLevel,
 	};
 
