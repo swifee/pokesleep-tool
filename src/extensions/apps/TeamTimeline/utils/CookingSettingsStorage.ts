@@ -6,6 +6,8 @@ import {
 	type CookingCategory,
 	type CookingSimulationSettings,
 	createDefaultCookingSettings,
+	MAX_RECIPE_LEVEL,
+	MIN_RECIPE_LEVEL,
 } from "../types/CookingTypes";
 
 export const STORAGE_KEY_COOKING_SETTINGS = "PstTeamTimelineCookingSettings";
@@ -15,8 +17,6 @@ const VALID_CATEGORIES: readonly CookingCategory[] = [
 	"salad",
 	"dessert",
 ];
-const MIN_RECIPE_LEVEL = 1;
-const MAX_RECIPE_LEVEL = 65;
 const MIN_POT_CAPACITY = 12;
 const MAX_POT_CAPACITY = 99;
 const POT_CAPACITY_STEP = 3;
@@ -71,7 +71,7 @@ function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
 			? (obj.category as CookingCategory)
 			: defaults.category;
 
-	// Validate recipeLevels is object with number values clamped to 1-65
+	// Validate recipeLevels is object with number values clamped to the recipe level range
 	const recipeLevels: Record<string, number> = {};
 	if (
 		typeof obj.recipeLevels === "object" &&
