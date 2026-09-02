@@ -1,4 +1,4 @@
-import pokemons from "../data/pokemons";
+import pokemons, { type IngredientName } from "../data/pokemons";
 import Nature from "./Nature";
 import PokemonIv from "./PokemonIv";
 import SubSkill from "./SubSkill";
@@ -472,8 +472,8 @@ describe("PokemonIV", () => {
 					lv10: new SubSkill("Berry Finding S"),
 					lv25: new SubSkill("Helping Speed S"),
 					lv50: new SubSkill("Ingredient Finder M"),
-					lv75: new SubSkill("Inventory Up L"),
-					lv100: new SubSkill("Skill Level Up S"),
+					lv70: new SubSkill("Inventory Up L"),
+					lv80: new SubSkill("Skill Level Up S"),
 				}),
 			});
 			expect(iv.serialize()).toBe("gS8AppABDSUL");
@@ -492,6 +492,18 @@ describe("PokemonIV", () => {
 			expect(iv.idForm).toBe(25 + 0x1000);
 
 			const ret = PokemonIv.deserialize("kQGBpwj5-38f");
+			compareIv(iv, ret);
+		});
+
+		test("Pikachu (Captain)", () => {
+			const iv = new PokemonIv({
+				pokemonName: "Pikachu (Captain)",
+				skillLevel: 1,
+			});
+			expect(iv.form).toBe(11);
+			expect(iv.idForm).toBe(25 + (11 << 12));
+
+			const ret = PokemonIv.deserialize(iv.serialize());
 			compareIv(iv, ret);
 		});
 
@@ -692,11 +704,11 @@ describe("PokemonIV", () => {
 			expect(result.subSkills).toBeInstanceOf(SubSkillList);
 		});
 
-		test('applies default ingredient "ABB" for pokemon without ing3', () => {
+		test('applies default ingredient "ABA" for pokemon without ing3', () => {
 			const result = PokemonIv.normalize({ pokemonName: "Feraligatr" });
 
 			// Feraligatr doesn't have ing3
-			expect(result.ingredient).toBe("ABB");
+			expect(result.ingredient).toBe("ABA");
 		});
 
 		test("preserves provided values (partial params)", () => {
@@ -861,6 +873,126 @@ describe("PokemonIV", () => {
 
 			expect(result.pokemonName).toBe("Pikachu (Halloween)");
 			expect(result.level).toBe(75);
+		});
+
+		test("handle level", () => {
+			// min 1
+			const result1 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				level: 0,
+			});
+			expect(result1.level).toBe(1);
+
+			// max 100
+			const result2 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				level: 101,
+			});
+			expect(result2.level).toBe(100);
+
+			// integer
+			const result3 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				level: 30.9,
+			});
+			expect(result3.level).toBe(30);
+		});
+
+		test("skillLevel", () => {
+			// min 1
+			const result1 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				skillLevel: 0,
+			});
+			expect(result1.skillLevel).toBe(1);
+
+			// max 7
+			const result2 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				skillLevel: 8,
+			});
+			expect(result2.skillLevel).toBe(7);
+
+			// integer
+			const result3 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				skillLevel: 2.9,
+			});
+			expect(result3.skillLevel).toBe(2);
+		});
+
+		test("ribbon", () => {
+			// min 0
+			const result1 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				ribbon: -1 as 0,
+			});
+			expect(result1.ribbon).toBe(0);
+
+			// max 4
+			const result2 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				ribbon: 5 as 4,
+			});
+			expect(result2.ribbon).toBe(4);
+
+			// integer
+			const result3 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				ribbon: 1.9 as 1,
+			});
+			expect(result3.ribbon).toBe(1);
+		});
+
+		test("ingredient", () => {
+			// Bulbasaur has ing3
+			const result1 = PokemonIv.normalize({
+				pokemonName: "Bulbasaur",
+				ingredient: "XYZ" as "ABC",
+			});
+			expect(result1.ingredient).toBe("ABC");
+
+			// Feraligatr has no ing3
+			const result2 = PokemonIv.normalize({
+				pokemonName: "Feraligatr",
+				ingredient: "XYZ" as "ABB",
+			});
+			expect(result2.ingredient).toBe("ABB");
+
+			const result3 = PokemonIv.normalize({
+				pokemonName: "Feraligatr",
+				ingredient: "ABC",
+			});
+			expect(result3.ingredient).toBe("ABA");
+		});
+
+		test("mythIng", () => {
+			const result1 = PokemonIv.normalize({
+				pokemonName: "Mew",
+				mythIng1: "invalid_ingredient" as IngredientName,
+				mythIng2: "invalid_ingredient" as IngredientName,
+			});
+			expect(result1.mythIng1).toBe("egg");
+			expect(result1.mythIng2).toBe("herb");
+
+			// Mew's "tail" has c1=0, c2=0, c3=2
+			const result2 = PokemonIv.normalize({
+				pokemonName: "Mew",
+				mythIng1: "tail",
+			});
+			expect(result2.mythIng1).toBe("egg");
+
+			const result3 = PokemonIv.normalize({
+				pokemonName: "Mew",
+				mythIng2: "tail",
+			});
+			expect(result3.mythIng2).toBe("herb");
+
+			const result4 = PokemonIv.normalize({
+				pokemonName: "Mew",
+				mythIng3: "tail",
+			});
+			expect(result4.mythIng3).toBe("tail");
 		});
 	});
 
@@ -1385,8 +1517,8 @@ describe("PokemonIV", () => {
 		expect(iv2.subSkills.lv10?.name).toBe(iv1.subSkills.lv10?.name);
 		expect(iv2.subSkills.lv25?.name).toBe(iv1.subSkills.lv25?.name);
 		expect(iv2.subSkills.lv50?.name).toBe(iv1.subSkills.lv50?.name);
-		expect(iv2.subSkills.lv75?.name).toBe(iv1.subSkills.lv75?.name);
-		expect(iv2.subSkills.lv100?.name).toBe(iv1.subSkills.lv100?.name);
+		expect(iv2.subSkills.lv70?.name).toBe(iv1.subSkills.lv70?.name);
+		expect(iv2.subSkills.lv80?.name).toBe(iv1.subSkills.lv80?.name);
 		expect(iv2.ribbon).toBe(iv1.ribbon);
 		expect(iv2.shiny).toBe(iv1.shiny);
 		expect(iv2.versatileSkill).toBe(iv1.versatileSkill);

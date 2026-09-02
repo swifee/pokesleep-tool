@@ -3,7 +3,7 @@ import { getBerryStrength } from "./Berry";
 import type PokemonIv from "./PokemonIv";
 import type SubSkill from "./SubSkill";
 
-export const maxLevel = 65;
+export const maxLevel = 70;
 
 export const ingredientStrength: { [ing in IngredientName]: number } = {
 	leek: 185,
@@ -265,23 +265,19 @@ class PokemonRp {
 				1.274, 1.288, 1.303, 1.319, 1.335, 1.351, 1.368, 1.385, 1.402, 1.42,
 				1.439, 1.457, 1.477, 1.496, 1.517, 1.537, 1.558, 1.58, 1.602, 1.625,
 				1.648, 1.671, 1.696, 1.72, 1.745, 1.771, 1.798, 1.824, 1.852, 1.88,
-				1.927, 1.975, 2.024, 2.075, 2.127,
-				// Expected values by ChatGPT
-				2.18, 2.234, 2.289, 2.345, 2.402, 2.46, 2.519, 2.579, 2.64, 2.702,
-				2.765, 2.829, 2.894, 2.96, 3.027, 3.095, 3.164, 3.234, 3.305, 3.377,
-				3.45, 3.524, 3.599, 3.675, 3.752, 3.83, 3.909, 3.989, 4.07, 4.152,
-				4.235, 4.319, 4.404, 4.49, 4.577,
+				1.927, 1.975, 2.024, 2.075, 2.127, 2.18, 2.235, 2.29, 2.348, 2.406,
+				// Expected values by Claude Code (quadratic fit on Lv61-70)
+				// biome-ignore lint/suspicious/noApproximativeNumericConstant: data table value, not Math.E
+				2.466, 2.527, 2.589, 2.653, 2.718, 2.784, 2.852, 2.921, 2.991, 3.062,
+				3.135, 3.209, 3.285, 3.361, 3.439, 3.519, 3.599, 3.681, 3.764, 3.849,
+				3.935, 4.022, 4.11, 4.2, 4.291, 4.383, 4.477, 4.572, 4.668, 4.766,
 			];
 			if (this.iv.level - 1 < table.length) {
 				return table[this.iv.level - 1];
 			}
-			// assumption: RP collection's 'Ingr Growth' sheet
+			// quadratic fit on Lv61-70 confirmed values
 			return (
-				0.000000398 * this.iv.level ** 3 +
-				0.000159 * this.iv.level ** 2 +
-				0.00367 * this.iv.level -
-				0.00609 +
-				1
+				0.0006515 * this.iv.level ** 2 - 0.032106 * this.iv.level + 1.461109
 			);
 		});
 	}
@@ -321,77 +317,68 @@ class PokemonRp {
 	 */
 	get skillValue(): number {
 		return this.getOrCache("skillValue", () => {
+			const skill = this.iv.pokemon.skill;
+			const level = this.iv.skillLevel;
 			if (
-				this.iv.pokemon.skill === "Charge Strength S" ||
-				this.iv.pokemon.skill === "Charge Strength S (Random)"
+				skill === "Charge Strength S" ||
+				skill === "Charge Strength S (Random)"
 			) {
-				return [400, 569, 785, 1083, 1496, 2066, 2842][this.iv.skillLevel - 1];
+				return [400, 569, 785, 1083, 1496, 2066, 2842][level - 1];
 			}
-			if (this.iv.pokemon.skill === "Charge Energy S") {
-				return [400, 569, 785, 1083, 1496, 2066, 2656][this.iv.skillLevel - 1];
+			if (skill === "Charge Energy S") {
+				return [400, 569, 785, 1083, 1496, 2066, 2656][level - 1];
 			}
-			if (this.iv.pokemon.skill === "Charge Energy S (Moonlight)") {
-				return [560, 797, 1099, 1516, 2094, 2892][this.iv.skillLevel - 1];
-			}
-			if (
-				this.iv.pokemon.skill === "Charge Strength S (Stockpile)" ||
-				this.iv.pokemon.skill === "Skill Copy (Transform)" ||
-				this.iv.pokemon.skill === "Skill Copy (Mimic)"
-			) {
-				return [600, 853, 1177, 1625, 2243, 3099, 3984][this.iv.skillLevel - 1];
-			}
-			if (this.iv.pokemon.skill === "Charge Strength M") {
-				return [880, 1251, 1726, 2383, 3290, 4546, 6252][
-					this.iv.skillLevel - 1
-				];
-			}
-			if (this.iv.pokemon.skill === "Energy for Everyone S") {
-				return [1120, 1593, 2197, 3033, 4187, 5785][this.iv.skillLevel - 1];
-			}
-			if (this.iv.pokemon.skill === "Cooking Assist S (Bulk Up)") {
-				return [1144, 1627, 2244, 3098, 4277, 5910, 7596][
-					this.iv.skillLevel - 1
-				];
-			}
-			if (this.iv.pokemon.skill === "Energy for Everyone S (Berry Juice)") {
-				return [1220, 1735, 2392, 3303, 4559, 6299][this.iv.skillLevel - 1];
-			}
-			if (this.iv.pokemon.skill === "Helper Boost") {
-				return [2800, 3902, 5273, 6975, 9317, 12438][this.iv.skillLevel - 1];
-			}
-			if (this.iv.pokemon.skill === "Berry Burst (Draco Meteor)") {
-				// Lv1, Lv2, Lv3: fixed
-				// Lv4: 6442-6445
-				// Lv4, Lv5: Charge Energy S x5.95 (estimation)
-				// Lv6: 12294-12296
-				return [2380, 3385, 4670, 6443, 8901, 12296][this.iv.skillLevel - 1];
+			if (skill === "Charge Energy S (Moonlight)") {
+				return [560, 797, 1099, 1516, 2094, 2892][level - 1];
 			}
 			if (
-				this.iv.pokemon.skill === "Berry Burst (Disguise)" ||
-				this.iv.pokemon.skill === "Berry Burst" ||
-				this.iv.pokemon.skill === "Energy for Everyone S (Lunar Blessing)"
+				skill === "Charge Strength S (Stockpile)" ||
+				skill === "Skill Copy (Transform)" ||
+				skill === "Skill Copy (Mimic)"
 			) {
-				return [1400, 1991, 2747, 3791, 5234, 7232][this.iv.skillLevel - 1];
+				return [600, 853, 1177, 1625, 2243, 3099, 3984][level - 1];
 			}
-			if (this.iv.pokemon.skill === "Charge Strength M (Bad Dreams)") {
-				return [2400, 3313, 4643, 6441, 8864, 11878, 14072][
-					this.iv.skillLevel - 1
-				];
+			if (skill === "Charge Strength M") {
+				return [880, 1251, 1726, 2383, 3290, 4546, 6252][level - 1];
 			}
-			if (this.iv.pokemon.skill === "Energizing Cheer S") {
-				return [766, 1089, 1502, 2074, 2863, 3956][this.iv.skillLevel - 1];
+			if (skill === "Energy for Everyone S") {
+				return [1120, 1593, 2197, 3033, 4187, 5785][level - 1];
 			}
-			if (this.iv.pokemon.skill === "Energizing Cheer S (Heal Pulse)") {
-				return [1600, 2300, 3180, 4417, 6113, 8462][this.iv.skillLevel - 1];
+			if (skill === "Cooking Assist S (Bulk Up)") {
+				return [1144, 1627, 2244, 3098, 4277, 5910, 7596][level - 1];
 			}
-			if (this.iv.pokemon.skill === "Versatile") {
-				return [1280, 1651, 2126, 2783, 3690, 5056, 6463, 8033][
-					this.iv.skillLevel - 1
-				];
+			if (skill === "Energy for Everyone S (Berry Juice)") {
+				return [1220, 1735, 2392, 3303, 4559, 6299][level - 1];
 			}
-			return [880, 1251, 1726, 2383, 3290, 4546, 5843, 7303][
-				this.iv.skillLevel - 1
-			];
+			if (skill === "Helper Boost") {
+				return [2800, 3902, 5273, 6975, 9317, 12438][level - 1];
+			}
+			if (skill === "Berry Burst (Draco Meteor)") {
+				return [2380, 3385, 4670, 6445, 8898, 12294][level - 1];
+			}
+			if (
+				skill === "Berry Burst (Disguise)" ||
+				skill === "Berry Burst" ||
+				skill === "Energy for Everyone S (Lunar Blessing)"
+			) {
+				return [1400, 1991, 2747, 3791, 5234, 7232][level - 1];
+			}
+			if (skill === "Charge Strength M (Bad Dreams)") {
+				return [2400, 3313, 4643, 6441, 8864, 11878, 14072][level - 1];
+			}
+			if (skill === "Energizing Cheer S") {
+				return [766, 1089, 1502, 2074, 2863, 3956][level - 1];
+			}
+			if (skill === "Energizing Cheer S (Heal Pulse)") {
+				return [1600, 2300, 3180, 4417, 6113, 8462][level - 1];
+			}
+			if (skill === "Versatile") {
+				return [1280, 1651, 2126, 2783, 3690, 5056, 6463, 8033][level - 1];
+			}
+			if (skill === "Dream Shard Magnet S (Aura Sphere)") {
+				return [1040, 1479, 2040, 2816, 3888, 5372, 6905, 8543][level - 1];
+			}
+			return [880, 1251, 1726, 2383, 3290, 4546, 5843, 7303][level - 1];
 		});
 	}
 }

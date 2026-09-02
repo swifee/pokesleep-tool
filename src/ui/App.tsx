@@ -9,6 +9,7 @@ import IvCalcApp from "./IvCalc/IvCalcApp";
 import NewsInfo from "./NewsInfo";
 import PwaNotify from "./PwaBanner";
 import ResearchCalcApp from "./ResearchCalc/ResearchCalcApp";
+import TapRippleEffect from "./TapRippleEffect";
 import ToolBar from "./ToolBar";
 
 const defaultTheme = createTheme({
@@ -81,6 +82,7 @@ export default function App({ config }: { config: AppConfig }) {
 					pwaCount={config.pwacnt}
 					onClose={onPwaBannerClose}
 				/>
+				{appConfig.tapRippleEffect && <TapRippleEffect />}
 			</AppConfigContext.Provider>
 		</ThemeProvider>
 	);

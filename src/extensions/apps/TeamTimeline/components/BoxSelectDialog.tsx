@@ -293,6 +293,8 @@ const BoxSelectDialog = React.memo(
 						<BoxSortConfigFooter
 							sortConfig={sortConfig}
 							parameter={parameter}
+							// FooterArea handles the spacing, so no extra style is needed here.
+							sx={NO_SORT_FOOTER_STYLE}
 							dispatch={onSortConfigDispatch}
 							onChange={onSortConfigChange}
 						/>
@@ -415,6 +417,9 @@ const StyledBoxItem = styled("div")({
 		},
 	},
 });
+
+/** Empty style for BoxSortConfigFooter, which requires an `sx` object. */
+const NO_SORT_FOOTER_STYLE = {};
 
 const FooterArea = styled("div")({
 	width: "100%",

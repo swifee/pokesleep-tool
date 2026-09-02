@@ -25,7 +25,7 @@ export interface CookingSimulationSettings {
 	readonly enabled: boolean;
 	/** 今週の料理カテゴリ */
 	readonly category: CookingCategory;
-	/** 各レシピのレベル: recipeName -> level (1-65) */
+	/** 各レシピのレベル: recipeName -> level (MIN_RECIPE_LEVEL - MAX_RECIPE_LEVEL) */
 	readonly recipeLevels: Readonly<Record<string, number>>;
 	/** 鍋の基礎容量 */
 	readonly basePotCapacity: number;
@@ -193,6 +193,15 @@ export const DEFAULT_POT_CAPACITY = 81;
 
 /** レシピレベル未設定時のデフォルト値 */
 export const DEFAULT_RECIPE_LEVEL = 50;
+
+/** レシピレベルの下限 */
+export const MIN_RECIPE_LEVEL = 1;
+
+/**
+ * レシピレベルの上限。
+ * 上流の `recipeLevelBonus` テーブルが対応する最大レベルに合わせる。
+ */
+export const MAX_RECIPE_LEVEL = 70;
 
 /** デフォルトの料理シミュレーション設定を生成 */
 export function createDefaultCookingSettings(): CookingSimulationSettings {

@@ -188,6 +188,19 @@ const pokemonRectData: { [id: string]: IconData } = {
 		normalPallet: ["#3d3532", "#ffe14f", "#cd5f59", "#fefcf3"],
 		shinyPallet: ["#646566", "#f1d46d", "#fa5a56", "#fefefa"],
 	},
+	// Pikachu (Captain)
+	"45081": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 0.15, color: 0 },
+			{ x: 0, y: 0.15, w: 1, h: 0.85, color: 1 },
+			{ x: 0.65, y: 0.85, w: 0.29, h: 0.13, r: 0.04, color: 3 },
+			{ x: 0.59, y: 0.6, w: 0.4, h: 0.3, r: 0.2, color: 2 },
+			{ x: 0.65, y: 0.85, w: 0.29, h: 0.1, r: 0.01, color: 3 },
+			{ x: 0.72, y: 0.74, w: 0.15, h: 0.15, r: 0.1, color: 4 },
+		],
+		normalPallet: ["#3d3532", "#ffe14f", "#f4f4f4", "#777777", "#eadd8b"],
+		shinyPallet: ["#646566", "#f1d46d", "#f4f4f4", "#777777", "#eadd8b"],
+	},
 	// Raichu
 	"26": {
 		rects: [
@@ -443,7 +456,7 @@ const pokemonRectData: { [id: string]: IconData } = {
 			{ x: 0, y: 0.7, w: 1, h: 0.5, r: 0.3, color: 1 },
 		],
 		normalPallet: ["#f7c0d5", "#fbf4d7"],
-		shinyPallet: ["#fee6f6", "#fee6f6"],
+		shinyPallet: ["#f8e8f3", "#feffe6"],
 	},
 	// Slowbro
 	"80": {
@@ -719,6 +732,15 @@ const pokemonRectData: { [id: string]: IconData } = {
 		],
 		normalPallet: ["#faba50", "#f7ecbf"],
 		shinyPallet: ["#a2da9e", "#fefee2"],
+	},
+	// Mewtwo
+	"150": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0.8, w: 1, h: 0.2, color: 1 },
+		],
+		normalPallet: ["#f8eef8", "#ccbbdd"],
+		shinyPallet: ["#f8eef8", "#aadd88"],
 	},
 	// Mew
 	"151": {
@@ -1624,6 +1646,112 @@ const pokemonRectData: { [id: string]: IconData } = {
 		normalPallet: ["#76bde7", "#fdfdfd"],
 		shinyPallet: ["#aff2d7", "#fdfdfd"],
 	},
+	// Turtwig
+	"387": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.2, color: 1 },
+			{ x: 0, y: 0.8, w: 1, h: 0.2, color: 2 },
+		],
+		normalPallet: ["#e6fbae", "#d7a86e", "#faf776"],
+		shinyPallet: ["#b9e9ca", "#c7a767", "#f9f673"],
+	},
+	// Grotle
+	"388": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.6, color: 1 },
+			{ x: 0, y: 0, w: 1, h: 0.35, color: 2 },
+		],
+		normalPallet: ["#cce2ab", "#f8f054", "#6fc469"],
+		shinyPallet: ["#eef372", "#bef1cd", "#a0c77c"],
+	},
+	// Torterra
+	"389": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0.9, w: 1, h: 0.1, color: 1 },
+			{ x: 0, y: 0.5, w: 1, h: 0.15, color: 2 },
+		],
+		normalPallet: ["#71c66a", "#d7a36a", "#eff6fa"],
+		shinyPallet: ["#a0c57c", "#e1e36c", "#f7f8f3"],
+	},
+	// Chimchar
+	"390": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0.3, w: 1, h: 1, r: 0.3, color: 1 },
+			{ x: 0.3, y: 0.2, w: 0.4, h: 0.2, r: 0.2, color: 0 },
+			{ x: -0.06, y: 0.6, w: 0.15, h: 0.25, r: 0.1, color: 2 },
+			{ x: 0.91, y: 0.6, w: 0.15, h: 0.25, r: 0.1, color: 2 },
+		],
+		normalPallet: ["#e6a14e", "#fcfab5", "#dd5d60"],
+		shinyPallet: ["#e595a4", "#fcfec2", "#be5468"],
+	},
+	// Monferno
+	"391": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0.5, w: 1, h: 0.5, color: 3 },
+			{ x: 0, y: 0.4, w: 1, h: 0.1, color: 1 },
+			{ x: 0, y: 0.5, w: 1, h: 0.1, color: 2 },
+		],
+		normalPallet: ["#e9af4a", "#67a6e5", "#d85a58", "#f8e9d6"],
+		shinyPallet: ["#e595a4", "#9c7bd5", "#d06f84", "#fdfebb"],
+	},
+	// Infernape
+	"392": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.2, color: 1 },
+			{ x: 0, y: 0.2, w: 1, h: 0.1, color: 2 },
+			{ x: 0, y: 0.3, w: 1, h: 0.1, color: 3 },
+			{ x: 0, y: 0.5, w: 1, h: 0.4, color: 4 },
+		],
+		normalPallet: ["#ffffff", "#dd6558", "#e9b54f", "#faf476", "#dd8857"],
+		shinyPallet: ["#ffffff", "#de6751", "#e29764", "#fdfebe", "#e595a2"],
+	},
+	// Piplup
+	"393": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.4, color: 1 },
+			{ x: -0.3, y: 0.2, w: 0.7, h: 1, r: 0.4, color: 2 },
+			{ x: 0.6, y: 0.2, w: 0.7, h: 1, r: 0.4, color: 2 },
+			{ x: 0, y: 0.6, w: 1, h: 1, color: 2 },
+			{ x: 0.3, y: 0.55, w: 0.4, h: 0.35, r: 0.3, color: 3 },
+		],
+		normalPallet: ["#c3f6fc", "#6aa6f7", "#ffffff", "#f8ee7b"],
+		shinyPallet: ["#d9f6ec", "#7dccde", "#ffffff", "#fafb81"],
+	},
+	// Prinplup
+	"394": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.2, color: 1 },
+			{ x: 0, y: 0.2, w: 1, h: 0.3, color: 2 },
+			{ x: 0, y: 0.9, w: 1, h: 0.1, color: 1 },
+			{ x: 0.3, y: 0.55, w: 0.1, h: 0.12, r: 0.1, color: 3 },
+			{ x: 0.3, y: 0.72, w: 0.1, h: 0.12, r: 0.1, color: 3 },
+			{ x: 0.6, y: 0.55, w: 0.1, h: 0.12, r: 0.1, color: 3 },
+			{ x: 0.6, y: 0.72, w: 0.1, h: 0.12, r: 0.1, color: 3 },
+		],
+		normalPallet: ["#c3f3fd", "#f6ea7c", "#5084c2", "#ffffff"],
+		shinyPallet: ["#c9faef", "#fafc8b", "#4a7d94", "#ffffff"],
+	},
+	// Empoleon
+	"395": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.1, color: 1 },
+			{ x: 0, y: 0.1, w: 1, h: 0.1, color: 2 },
+			{ x: 0, y: 0.4, w: 1, h: 0.3, color: 3 },
+			{ x: 0.45, y: 0.1, w: 0.1, h: 1, color: 2 },
+			{ x: 0, y: 0.9, w: 1, h: 0.1, color: 1 },
+		],
+		normalPallet: ["#585c60", "#f5e46d", "#75a9e3", "#ffffff"],
+		shinyPallet: ["#4c8095", "#f9f474", "#c7f3f7", "#ffffff"],
+	},
 	// Shinx
 	"403": {
 		rects: [
@@ -2020,6 +2148,18 @@ const pokemonRectData: { [id: string]: IconData } = {
 		],
 		normalPallet: ["#ae7376", "#ebb76a", "#ffffff", "#55524e"],
 		shinyPallet: ["#5682c6", "#9e9a96", "#fefefe", "#3e5a96"],
+	},
+	// Hawlucha
+	"701": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.1, color: 1 },
+			{ x: 0, y: 0.1, w: 1, h: 0.2, color: 2 },
+			{ x: 0, y: 0.4, w: 1, h: 0.4, color: 3 },
+			{ x: 0, y: 0.9, w: 1, h: 0.1, color: 4 },
+		],
+		normalPallet: ["#ffffff", "#e28e45", "#82dbaf", "#dd5567", "#faf66b"],
+		shinyPallet: ["#c54d60", "#c3d86c", "#9597ce", "#5e5c64", "#f5e381"],
 	},
 	// Sylveon
 	"700": {
@@ -2570,6 +2710,41 @@ const pokemonRectData: { [id: string]: IconData } = {
 		],
 		normalPallet: ["#f4e07f", "#fdffde"],
 		shinyPallet: ["#fec2c2", "#fefede"],
+	},
+	// Tinkatink
+	"957": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.15, color: 1 },
+			{ x: 0.7, y: 0.7, w: 0.3, h: 0.3, r: 0.2, color: 2 },
+			{ x: 0.64, y: 0.76, w: 0.3, h: 0.3, r: 0.2, color: 3 },
+		],
+		normalPallet: ["#e27eb2", "#eebedd", "#8b7bc3", "#d1cbe9"],
+		shinyPallet: ["#e27eb2", "#eebedd", "#8e4c5b", "#e9ad7f"],
+	},
+	// Tinkatuff
+	"958": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.2, color: 1 },
+			{ x: 0, y: 0.2, w: 1, h: 0.07, color: 2 },
+			{ x: 0.65, y: 0.65, w: 0.4, h: 0.4, r: 0.2, color: 3 },
+			{ x: 0.55, y: 0.7, w: 0.4, h: 0.4, r: 0.2, color: 4 },
+		],
+		normalPallet: ["#e27eb2", "#f8e7e6", "#eebedd", "#8b7bc3", "#d1cbe9"],
+		shinyPallet: ["#e27eb2", "#f8e7e6", "#eebedd", "#8e4c5b", "#e9ad7f"],
+	},
+	// Tinkaton
+	"959": {
+		rects: [
+			{ x: 0, y: 0, w: 1, h: 1, color: 0 },
+			{ x: 0, y: 0, w: 1, h: 0.3, color: 2 },
+			{ x: 0, y: 0.08, w: 1, h: 0.15, color: 1 },
+			{ x: 0.6, y: 0.55, w: 0.5, h: 0.5, r: 0.3, color: 3 },
+			{ x: 0.5, y: 0.6, w: 0.5, h: 0.5, r: 0.3, color: 4 },
+		],
+		normalPallet: ["#e27eb2", "#f8e7e6", "#eebedd", "#8b7bc3", "#d1cbe9"],
+		shinyPallet: ["#e27eb2", "#f8e7e6", "#eebedd", "#8e4c5b", "#e9ad7f"],
 	},
 	// Pawmot
 	"923": {

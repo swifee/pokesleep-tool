@@ -1,4 +1,5 @@
 import type { CookingSimulationSettings } from "../types/CookingTypes";
+import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import type { TimeSlot } from "../types/TimeSlotTypes";
 
@@ -8,6 +9,8 @@ interface SimulationContextHashInput {
 	initialEnergy: number;
 	simulationDays: number;
 	timeSlots: TimeSlot[];
+	/** 仮設定（未指定ならハッシュに含めない） */
+	provisionalSettings?: ProvisionalSettings;
 }
 
 type StableValue =
@@ -67,6 +70,7 @@ export function buildSimulationContextHash(
 			initialEnergy: input.initialEnergy,
 			simulationDays: input.simulationDays,
 			timeSlots: input.timeSlots,
+			provisionalSettings: input.provisionalSettings,
 		}),
 	);
 }

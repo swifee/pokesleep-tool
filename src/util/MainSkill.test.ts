@@ -84,6 +84,17 @@ describe("MainSkill", () => {
 			expect(matchMainSkillName(murkrow, "Energy for Everyone S")).toBe(false);
 		});
 
+		test("special case: Energizing Cheer S (Heal Pulse) matches Extra Helpful S", () => {
+			const latias = pokemons.find((x) => x.name === "Latias");
+			if (latias === undefined) {
+				throw new Error("Latias not found in pokemons data");
+			}
+
+			expect(matchMainSkillName(latias, "Extra Helpful S")).toBe(true);
+			expect(matchMainSkillName(latias, "Energizing Cheer S")).toBe(true);
+			expect(matchMainSkillName(latias, "Berry Burst")).toBe(false);
+		});
+
 		describe("Mew versatile special cases", () => {
 			test("Mew with versatileSkill set matches that skill", () => {
 				const mew = pokemons.find((x) => x.name === "Mew");
@@ -170,6 +181,38 @@ describe("MainSkill", () => {
 				expect(
 					matchMainSkillName(pikachu, "Ingredient Magnet S", true, iv),
 				).toBe(false);
+			});
+		});
+
+		describe("Riolu evolution special cases", () => {
+			test("Riolu evolves to Dream Shard Magnet S (Aura Sphere), matching both Dream Shard Magnet S and Charge Strength S", () => {
+				const riolu = pokemons.find((x) => x.name === "Riolu");
+				if (riolu === undefined) {
+					throw new Error("Riolu not found in pokemons data");
+				}
+				const iv = new PokemonIv({ pokemonName: "Riolu" });
+
+				expect(
+					matchMainSkillName(riolu, "Dream Shard Magnet S", true, iv),
+				).toBe(true);
+				expect(matchMainSkillName(riolu, "Charge Strength S", true, iv)).toBe(
+					true,
+				);
+				expect(matchMainSkillName(riolu, "Ingredient Magnet S", true, iv)).toBe(
+					false,
+				);
+			});
+
+			test("Riolu without evolved flag keeps its normal skill", () => {
+				const riolu = pokemons.find((x) => x.name === "Riolu");
+				if (riolu === undefined) {
+					throw new Error("Riolu not found in pokemons data");
+				}
+				const iv = new PokemonIv({ pokemonName: "Riolu" });
+
+				expect(matchMainSkillName(riolu, "Charge Strength S", false, iv)).toBe(
+					false,
+				);
 			});
 		});
 	});

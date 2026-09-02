@@ -5,6 +5,7 @@ import type {
 	CookingSimulationSettings,
 } from "./CookingTypes";
 import type { TrialSummary } from "./MultiTrialTypes";
+import type { ProvisionalSettings } from "./ProvisionalSettingsTypes";
 import type {
 	TimelineBonusSettings,
 	TimelineFavoriteTypes,
@@ -112,6 +113,8 @@ export interface TeamTimelineState {
 	bonusSettings: TimelineBonusSettings;
 	/** 料理シミュレーション設定 */
 	cookingSettings: CookingSimulationSettings;
+	/** 仮設定（公式未公開パラメータ） */
+	provisionalSettings: ProvisionalSettings;
 	/** 個体値計算機設定との連動フラグ */
 	syncWithIvParameter: boolean;
 }
@@ -215,7 +218,9 @@ export type TeamTimelineAction =
 	| { type: "setSyncWithIvParameter"; enabled: boolean }
 	| { type: "loadSyncWithIvParameter"; enabled: boolean }
 	| { type: "setCookingSettings"; settings: CookingSimulationSettings }
-	| { type: "loadCookingSettings"; settings: CookingSimulationSettings };
+	| { type: "loadCookingSettings"; settings: CookingSimulationSettings }
+	| { type: "setProvisionalSettings"; settings: ProvisionalSettings }
+	| { type: "loadProvisionalSettings"; settings: ProvisionalSettings };
 
 /**
  * チームの最大メンバー数

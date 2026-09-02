@@ -14,9 +14,14 @@ import {
 } from "../../../../util/MainSkill";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
+import {
+	type BerryZoneProvisionalSettings,
+	createDefaultBerryZoneSettings,
+} from "../types/ProvisionalSettingsTypes";
 import SeededRandom from "./SeededRandom";
 import {
 	classifySkill,
+	isNonEPSkill,
 	type PokemonSkillBonusContext,
 	processSkillTriggers,
 	resolveSkillLevelForSkill,
@@ -2118,5 +2123,142 @@ describe("SkillEffectProcessor", () => {
 
 		expect(result.energizingCheerEvents).toHaveLength(2);
 		expect(result.nuzzleTriggeredSkillEvents).toHaveLength(0);
+	});
+});
+
+describe("上流で追加されたメインスキルの分類", () => {
+	it("Dream Shard Magnet S (Aura Sphere) をゆめのかけらスキルとして扱う", () => {
+		expect(classifySkill("Dream Shard Magnet S (Aura Sphere)")).toBe(
+			"dreamShard",
+		);
+		expect(isNonEPSkill("Dream Shard Magnet S (Aura Sphere)")).toBe(true);
+	});
+
+	it("Aura Sphere のスキル値は Dream Shard Magnet S と同じ", () => {
+		for (let level = 1; level <= 7; level += 1) {
+			expect(getSkillValue("Dream Shard Magnet S (Aura Sphere)", level)).toBe(
+				getSkillValue("Dream Shard Magnet S", level),
+			);
+		}
+	});
+
+	it("Berry Zone はカビゴンのエナジーを増やす直接EPスキルとして扱う", () => {
+		// 数値は上流未実装のため、仮設定から与える。
+		expect(classifySkill("Berry Zone")).toBe("directEP");
+		expect(classifySkill("Berry Zone (Psystrike)")).toBe("directEP");
+		expect(isNonEPSkill("Berry Zone")).toBe(false);
+	});
+});
+
+describe("Berry Zone (Psystrike)", () => {
+	function createMewtwo(skillLevel: number): PokemonBoxItem {
+		return new PokemonBoxItem(
+			new PokemonIv({ pokemonName: "Mewtwo", level: 50, skillLevel }),
+		);
+	}
+
+	function createBerryZoneBonusContext(
+		members: PokemonBoxItem[],
+		berryZone: Partial<BerryZoneProvisionalSettings>,
+		berryZoneStackCount = 0,
+	): TeamSkillBonusContext {
+		return {
+			fieldBonus: 0,
+			byPokemonId: new Map<number, PokemonSkillBonusContext>(
+				members.map((member) => [member.id, createPokemonBonusContext()]),
+			),
+			berryZone: {
+				...createDefaultBerryZoneSettings(),
+				enabled: true,
+				snorlaxEnergyByLevel: [100, 200, 300, 400, 500, 600],
+				...berryZone,
+			},
+			berryZoneStackCount,
+		};
+	}
+
+	function triggerBerryZone(
+		caster: PokemonBoxItem,
+		triggerCount: number,
+		bonusContext?: TeamSkillBonusContext,
+	) {
+		return processSkillTriggers(
+			caster,
+			triggerCount,
+			50,
+			new SeededRandom(4321),
+			[],
+			0,
+			[caster],
+			undefined,
+			false,
+			undefined,
+			undefined,
+			false,
+			bonusContext,
+		);
+	}
+
+	it("仮設定がない場合はエナジーもゾーン展開も発生しない", () => {
+		const result = triggerBerryZone(createMewtwo(3), 2);
+
+		expect(result.directEP).toBe(0);
+		expect(result.berryZoneStackGain).toBe(0);
+	});
+
+	it("仮設定が無効な場合は効果なしとして扱う", () => {
+		const caster = createMewtwo(3);
+		const bonusContext = createBerryZoneBonusContext(caster ? [caster] : [], {
+			enabled: false,
+		});
+
+		const result = triggerBerryZone(caster, 2, bonusContext);
+
+		expect(result.directEP).toBe(0);
+		expect(result.berryZoneStackGain).toBe(0);
+	});
+
+	it("発動回数分のカビゴンエナジーを獲得し、同じ回数だけ重ねがけする", () => {
+		const caster = createMewtwo(3);
+		const bonusContext = createBerryZoneBonusContext([caster], {});
+
+		const result = triggerBerryZone(caster, 2, bonusContext);
+
+		expect(result.directEP).toBe(300 * 2);
+		expect(result.berryZoneStackGain).toBe(2);
+	});
+
+	it("ゾーン展開中はマゴのみ由来のスキルEPが上がる", () => {
+		// マゴのみ（エスパー）のきのみEPを配るスキルで確認する。
+		const caster = createPokemonBySkill(
+			"Energy for Everyone S (Lunar Blessing)",
+			3,
+		);
+		expect(caster.iv.pokemon.type).toBe("psychic");
+		const withoutZone = createBerryZoneBonusContext([caster], {
+			berryEnergyBonusPercent: 20,
+		});
+		const withZone = createBerryZoneBonusContext(
+			[caster],
+			{ berryEnergyBonusPercent: 20 },
+			2,
+		);
+
+		const baseResult = triggerBerryZone(caster, 1, withoutZone);
+		const zoneResult = triggerBerryZone(caster, 1, withZone);
+
+		expect(baseResult.directEP).toBeGreaterThan(0);
+		expect(zoneResult.directEP).toBeGreaterThan(baseResult.directEP);
+	});
+
+	it("マゴのみ以外のきのみ由来のスキルEPは変わらない", () => {
+		const caster = createBerryBurstPokemon(3);
+		expect(caster.iv.pokemon.type).not.toBe("psychic");
+		const withoutZone = createBerryZoneBonusContext([caster], {});
+		const withZone = createBerryZoneBonusContext([caster], {}, 3);
+
+		expect(triggerBerryZone(caster, 1, withZone).directEP).toBe(
+			triggerBerryZone(caster, 1, withoutZone).directEP,
+		);
 	});
 });

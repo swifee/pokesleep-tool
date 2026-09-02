@@ -5,8 +5,10 @@
 	"how to use": "사용 방법",
 	"about": "이 도구에 대하여",
 	"news": "소식",
+	"faq": "자주 묻는 질문",
 	"settings": "설정",
 	"change language": "언어 전환",
+	"tap ripple effect": "탭 물결 효과",
 	"custom icon": "사용자 지정 아이콘",
 	"custom icon summary": "포켓몬 아이콘을 변경할 수 있습니다.",
 	"custom icon placeholder": "사용자 지정 아이콘의 URL",
@@ -34,10 +36,12 @@
 		"라피스 라줄리 호숫가",
 		"골드 폐발전소",
 		"앰버 골짜기",
-		"연둣빛 본섬 EX"
+		"연둣빛 본섬 EX",
+		"시안 모래해변 EX"
 	],
 	"none": "없음",
 	"enabled": "활성화",
+	"unknown": "알 수 없음",
 	"multiplier": "배율",
 	"range separator": "~",
 	"text separator": ", ",
@@ -55,6 +59,6 @@
 	"profile": "http://tech.nitoyon.com/ja/about/",
 	"x username": "nitoyon1",
 	"about2": "개선 요청 및 버그 신고는, X (트위터)의 <x>@nitoyon1</x> 또는 <github>GitHub</github>로 부탁드립니다.",
-	"about3": "사용하고 있는 데이터는 '<wiki>포켓몬 슬립 공략·검증 Wiki</wiki>', '<rp>SP 수집 프로젝트</rp>', 그리고 '<raenonx>RaenonX</raenonx>'를 참조하고 있습니다.",
-	"about4": "식재료의 아이콘은 ちゃんりわ 씨가 만들었습니다."
+	"about3": "사용하고 있는 데이터는 '<wiki>포켓몬 슬립 공략·검증 Wiki</wiki>', '<rp>SP 수집 프로젝트</rp>', 그리고 '<raenonx>RaenonX</raenonx>'를 참조하고 있습니다. 식재료의 아이콘은 ちゃんりわ 씨가 만들었습니다.",
+	"about4": "이 도구의 데이터·시뮬레이션 결과·스크린샷 등은 자유롭게 이용하실 수 있습니다. 그때 이 도구를 이용하고 있다는 점을 기재해 주시면 감사하겠습니다."
 }

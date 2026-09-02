@@ -22,6 +22,7 @@ import type {
 	CookingSimulationResult,
 	CookingSimulationSettings,
 } from "../types/CookingTypes";
+import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import {
 	type DailySummary,
@@ -36,9 +37,18 @@ import {
 	type TimeSlot,
 	type TimeSlotResult,
 } from "../types/TimeSlotTypes";
+import {
+	addBerryZoneStacks,
+	getBerryZoneMultiplierForType,
+	getInitialBerryZoneStackCount,
+} from "../utils/BerryZoneUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import { buildExpandedTimeline } from "../utils/TimelineDayExpansion";
-import { normalizeTimelinePokemon } from "../utils/TimelinePokemonUtils";
+import {
+	getProvisionalBaseFrequencySeconds,
+	getTimelineCarryLimit,
+	normalizeTimelinePokemon,
+} from "../utils/TimelinePokemonUtils";
 import { calculateDuration, isSleepingSlot } from "../utils/TimeSlotUtils";
 import {
 	addIngredientsToBag,
@@ -133,6 +143,16 @@ function getCookingEventBonusPercent(
 	return Math.round((dishBonus - 1) * 100);
 }
 
+/**
+ * イベントによる鍋容量倍率を取得する。
+ */
+function getPotSizeEventMultiplier(
+	bonusSettings: TimelineBonusSettings,
+): number {
+	return getEventBonus(bonusSettings.event, bonusSettings.customEventBonus)
+		.potSize;
+}
+
 export interface SimulationAnalysisOptions {
 	disabledPokemonIds?: readonly number[];
 	keepDisabledPokemonTargetable?: boolean;
@@ -161,6 +181,8 @@ export interface SimulationInput {
 	analysisOptions?: SimulationAnalysisOptions;
 	/** 料理シミュレーション設定（オプショナル） */
 	cookingSettings?: CookingSimulationSettings;
+	/** 仮設定（公式未公開パラメータ、オプショナル） */
+	provisionalSettings?: ProvisionalSettings;
 }
 
 /** ポケモンの状態（シミュレーション中の内部管理用） */
@@ -272,6 +294,7 @@ function buildPokemonBonusContext(
 	pokemon: PokemonBoxItem,
 	bonusSettings: TimelineBonusSettings,
 	strengthParameter: StrengthParameter,
+	provisionalSettings?: ProvisionalSettings,
 ): PokemonBonusContext {
 	const strength = new PokemonStrength(pokemon.iv, strengthParameter);
 	const bonus = strength.bonusEffects;
@@ -293,6 +316,11 @@ function buildPokemonBonusContext(
 			isGoodCampTicketSet: bonusSettings.isGoodCampTicketSet,
 			isMainBerry,
 			isNonFavoriteBerry: isExpertMode && !isFavoriteBerry,
+			fieldIndex: strengthParameter.fieldIndex,
+			baseFrequencySecondsOverride: getProvisionalBaseFrequencySeconds(
+				pokemon.iv,
+				provisionalSettings?.placeholderPokemon,
+			),
 		},
 		skill: {
 			skillTriggerBonus: bonus.skillTrigger,
@@ -487,6 +515,7 @@ function runCookingPostProcess(
 	const bag = createIngredientBag(cookingSettings.initialIngredients);
 	const cookingRandom = new SeededRandom(baseSeed + 9999);
 	const cookingEventBonus = getCookingEventBonusPercent(bonusSettings);
+	const potSizeMultiplier = getPotSizeEventMultiplier(bonusSettings);
 	const disabledRecipeSet = new Set<string>(
 		Object.entries(cookingSettings.disabledRecipes)
 			.filter(([, disabled]) => disabled === true)
@@ -532,6 +561,7 @@ function runCookingPostProcess(
 				recipeLevels: cookingSettings.recipeLevels as Record<string, number>,
 				basePotCapacity: cookingSettings.basePotCapacity,
 				isGoodCampTicket: bonusSettings.isGoodCampTicketSet,
+				potSizeMultiplier,
 				cookingPowerUpBonus,
 				tastyChanceAccumulated,
 				fieldBonus: bonusSettings.fieldBonus,
@@ -610,7 +640,10 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		noCollectCells = [],
 		box,
 		analysisOptions,
+		provisionalSettings,
 	} = input;
+	const berryZoneSettings = provisionalSettings?.berryZone;
+	const placeholderStats = provisionalSettings?.placeholderPokemon;
 	const disabledPokemonIds = new Set<number>(
 		analysisOptions?.disabledPokemonIds ?? [],
 	);
@@ -632,7 +665,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		if (cached) {
 			return cached;
 		}
-		const normalized = normalizeTimelinePokemon(pokemon, strengthParameter);
+		const normalized = normalizeTimelinePokemon(
+			pokemon,
+			strengthParameter,
+			placeholderStats,
+		);
 		normalizedPokemonById.set(pokemon.id, normalized);
 		return normalized;
 	};
@@ -678,6 +715,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			pokemon,
 			bonusSettings,
 			strengthParameter,
+			provisionalSettings,
 		);
 		bonusContextByPokemonId.set(pokemon.id, built);
 		return built;
@@ -742,7 +780,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			carriedSkillIngredients: new Map<IngredientName, number>(),
 			bankedTimeSeconds: 0,
 			maxSkillStock: getMaxSkillStock(pokemon.iv.pokemon.specialty),
-			maxInventory: pokemon.iv.carryLimit,
+			maxInventory: getTimelineCarryLimit(pokemon.iv, placeholderStats),
 			stockpileCount: 0,
 			berryBurstDisguiseLocked: false,
 		});
@@ -751,6 +789,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 	// 7. 結果を格納するマップ
 	const slotResults = new Map<string, TimeSlotResult[]>();
 	const pokemonResults = new Map<number, TimeSlotResult[]>(); // pokemonId -> results
+
+	// 7.5. 「きのみゾーン」の展開状況（フィールド単位の状態のため、チーム全体で共有する）
+	let berryZoneStackCount = getInitialBerryZoneStackCount(berryZoneSettings);
 
 	// 8. 時間帯ループ
 	let activeDayIndex = -1;
@@ -816,7 +857,12 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		const teamSkillBonusContext: TeamSkillBonusContext = {
 			fieldBonus: bonusSettings.fieldBonus,
 			byPokemonId: teamSkillBonusByPokemonId,
+			berryZone: berryZoneSettings,
+			berryZoneStackCount,
 		};
+		// この時間帯に回収するきのみへ適用する重ねがけ数。
+		// 発動による重ねがけは次の時間帯から反映する。
+		const berryZoneStackCountAtSlotStart = berryZoneStackCount;
 
 		// 睡眠開始を追跡
 		if (getDisplayLabel(slot) === "sleep") {
@@ -1079,6 +1125,17 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			}
 		}
 
+		// 「きのみゾーン」の重ねがけを反映（効果は次の時間帯から）
+		let berryZoneStackGain = 0;
+		skillResults.forEach((skillResult) => {
+			berryZoneStackGain += skillResult.berryZoneStackGain;
+		});
+		berryZoneStackCount = addBerryZoneStacks(
+			berryZoneStackCount,
+			berryZoneStackGain,
+			berryZoneSettings,
+		);
+
 		// Phase 2: 各ポケモンのげんき更新と結果生成
 		const slotResultsForThisSlot: TimeSlotResult[] = [];
 
@@ -1328,6 +1385,12 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				badDreamsHitCount: skillResult.badDreamsHitCount,
 				badDreamsTotalDamageGiven: skillResult.badDreamsTotalDamage,
 				badDreamsDamageTaken: actualBadDreamsDamage,
+				berryZoneStackCount: berryZoneStackCountAtSlotStart,
+				berryZoneMultiplier: getBerryZoneMultiplierForType(
+					state.pokemon.iv.pokemon.type,
+					berryZoneSettings,
+					berryZoneStackCountAtSlotStart,
+				),
 			};
 
 			slotResultsForThisSlot.push(result);
@@ -1412,7 +1475,10 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				carriedSkillIngredients: new Map<IngredientName, number>(),
 				bankedTimeSeconds: 0,
 				maxSkillStock: getMaxSkillStock(simulationPokemon.iv.pokemon.specialty),
-				maxInventory: simulationPokemon.iv.carryLimit,
+				maxInventory: getTimelineCarryLimit(
+					simulationPokemon.iv,
+					placeholderStats,
+				),
 				stockpileCount: 0,
 				berryBurstDisguiseLocked: false,
 			};

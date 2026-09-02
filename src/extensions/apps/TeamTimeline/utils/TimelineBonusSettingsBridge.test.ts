@@ -150,3 +150,41 @@ describe("TimelineBonusSettingsBridge", () => {
 		});
 	});
 });
+
+describe("TimelineBonusSettingsBridge レシピレベルの範囲", () => {
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	it("上流の上限まで拡張されたレシピレベルを受け付ける", () => {
+		expect(
+			normalizeTimelineBonusSettings({ recipeLevel: 70 }).recipeLevel,
+		).toBe(70);
+		expect(
+			normalizeTimelineBonusSettings({ recipeLevel: 66 }).recipeLevel,
+		).toBe(66);
+	});
+
+	it("上限を超えるレシピレベルは上限へ丸める", () => {
+		expect(
+			normalizeTimelineBonusSettings({ recipeLevel: 100 }).recipeLevel,
+		).toBe(70);
+	});
+
+	it("下限未満のレシピレベルは下限へ丸める", () => {
+		expect(normalizeTimelineBonusSettings({ recipeLevel: 0 }).recipeLevel).toBe(
+			1,
+		);
+		expect(
+			normalizeTimelineBonusSettings({ recipeLevel: -10 }).recipeLevel,
+		).toBe(1);
+	});
+
+	it("数値以外のレシピレベルは既定値へフォールバックする", () => {
+		expect(
+			normalizeTimelineBonusSettings({
+				recipeLevel: "70" as unknown as number,
+			}).recipeLevel,
+		).toBe(createDefaultTimelineBonusSettings().recipeLevel);
+	});
+});

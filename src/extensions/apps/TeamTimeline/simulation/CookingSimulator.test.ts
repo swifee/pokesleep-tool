@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	calculateEffectivePotCapacity,
 	computeInitialIngredientAttributedEP,
 	createIngredientBag,
 	executeMealCooking,
@@ -290,5 +291,72 @@ describe("CookingSimulator", () => {
 		]);
 
 		expect(totalInitialIngredientEP).toBeCloseTo(62.55, 2);
+	});
+});
+
+describe("calculateEffectivePotCapacity", () => {
+	it("イベント倍率がない場合は従来の容量を維持する", () => {
+		expect(calculateEffectivePotCapacity(60, false, 0)).toBe(60);
+		expect(calculateEffectivePotCapacity(60, false, 0, 1)).toBe(60);
+	});
+
+	it("イベントの鍋容量倍率を基礎容量へ適用する", () => {
+		expect(calculateEffectivePotCapacity(60, false, 0, 1.6)).toBe(96);
+		expect(calculateEffectivePotCapacity(60, false, 0, 2)).toBe(120);
+	});
+
+	it("イベント倍率とキャンプチケット倍率は乗算で重なる", () => {
+		expect(calculateEffectivePotCapacity(60, true, 0, 2)).toBe(180);
+	});
+
+	it("料理パワーアップの追加容量は倍率適用後に加算する", () => {
+		expect(calculateEffectivePotCapacity(60, false, 7, 2)).toBe(127);
+	});
+
+	it("端数は丸めてから追加容量を足す", () => {
+		// 21 * 1.6 = 33.6 -> 34
+		expect(calculateEffectivePotCapacity(21, false, 0, 1.6)).toBe(34);
+	});
+
+	it("1未満の倍率は無効な入力として1として扱う", () => {
+		expect(calculateEffectivePotCapacity(60, false, 0, 0)).toBe(60);
+		expect(calculateEffectivePotCapacity(60, false, 0, -3)).toBe(60);
+	});
+});
+
+describe("executeMealCooking の鍋容量倍率", () => {
+	it("鍋容量倍率が有効容量へ反映される", () => {
+		const withoutBonus = executeMealCooking({
+			bag: createIngredientBag({ apple: 20 }),
+			category: "curry",
+			recipeLevels: {},
+			basePotCapacity: 7,
+			isGoodCampTicket: false,
+			cookingPowerUpBonus: 0,
+			tastyChanceAccumulated: 0,
+			fieldBonus: 0,
+			eventBonus: 0,
+			random: new SeededRandom(2026),
+			mealSlotId: "meal-1",
+			mealType: "breakfast",
+		});
+		const withBonus = executeMealCooking({
+			bag: createIngredientBag({ apple: 20 }),
+			category: "curry",
+			recipeLevels: {},
+			basePotCapacity: 7,
+			isGoodCampTicket: false,
+			potSizeMultiplier: 2,
+			cookingPowerUpBonus: 0,
+			tastyChanceAccumulated: 0,
+			fieldBonus: 0,
+			eventBonus: 0,
+			random: new SeededRandom(2026),
+			mealSlotId: "meal-1",
+			mealType: "breakfast",
+		});
+
+		expect(withoutBonus.result.effectivePotCapacity).toBe(7);
+		expect(withBonus.result.effectivePotCapacity).toBe(14);
 	});
 });

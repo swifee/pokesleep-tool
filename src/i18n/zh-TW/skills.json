@@ -72,6 +72,12 @@
 			"desc": "$t(skills.Dream Shard Magnet S.desc)",
 			"detail": "$t(skills.random)"
 		},
+		"Dream Shard Magnet S (Aura Sphere)": {
+			"name": "波導彈 (夢之碎片獲取S)",
+			"strength": "",
+			"desc": "獲得夢之碎片，且增加卡比獸的能量。",
+			"detail": "$t(skills.Dream Shard Magnet S.detail)"
+		},
 		"Energizing Cheer S": {
 			"name": "活力療愈S",
 			"strength": "技能造成的體力回復沒有換算成合計能量值。",
@@ -110,13 +116,13 @@
 		},
 		"Energy for Everyone S (Berry Juice)": {
 			"name": "樹果汁 (活力全體療癒S)",
-			"strength": "$t(skills.Energy for Everyone S.strength)$t(berry juice assumption)",
+			"strength": "$t(skills.Energy for Everyone S.strength)樹果汁獲取機率根據 RaenonX 的統計數據 (18.5%)。",
 			"desc": "$t(skills.Energy for Everyone S.desc)有時候還會額外獲得樹果汁。",
 			"detail": "$t(skills.Energy for Everyone S.detail) 樹果汁最多可持有5個。獲取率約為20%。"
 		},
 		"Extra Helpful S": {
 			"name": "幫手支援S",
-			"strength": "顯示技能發動帶來的 [幫助次數] 。能量總量以每次幫助 300（不含營地獎勵）進行計算。",
+			"strength": "顯示技能發動帶來的 [幫助次數] 。$t(other member calculation)",
 			"desc": "幫手寶可夢中的某1隻會立刻完成幫忙。",
 			"detail": "包括自己在內隨機選擇目標。不會觸發主技能抽籤。不受$t(expert mode)和$t(event bonus)引起的樹果·食材數量變化的影響。"
 		},
@@ -140,7 +146,7 @@
 		},
 		"Helper Boost": {
 			"name": "幫手加速",
-			"strength": "假定為同類型的3隻寶可夢。能量總量以每次幫助 300（不含營地獎勵）進行計算。",
+			"strength": "假定為同類型的3隻寶可夢。$t(other member calculation)",
 			"desc": "隊伍中的所有寶可夢會立刻完成幫忙。滿足特定條件時，效果會進一步提升。",
 			"detail": "幫忙寶可夢可超過$t(carry limit)，最多持有999個樹果·食材。"
 		},
@@ -213,6 +219,16 @@
 			"strength": "",
 			"desc": "獲得自己以及隊伍中的寶可夢會撿來的樹果。隊伍中有越多不同種類的龍屬性幫手寶可夢，樹果數量就會增加得越多。隊伍中有拉帝亞斯時，自己獲得的樹果數量會增加得更多。",
 			"detail": ""
+		},
+		"Berry Zone": {
+			"name": "樹果領域",
+			"strength": ""
+		},
+		"Berry Zone (Psystrike)": {
+			"name": "精神擊破 (樹果領域)",
+			"strength": "",
+			"desc": "增加卡比獸能量的同時，還會在營地展開「樹果領域」。",
+			"detail": "藉由精神擊破 (樹果領域) 展開「樹果領域」的期間，透過芒芒果 (超能力屬性) 獲得的能量會提升。"
 		},
 		"unknown": {
 			"name": "(未知)",

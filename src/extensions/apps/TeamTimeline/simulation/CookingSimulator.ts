@@ -11,6 +11,7 @@ import {
 	DEFAULT_RECIPE_LEVEL,
 	type IngredientBag,
 	type LeftoverIngredients,
+	MAX_RECIPE_LEVEL,
 	type PokemonCookingAttribution,
 	type RecipeDefinition,
 } from "../types/CookingTypes";
@@ -38,6 +39,8 @@ interface ExecuteMealCookingParams {
 	recipeLevels: Record<string, number>;
 	basePotCapacity: number;
 	isGoodCampTicket: boolean;
+	/** イベントによる鍋容量倍率（1 / 1.6 / 2） */
+	potSizeMultiplier?: number;
 	cookingPowerUpBonus: number;
 	tastyChanceAccumulated: number;
 	fieldBonus: number;
@@ -127,23 +130,39 @@ export function addIngredientsToBag(
 	}
 }
 
+/** イベントによる鍋容量倍率の既定値（ボーナスなし） */
+const DEFAULT_POT_SIZE_MULTIPLIER = 1;
+
+/** おこうグッドキャンプチケットによる鍋容量倍率 */
+const GOOD_CAMP_TICKET_POT_MULTIPLIER = 1.5;
+
 /**
  * 有効鍋容量を計算する
  *
- * 基礎容量にキャンプチケット倍率と料理パワーアップボーナスを適用する。
+ * 基礎容量にイベント倍率・キャンプチケット倍率・料理パワーアップボーナスを
+ * 適用する。倍率は乗算で重ねてから丸める。
  *
  * @param basePotCapacity 鍋の基礎容量
  * @param isGoodCampTicket おこうグッドキャンプチケット使用中かどうか
  * @param cookingPowerUpBonus 料理パワーアップスキルによる追加容量
+ * @param potSizeMultiplier イベントによる鍋容量倍率（1 / 1.6 / 2）
  * @returns 有効鍋容量
  */
 export function calculateEffectivePotCapacity(
 	basePotCapacity: number,
 	isGoodCampTicket: boolean,
 	cookingPowerUpBonus: number,
+	potSizeMultiplier: number = DEFAULT_POT_SIZE_MULTIPLIER,
 ): number {
+	const eventMultiplier = Math.max(
+		DEFAULT_POT_SIZE_MULTIPLIER,
+		potSizeMultiplier,
+	);
+	const campTicketMultiplier = isGoodCampTicket
+		? GOOD_CAMP_TICKET_POT_MULTIPLIER
+		: 1;
 	return (
-		Math.round(basePotCapacity * (isGoodCampTicket ? 1.5 : 1)) +
+		Math.round(basePotCapacity * eventMultiplier * campTicketMultiplier) +
 		cookingPowerUpBonus
 	);
 }
@@ -396,7 +415,7 @@ export function selectBestRecipe(
 		);
 		const eBase = Math.round(rawStrength * (1 + recipe.recipeBonus));
 		const level = recipeLevels[recipe.name] ?? DEFAULT_RECIPE_LEVEL;
-		const levelBonus = recipeLevelBonus[Math.min(level, 65)] ?? 0;
+		const levelBonus = recipeLevelBonus[Math.min(level, MAX_RECIPE_LEVEL)] ?? 0;
 		const eDisplay = eBase + Math.round((eBase * levelBonus) / 100);
 		const eFinal = Math.round(
 			eDisplay * (1 + fieldBonus / 100) * (1 + eventBonus / 100),
@@ -514,6 +533,7 @@ export function executeMealCooking(
 		recipeLevels,
 		basePotCapacity,
 		isGoodCampTicket,
+		potSizeMultiplier,
 		cookingPowerUpBonus,
 		tastyChanceAccumulated,
 		fieldBonus,
@@ -528,6 +548,7 @@ export function executeMealCooking(
 		basePotCapacity,
 		isGoodCampTicket,
 		cookingPowerUpBonus,
+		potSizeMultiplier,
 	);
 	const bagIngredientsBeforeCooking = createBagIngredientSnapshot(bag);
 

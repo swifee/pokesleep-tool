@@ -2,6 +2,7 @@ import common from "./zh-TW/common.json";
 import data from "./zh-TW/data.json";
 import events from "./zh-TW/events.json";
 import IvCalc from "./zh-TW/IvCalc.json";
+import IvCalcFaq from "./zh-TW/IvCalcFaq.json";
 import IvCalcNews from "./zh-TW/IvCalcNews.json";
 import pokemons from "./zh-TW/pokemons.json";
 import ResearchCalc from "./zh-TW/ResearchCalc.json";
@@ -14,10 +15,12 @@ export default {
 		...ResearchCalc,
 		...IvCalc,
 		...IvCalcNews,
+		...IvCalcFaq,
 		TeamTimeline: legacy.translation.TeamTimeline,
 		IvCalc: {
 			...IvCalc.IvCalc,
 			...IvCalcNews.IvCalc,
+			...IvCalcFaq.IvCalc,
 		},
 		...events,
 		...skills,

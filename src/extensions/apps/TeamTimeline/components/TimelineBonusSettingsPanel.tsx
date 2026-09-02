@@ -17,6 +17,7 @@ import { getActiveHelpBonus } from "../../../../data/events";
 import AreaControlGroup from "../../../../ui/IvCalc/Strength/AreaControlGroup";
 import EventConfigDialog from "../../../../ui/IvCalc/Strength/EventConfigDialog";
 import type { StrengthParameter } from "../../../../util/PokemonStrength";
+import { MAX_RECIPE_LEVEL, MIN_RECIPE_LEVEL } from "../types/CookingTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import {
 	buildStrengthParameterFromTimelineBonusSettings,
@@ -199,8 +200,8 @@ const TimelineBonusSettingsPanel = React.memo(
 						<Slider
 							value={parameter.recipeLevel}
 							onChange={handleRecipeLevelChange}
-							min={1}
-							max={65}
+							min={MIN_RECIPE_LEVEL}
+							max={MAX_RECIPE_LEVEL}
 							step={1}
 							valueLabelDisplay="auto"
 						/>

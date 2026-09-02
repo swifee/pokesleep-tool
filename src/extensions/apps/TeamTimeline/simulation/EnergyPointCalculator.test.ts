@@ -9,6 +9,7 @@ import type {
 } from "../types/TimeSlotTypes";
 import {
 	aggregateIngredients,
+	applyBerryZoneMultiplier,
 	calculateBerryEP,
 	calculateBerryStrength,
 	calculateDailySummary,
@@ -992,5 +993,109 @@ describe("EnergyPointCalculator", () => {
 			expect(teamSummary.totalTastyChanceIncreasePercent).toBe(0);
 			expect(teamSummary.totalDreamShardCount).toBe(0);
 		});
+	});
+});
+
+describe("きのみゾーンのきのみEP", () => {
+	function createSlotResult(
+		overrides: Partial<TimeSlotResult> = {},
+	): TimeSlotResult {
+		return {
+			slotId: "slot-1",
+			pokemonId: 1,
+			teamIndex: 0,
+			durationMinutes: 300,
+			isSleeping: false,
+			helpCount: 0,
+			skillTriggerCount: 0,
+			berryCount: 0,
+			ingredients: [],
+			energyStart: 100,
+			energyEnd: 100,
+			mealRecovery: 0,
+			skillRecovery: 0,
+			wakeRecovery: 0,
+			energyDecay: 0,
+			skillOverflowCount: 0,
+			overflowIngredients: [],
+			selfSkillRecovery: 0,
+			directSkillEP: 0,
+			moonlightGivenRecovery: 0,
+			moonlightReceivedRecovery: 0,
+			energizingCheerGivenRecovery: 0,
+			energizingCheerReceivedRecovery: 0,
+			energizingCheerEvents: [],
+			nuzzleTriggeredSkillEvents: [],
+			presentCandyCount: 0,
+			berryJuiceCount: 0,
+			supportSkillBerryCount: 0,
+			supportSkillBerryEP: 0,
+			supportHelpEvents: [],
+			stockpileStoreCount: 0,
+			stockpileSpitCount: 0,
+			badDreamsHitCount: 0,
+			badDreamsTotalDamageGiven: 0,
+			badDreamsDamageTaken: 0,
+			...overrides,
+		};
+	}
+
+	const bonusContext = {
+		fieldBonus: 0,
+		berryStrengthBonus: 1,
+		recipeBonus: 0,
+		recipeLevel: 1,
+		dishBonus: 1,
+	};
+
+	it("倍率が未指定なら元のボーナスコンテキストを返す", () => {
+		expect(applyBerryZoneMultiplier(bonusContext, undefined)).toBe(
+			bonusContext,
+		);
+		expect(applyBerryZoneMultiplier(bonusContext, 1)).toBe(bonusContext);
+		expect(applyBerryZoneMultiplier(undefined, 1.5)).toBeUndefined();
+	});
+
+	it("倍率をきのみ強度ボーナスに掛ける", () => {
+		expect(applyBerryZoneMultiplier(bonusContext, 1.5)).toEqual({
+			...bonusContext,
+			berryStrengthBonus: 1.5,
+		});
+	});
+
+	it("きのみEPは時間帯ごとの倍率で計算する", () => {
+		const iv = new PokemonIv({ pokemonName: "Natu", level: 1 });
+		const pokemon = new PokemonBoxItem(iv);
+		const results = [
+			createSlotResult({ slotId: "slot-1", berryCount: 10 }),
+			createSlotResult({
+				slotId: "slot-2",
+				berryCount: 10,
+				berryZoneMultiplier: 1.5,
+			}),
+		];
+
+		const summary = calculateDailySummary(1, pokemon, results, bonusContext);
+
+		const baseStrength = calculateBerryStrength(
+			pokemon.iv.pokemon.type,
+			pokemon.iv.level,
+		);
+		expect(summary.berryEP).toBe(
+			baseStrength * 10 + Math.ceil(baseStrength * 1.5) * 10,
+		);
+	});
+
+	it("倍率がなければ従来どおり合計個数から計算した値と一致する", () => {
+		const iv = new PokemonIv({ pokemonName: "Natu", level: 1 });
+		const pokemon = new PokemonBoxItem(iv);
+		const results = [
+			createSlotResult({ slotId: "slot-1", berryCount: 7 }),
+			createSlotResult({ slotId: "slot-2", berryCount: 13 }),
+		];
+
+		const summary = calculateDailySummary(1, pokemon, results, bonusContext);
+
+		expect(summary.berryEP).toBe(calculateBerryEP(pokemon, 20, bonusContext));
 	});
 });

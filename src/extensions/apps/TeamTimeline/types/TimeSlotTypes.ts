@@ -320,6 +320,13 @@ export interface TimeSlotResult {
 	badDreamsTotalDamageGiven: number;
 	/** Charge Strength M (Bad Dreams): 自分が受けた減少量 */
 	badDreamsDamageTaken: number;
+	/**
+	 * この時間帯のきのみEPに適用する「きのみゾーン」倍率。
+	 * 未指定または 1 のときは効果なし。
+	 */
+	berryZoneMultiplier?: number;
+	/** この時間帯の開始時点で展開されていた「きのみゾーン」の重ねがけ数 */
+	berryZoneStackCount?: number;
 }
 
 /**
