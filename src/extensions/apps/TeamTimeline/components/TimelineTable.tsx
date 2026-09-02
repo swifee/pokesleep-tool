@@ -16,6 +16,7 @@ import type PokemonBox from "../../../../util/PokemonBox";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonStrength from "../../../../util/PokemonStrength";
 import {
+	applyBerryZoneMultiplier,
 	calculateBerryEP,
 	calculateIngredientEP,
 	type DailySummaryBonusContext,
@@ -237,7 +238,10 @@ const TimelineTable = React.memo(
 					cumulativeEp += calculateBerryEP(
 						pokemon,
 						slotResult.berryCount,
-						bonusContext,
+						applyBerryZoneMultiplier(
+							bonusContext,
+							slotResult.berryZoneMultiplier,
+						),
 					);
 					if (!shouldUseCookingTotals) {
 						const allIngredients =

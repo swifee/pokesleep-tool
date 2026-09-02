@@ -133,6 +133,32 @@ export function calculateBerryEP(
 }
 
 /**
+ * 「きのみゾーン」倍率を反映したボーナスコンテキストを返す。
+ * 倍率が効果なし（未指定または1）の場合は元のコンテキストをそのまま返す。
+ *
+ * @param bonusContext - 元のボーナスコンテキスト
+ * @param berryZoneMultiplier - 時間帯ごとのきのみゾーン倍率
+ * @returns きのみゾーンを反映したボーナスコンテキスト
+ */
+export function applyBerryZoneMultiplier(
+	bonusContext: DailySummaryBonusContext | undefined,
+	berryZoneMultiplier: number | undefined,
+): DailySummaryBonusContext | undefined {
+	if (
+		bonusContext === undefined ||
+		berryZoneMultiplier === undefined ||
+		!Number.isFinite(berryZoneMultiplier) ||
+		berryZoneMultiplier === 1
+	) {
+		return bonusContext;
+	}
+	return {
+		...bonusContext,
+		berryStrengthBonus: bonusContext.berryStrengthBonus * berryZoneMultiplier,
+	};
+}
+
+/**
  * 食材EPを計算
  *
  * @param ingredients - 食材の配列
@@ -287,7 +313,17 @@ export function calculateDailySummary(
 	const totalOverflowIngredients = aggregateOverflowIngredients(results);
 
 	// 各EPを計算
-	const berryEP = calculateBerryEP(pokemon, totalBerryCount, bonusContext);
+	// きのみゾーンの倍率は時間帯ごとに変わるため、時間帯単位で計算して合計する。
+	const berryEP = results.reduce(
+		(total, result) =>
+			total +
+			calculateBerryEP(
+				pokemon,
+				result.berryCount,
+				applyBerryZoneMultiplier(bonusContext, result.berryZoneMultiplier),
+			),
+		0,
+	);
 	const ingredientEP = calculateIngredientEP(totalIngredients, bonusContext);
 
 	// スキルEPの計算: 直接エナジー獲得値のみを集計

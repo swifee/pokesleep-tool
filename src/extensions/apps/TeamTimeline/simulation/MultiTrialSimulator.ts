@@ -12,6 +12,7 @@ import type {
 	CookingSimulationSettings,
 } from "../types/CookingTypes";
 import type { MultiTrialResult, TrialSummary } from "../types/MultiTrialTypes";
+import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import type {
 	DailySummary,
@@ -34,6 +35,8 @@ export interface MultiTrialInput {
 	readonly noCollectCells?: NoCollectCellSetting[];
 	readonly box?: PokemonBox;
 	readonly cookingSettings?: CookingSimulationSettings;
+	/** 仮設定（公式未公開パラメータ） */
+	readonly provisionalSettings?: ProvisionalSettings;
 	readonly trialCount: number;
 	readonly initialSeed?: number;
 }
@@ -508,6 +511,7 @@ export function runMultiTrialSimulation(
 			noCollectCells,
 			box,
 			cookingSettings: input.cookingSettings,
+			provisionalSettings: input.provisionalSettings,
 		});
 
 		trials.push({
@@ -605,6 +609,7 @@ export async function runMultiTrialSimulationWithProgress(
 			noCollectCells,
 			box,
 			cookingSettings: input.cookingSettings,
+			provisionalSettings: input.provisionalSettings,
 		});
 
 		trials.push({
