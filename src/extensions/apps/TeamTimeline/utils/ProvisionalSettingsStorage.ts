@@ -10,8 +10,12 @@ import {
 	BERRY_ZONE_MAX_STACK_LIMIT,
 	type BerryZoneProvisionalSettings,
 	createDefaultBerryZoneSettings,
+	createDefaultHugeMagoBerrySettings,
 	createDefaultPlaceholderPokemonSettings,
 	createDefaultProvisionalSettings,
+	HUGE_MAGO_BERRY_MAX_ENERGY_MULTIPLIER,
+	HUGE_MAGO_BERRY_MAX_PICKUP_RATE_PERCENT,
+	type HugeMagoBerryProvisionalSettings,
 	PLACEHOLDER_MAX_CARRY_LIMIT,
 	PLACEHOLDER_MAX_FREQUENCY_SECONDS,
 	PLACEHOLDER_MAX_SKILL_RATE_PERCENT,
@@ -112,6 +116,42 @@ export function normalizeBerryZoneSettings(
 	};
 }
 
+/** とてもおおきなマゴのみの仮パラメータを正規化する */
+export function normalizeHugeMagoBerrySettings(
+	input: unknown,
+): HugeMagoBerryProvisionalSettings {
+	const defaults = createDefaultHugeMagoBerrySettings();
+	const raw = toRecord(input);
+	if (raw === null) {
+		return defaults;
+	}
+
+	const clampPickupRate = (value: unknown, fallback: number): number =>
+		clampNumber(value, 0, HUGE_MAGO_BERRY_MAX_PICKUP_RATE_PERCENT, fallback);
+
+	return {
+		enabled: typeof raw.enabled === "boolean" ? raw.enabled : defaults.enabled,
+		energyMultiplier: clampNumber(
+			raw.energyMultiplier,
+			0,
+			HUGE_MAGO_BERRY_MAX_ENERGY_MULTIPLIER,
+			defaults.energyMultiplier,
+		),
+		legendaryPickupRatePercent: clampPickupRate(
+			raw.legendaryPickupRatePercent,
+			defaults.legendaryPickupRatePercent,
+		),
+		psychicPickupRatePercent: clampPickupRate(
+			raw.psychicPickupRatePercent,
+			defaults.psychicPickupRatePercent,
+		),
+		otherPickupRatePercent: clampPickupRate(
+			raw.otherPickupRatePercent,
+			defaults.otherPickupRatePercent,
+		),
+	};
+}
+
 /** データ未公開ポケモンの仮ステータスを正規化する */
 export function normalizePlaceholderPokemonSettings(
 	input: unknown,
@@ -155,6 +195,7 @@ export function normalizeProvisionalSettings(
 	}
 	return {
 		berryZone: normalizeBerryZoneSettings(raw.berryZone),
+		hugeMagoBerry: normalizeHugeMagoBerrySettings(raw.hugeMagoBerry),
 		placeholderPokemon: normalizePlaceholderPokemonSettings(
 			raw.placeholderPokemon,
 		),

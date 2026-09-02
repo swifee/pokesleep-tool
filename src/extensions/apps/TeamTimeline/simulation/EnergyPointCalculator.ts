@@ -8,6 +8,7 @@ import type {
 	TeamSummary,
 	TimeSlotResult,
 } from "../types/TimeSlotTypes";
+import { HUGE_MAGO_BERRY_TYPE } from "../utils/HugeMagoBerryUtils";
 
 /**
  * きのみ強度マップ（タイプ別）
@@ -114,22 +115,61 @@ export function calculateBerryEP(
 	berryCount: number,
 	bonusContext?: DailySummaryBonusContext,
 ): number {
-	const strength = calculateBerryStrength(
+	const perBerryStrength = calculateEnergyPerBerry(
 		pokemon.iv.pokemon.type,
 		pokemon.iv.level,
+		bonusContext,
 	);
-	if (!bonusContext) {
-		return strength * berryCount;
-	}
+	return perBerryStrength * berryCount;
+}
 
+/**
+ * きのみ1個あたりのエナジー（エリアボーナス・好みのきのみ補正まで反映）を計算する。
+ */
+function calculateEnergyPerBerry(
+	type: PokemonType,
+	level: number,
+	bonusContext?: DailySummaryBonusContext,
+): number {
+	const strength = calculateBerryStrength(type, level);
+	if (!bonusContext) {
+		return strength;
+	}
 	const normalized = normalizeDailySummaryBonusContext(bonusContext);
 	const areaAppliedStrength = Math.ceil(
 		strength * (1 + normalized.fieldBonus / 100),
 	);
-	const perBerryStrength = Math.ceil(
-		areaAppliedStrength * normalized.berryStrengthBonus,
+	return Math.ceil(areaAppliedStrength * normalized.berryStrengthBonus);
+}
+
+/**
+ * 「とてもおおきなマゴのみ」のEPを計算する。
+ *
+ * 通常のマゴのみ（エスパータイプ）1個分のエナジーに、仮設定の倍率を掛けたもの。
+ * `bonusContext` にはマゴのみとしての好みのきのみ補正を渡すこと
+ * （拾ったポケモン自身のきのみタイプではない）。
+ *
+ * @param level - 拾ったポケモンのレベル
+ * @param count - とてもおおきなマゴのみの個数
+ * @param energyMultiplier - 通常のマゴのみに対するエナジー倍率
+ * @param bonusContext - ボーナスコンテキスト
+ * @returns とてもおおきなマゴのみのEP
+ */
+export function calculateHugeMagoBerryEP(
+	level: number,
+	count: number,
+	energyMultiplier: number,
+	bonusContext?: DailySummaryBonusContext,
+): number {
+	if (count <= 0 || energyMultiplier <= 0) {
+		return 0;
+	}
+	const perBerryStrength = calculateEnergyPerBerry(
+		HUGE_MAGO_BERRY_TYPE,
+		level,
+		bonusContext,
 	);
-	return perBerryStrength * berryCount;
+	return Math.ceil(perBerryStrength * energyMultiplier) * count;
 }
 
 /**
@@ -286,6 +326,8 @@ export function calculateDailySummary(
 	let totalHelpCount = 0;
 	let totalSkillCount = 0;
 	let totalBerryCount = 0;
+	let totalHugeMagoBerryCount = 0;
+	let hugeMagoBerryEP = 0;
 	let totalSkillOverflowCount = 0;
 	let totalDirectSkillEP = 0;
 	let totalPresentCandyCount = 0;
@@ -297,6 +339,8 @@ export function calculateDailySummary(
 		totalHelpCount += result.helpCount;
 		totalSkillCount += result.skillTriggerCount;
 		totalBerryCount += result.berryCount;
+		totalHugeMagoBerryCount += result.hugeMagoBerryCount ?? 0;
+		hugeMagoBerryEP += result.hugeMagoBerryEP ?? 0;
 		totalSkillOverflowCount += result.skillOverflowCount;
 		totalDirectSkillEP += result.directSkillEP;
 		totalPresentCandyCount += result.presentCandyCount;
@@ -314,16 +358,18 @@ export function calculateDailySummary(
 
 	// 各EPを計算
 	// きのみゾーンの倍率は時間帯ごとに変わるため、時間帯単位で計算して合計する。
-	const berryEP = results.reduce(
-		(total, result) =>
-			total +
-			calculateBerryEP(
-				pokemon,
-				result.berryCount,
-				applyBerryZoneMultiplier(bonusContext, result.berryZoneMultiplier),
-			),
-		0,
-	);
+	// とてもおおきなマゴのみのEPはシミュレーション時に算出済みのため、ここでは加算のみ行う。
+	const berryEP =
+		results.reduce(
+			(total, result) =>
+				total +
+				calculateBerryEP(
+					pokemon,
+					result.berryCount,
+					applyBerryZoneMultiplier(bonusContext, result.berryZoneMultiplier),
+				),
+			0,
+		) + hugeMagoBerryEP;
 	const ingredientEP = calculateIngredientEP(totalIngredients, bonusContext);
 
 	// スキルEPの計算: 直接エナジー獲得値のみを集計
@@ -336,6 +382,8 @@ export function calculateDailySummary(
 		totalHelpCount,
 		totalSkillCount,
 		totalBerryCount,
+		totalHugeMagoBerryCount,
+		hugeMagoBerryEP,
 		totalIngredients,
 		totalSkillIngredients,
 		berryEP,
@@ -364,6 +412,8 @@ export function calculateTeamSummary(
 	dailySummaries: DailySummary[],
 ): TeamSummary {
 	let totalBerryEP = 0;
+	let totalHugeMagoBerryCount = 0;
+	let totalHugeMagoBerryEP = 0;
 	let totalIngredientEP = 0;
 	let totalSkillEP = 0;
 	let totalPresentCandyCount = 0;
@@ -375,6 +425,8 @@ export function calculateTeamSummary(
 	const allIngredients: IngredientResult[] = [];
 	for (const summary of dailySummaries) {
 		totalBerryEP += summary.berryEP;
+		totalHugeMagoBerryCount += summary.totalHugeMagoBerryCount ?? 0;
+		totalHugeMagoBerryEP += summary.hugeMagoBerryEP ?? 0;
 		totalIngredientEP += summary.ingredientEP;
 		totalSkillEP += summary.skillEP;
 		totalPresentCandyCount += summary.totalPresentCandyCount;
@@ -403,6 +455,8 @@ export function calculateTeamSummary(
 	return {
 		totalIngredients,
 		totalBerryEP,
+		totalHugeMagoBerryCount,
+		totalHugeMagoBerryEP,
 		totalIngredientEP,
 		totalSkillEP,
 		grandTotalEP,

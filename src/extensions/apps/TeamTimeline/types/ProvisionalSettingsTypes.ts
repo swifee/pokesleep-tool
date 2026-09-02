@@ -62,6 +62,38 @@ export interface BerryZoneProvisionalSettings {
 	snorlaxEnergyByLevel: number[];
 }
 
+/** とてもおおきなマゴのみのエナジー倍率として設定できる最大値 */
+export const HUGE_MAGO_BERRY_MAX_ENERGY_MULTIPLIER = 50;
+
+/** とてもおおきなマゴのみの取得確率(%)の上限 */
+export const HUGE_MAGO_BERRY_MAX_PICKUP_RATE_PERCENT = 100;
+
+/**
+ * 「とてもおおきなマゴのみ」の仮パラメータ。
+ *
+ * 公式説明（2026-09-14 / 09-21 の週のイベント）:
+ * - すべてのおてつだいポケモンが、通常のおてつだいで追加で拾ってくることがある
+ * - 通常より高いエナジーを持った特別なマゴのみ
+ * - 拾ってくる数（＝本ツールでは確率として扱う）は
+ *   ミュウ/ミュウツー ＞ エスパータイプ ＞ その他 の順に多い
+ * - サブスキル「きのみの数S」は適用されない
+ * - 「いつのまに育成」でカビゴンにあげられない（所持数が満タンなら拾えない）
+ *
+ * 「秘境の奥へと進むにつれて多く見つかる」点は再現せず、一律の確率として扱う。
+ */
+export interface HugeMagoBerryProvisionalSettings {
+	/** 仮パラメータを使ってシミュレートする */
+	enabled: boolean;
+	/** 通常のマゴのみ1個に対するエナジー倍率 */
+	energyMultiplier: number;
+	/** ミュウ / ミュウツーがおてつだい1回で拾ってくる確率(%) */
+	legendaryPickupRatePercent: number;
+	/** エスパータイプのおてつだいポケモンが拾ってくる確率(%) */
+	psychicPickupRatePercent: number;
+	/** その他のおてつだいポケモンが拾ってくる確率(%) */
+	otherPickupRatePercent: number;
+}
+
 /**
  * データ未公開ポケモンの仮ステータス。
  *
@@ -82,6 +114,7 @@ export interface PlaceholderPokemonProvisionalSettings {
 /** TeamTimeline の仮設定 */
 export interface ProvisionalSettings {
 	berryZone: BerryZoneProvisionalSettings;
+	hugeMagoBerry: HugeMagoBerryProvisionalSettings;
 	placeholderPokemon: PlaceholderPokemonProvisionalSettings;
 }
 
@@ -93,6 +126,17 @@ export function createDefaultBerryZoneSettings(): BerryZoneProvisionalSettings {
 		maxStackCount: 5,
 		berryEnergyBonusPercent: 20,
 		snorlaxEnergyByLevel: [400, 569, 785, 1083, 1496, 2066],
+	};
+}
+
+/** とてもおおきなマゴのみの仮パラメータの初期値（すべて仮の目安値） */
+export function createDefaultHugeMagoBerrySettings(): HugeMagoBerryProvisionalSettings {
+	return {
+		enabled: false,
+		energyMultiplier: 3,
+		legendaryPickupRatePercent: 30,
+		psychicPickupRatePercent: 20,
+		otherPickupRatePercent: 10,
 	};
 }
 
@@ -110,6 +154,7 @@ export function createDefaultPlaceholderPokemonSettings(): PlaceholderPokemonPro
 export function createDefaultProvisionalSettings(): ProvisionalSettings {
 	return {
 		berryZone: createDefaultBerryZoneSettings(),
+		hugeMagoBerry: createDefaultHugeMagoBerrySettings(),
 		placeholderPokemon: createDefaultPlaceholderPokemonSettings(),
 	};
 }

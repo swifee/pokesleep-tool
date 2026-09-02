@@ -73,6 +73,8 @@ type DailyAccumulator = {
 	totalHelpCount: number;
 	totalSkillCount: number;
 	totalBerryCount: number;
+	totalHugeMagoBerryCount: number;
+	hugeMagoBerryEP: number;
 	totalSkillOverflowCount: number;
 	ingredientSums: Map<string, number>;
 	skillIngredientSums: Map<string, number>;
@@ -102,6 +104,8 @@ type AggregationState = {
 	teamAcc: {
 		ingredientSums: Map<string, number>;
 		totalBerryEP: number;
+		totalHugeMagoBerryCount: number;
+		totalHugeMagoBerryEP: number;
 		totalIngredientEP: number;
 		totalSkillEP: number;
 		grandTotalEP: number;
@@ -129,6 +133,8 @@ function createAggregationState(): AggregationState {
 		teamAcc: {
 			ingredientSums: new Map<string, number>(),
 			totalBerryEP: 0,
+			totalHugeMagoBerryCount: 0,
+			totalHugeMagoBerryEP: 0,
 			totalIngredientEP: 0,
 			totalSkillEP: 0,
 			grandTotalEP: 0,
@@ -172,6 +178,8 @@ function accumulateDailySummary(
 			totalHelpCount: 0,
 			totalSkillCount: 0,
 			totalBerryCount: 0,
+			totalHugeMagoBerryCount: 0,
+			hugeMagoBerryEP: 0,
 			totalSkillOverflowCount: 0,
 			ingredientSums: new Map(),
 			skillIngredientSums: new Map(),
@@ -193,6 +201,8 @@ function accumulateDailySummary(
 	acc.totalHelpCount += dailySummary.totalHelpCount;
 	acc.totalSkillCount += dailySummary.totalSkillCount;
 	acc.totalBerryCount += dailySummary.totalBerryCount;
+	acc.totalHugeMagoBerryCount += dailySummary.totalHugeMagoBerryCount ?? 0;
+	acc.hugeMagoBerryEP += dailySummary.hugeMagoBerryEP ?? 0;
 	acc.totalSkillOverflowCount += dailySummary.totalSkillOverflowCount;
 	acc.berryEP += dailySummary.berryEP;
 	acc.ingredientEP += dailySummary.ingredientEP;
@@ -222,6 +232,9 @@ function accumulateTeamSummary(
 	teamSummary: TeamSummary,
 ): void {
 	state.teamAcc.totalBerryEP += teamSummary.totalBerryEP;
+	state.teamAcc.totalHugeMagoBerryCount +=
+		teamSummary.totalHugeMagoBerryCount ?? 0;
+	state.teamAcc.totalHugeMagoBerryEP += teamSummary.totalHugeMagoBerryEP ?? 0;
 	state.teamAcc.totalIngredientEP += teamSummary.totalIngredientEP;
 	state.teamAcc.totalSkillEP += teamSummary.totalSkillEP;
 	state.teamAcc.grandTotalEP += teamSummary.grandTotalEP;
@@ -386,6 +399,10 @@ function finalizeAverages(
 			totalHelpCount: Math.round((acc.totalHelpCount / n) * 10) / 10,
 			totalSkillCount: Math.round((acc.totalSkillCount / n) * 10) / 10,
 			totalBerryCount: Math.round((acc.totalBerryCount / n) * 10) / 10,
+			totalHugeMagoBerryCount: roundToSingleDecimal(
+				acc.totalHugeMagoBerryCount / n,
+			),
+			hugeMagoBerryEP: Math.round(acc.hugeMagoBerryEP / n),
 			totalSkillOverflowCount:
 				Math.round((acc.totalSkillOverflowCount / n) * 10) / 10,
 			totalIngredients: [...acc.ingredientSums.entries()].map(
@@ -432,6 +449,10 @@ function finalizeAverages(
 			}),
 		),
 		totalBerryEP: Math.round(state.teamAcc.totalBerryEP / n),
+		totalHugeMagoBerryCount: roundToSingleDecimal(
+			state.teamAcc.totalHugeMagoBerryCount / n,
+		),
+		totalHugeMagoBerryEP: Math.round(state.teamAcc.totalHugeMagoBerryEP / n),
 		totalIngredientEP: Math.round(state.teamAcc.totalIngredientEP / n),
 		totalSkillEP: Math.round(state.teamAcc.totalSkillEP / n),
 		grandTotalEP: Math.round(state.teamAcc.grandTotalEP / n),

@@ -236,6 +236,10 @@ export interface TimeSlotResult {
 	skillTriggerCount: number;
 	/** きのみ個数 */
 	berryCount: number;
+	/** とてもおおきなマゴのみの個数（イベント仮設定が有効なときのみ） */
+	hugeMagoBerryCount?: number;
+	/** とてもおおきなマゴのみのEP（きのみEPに含まれる） */
+	hugeMagoBerryEP?: number;
 	/** 食材（種類別） */
 	ingredients: IngredientResult[];
 	/** スキルで獲得した食材（種類別） */
@@ -341,6 +345,10 @@ export interface DailySummary {
 	totalSkillCount: number;
 	/** 合計きのみ個数 */
 	totalBerryCount: number;
+	/** とてもおおきなマゴのみの合計個数 */
+	totalHugeMagoBerryCount?: number;
+	/** とてもおおきなマゴのみの合計EP（`berryEP` に含まれる） */
+	hugeMagoBerryEP?: number;
 	/** 合計食材（種類別） */
 	totalIngredients: IngredientResult[];
 	/** スキル由来の合計食材（種類別） */
@@ -381,6 +389,10 @@ export interface TeamSummary {
 	totalIngredients: IngredientResult[];
 	/** 合計きのみEP */
 	totalBerryEP: number;
+	/** とてもおおきなマゴのみのチーム合計個数 */
+	totalHugeMagoBerryCount?: number;
+	/** とてもおおきなマゴのみのチーム合計EP（`totalBerryEP` に含まれる） */
+	totalHugeMagoBerryEP?: number;
 	/** 合計食材EP */
 	totalIngredientEP: number;
 	/** 合計スキルEP */

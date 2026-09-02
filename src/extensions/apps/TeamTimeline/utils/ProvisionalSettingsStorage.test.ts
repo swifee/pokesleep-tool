@@ -63,6 +63,36 @@ describe("ProvisionalSettingsStorage 正規化", () => {
 	});
 });
 
+describe("ProvisionalSettingsStorage とてもおおきなマゴのみの正規化", () => {
+	it("範囲外の値をクランプする", () => {
+		const normalized = normalizeProvisionalSettings({
+			hugeMagoBerry: {
+				enabled: true,
+				energyMultiplier: -1,
+				legendaryPickupRatePercent: 250,
+				psychicPickupRatePercent: -10,
+				otherPickupRatePercent: 12.5,
+			},
+		});
+
+		expect(normalized.hugeMagoBerry).toEqual({
+			enabled: true,
+			energyMultiplier: 0,
+			legendaryPickupRatePercent: 100,
+			psychicPickupRatePercent: 0,
+			otherPickupRatePercent: 12.5,
+		});
+	});
+
+	it("未指定なら既定値を使う", () => {
+		const normalized = normalizeProvisionalSettings({ hugeMagoBerry: {} });
+
+		expect(normalized.hugeMagoBerry).toEqual(
+			createDefaultProvisionalSettings().hugeMagoBerry,
+		);
+	});
+});
+
 describe("ProvisionalSettingsStorage 永続化", () => {
 	beforeEach(() => {
 		localStorage.clear();
