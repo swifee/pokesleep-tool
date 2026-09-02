@@ -8,7 +8,10 @@ import type { IngredientName } from "../../../../data/pokemons";
 import { getSkillValue, type MainSkillName } from "../../../../util/MainSkill";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import type { IngredientResult } from "../types/TimeSlotTypes";
-import { getEffectiveMainSkillName } from "../utils/TimelinePokemonUtils";
+import {
+	getEffectiveMainSkillName,
+	resolveBaseFrequency,
+} from "../utils/TimelinePokemonUtils";
 import { calculateWeightedEfficiency } from "./EnergyCalculator";
 import type SeededRandom from "./SeededRandom";
 
@@ -37,6 +40,11 @@ export interface HelpBonusContext {
 	 * 省略時はグリーングラスEX（従来の補正値）として扱う。
 	 */
 	fieldIndex?: number;
+	/**
+	 * データ未公開ポケモンに適用するおてつだいスピード(秒)の仮値。
+	 * 種族データが入るまでの仮設定で、通常のポケモンには影響しない。
+	 */
+	baseFrequencySecondsOverride?: number;
 }
 
 /**
@@ -259,13 +267,14 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 	const fieldIndex = bonusContext?.fieldIndex ?? ggexFieldIndex;
 
 	// 基礎おてつだい間隔
-	const baseFrequency = pokemon.iv.getBaseFrequency(
-		Math.max(0, teamHelpingBonusCount),
+	const baseFrequency = resolveBaseFrequency(pokemon.iv, {
+		helpBonusCount: Math.max(0, teamHelpingBonusCount),
 		isGoodCampTicketSet,
 		isMainBerry,
 		isNonFavoriteBerry,
 		fieldIndex,
-	);
+		baseFrequencySecondsOverride: bonusContext?.baseFrequencySecondsOverride,
+	});
 
 	// 加重平均効率
 	const efficiency = calculateWeightedEfficiency(startEnergy, durationMinutes);
