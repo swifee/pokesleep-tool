@@ -26,6 +26,7 @@ import BoxSelectDialog from "./components/BoxSelectDialog";
 import CookingSettingsPanel from "./components/CookingSettingsPanel";
 import DailySummaryRow from "./components/DailySummaryRow";
 import NoCollectSupplementBar from "./components/NoCollectSupplementBar";
+import ProvisionalSettingsPanel from "./components/ProvisionalSettingsPanel";
 import type { ResimulationDeltaSummary } from "./components/ResimulationNoticeBar";
 import ResimulationNoticeBar from "./components/ResimulationNoticeBar";
 import SimulationControls from "./components/SimulationControls";
@@ -79,6 +80,7 @@ import type {
 	CookingSimulationSettings,
 } from "./types/CookingTypes";
 import type { TrialSummary } from "./types/MultiTrialTypes";
+import type { ProvisionalSettings } from "./types/ProvisionalSettingsTypes";
 import type {
 	TeamSetSimulationSnapshot,
 	TeamSetState,
@@ -119,6 +121,10 @@ import {
 	buildNoCollectSupplementEntries,
 	countActiveNoCollectCells,
 } from "./utils/NoCollectSupplementUtils";
+import {
+	loadProvisionalSettingsFromStorage,
+	saveProvisionalSettingsToStorage,
+} from "./utils/ProvisionalSettingsStorage";
 import { buildSimulationContextHash } from "./utils/SimulationContextHash";
 import type { SummaryValueMode } from "./utils/SummaryValueModeUtils";
 import {
@@ -532,10 +538,12 @@ export default function TeamTimelineApp() {
 				initialEnergy: state.simulationConfig.initialEnergy,
 				simulationDays: state.simulationConfig.simulationDays,
 				timeSlots: state.timeSlots,
+				provisionalSettings: state.provisionalSettings,
 			}),
 		[
 			state.bonusSettings,
 			state.cookingSettings,
+			state.provisionalSettings,
 			state.simulationConfig.initialEnergy,
 			state.simulationConfig.simulationDays,
 			state.timeSlots,
@@ -587,6 +595,11 @@ export default function TeamTimelineApp() {
 		const cookingSettings = loadCookingSettingsFromStorage();
 		dispatch({ type: "loadCookingSettings", settings: cookingSettings });
 
+		dispatch({
+			type: "loadProvisionalSettings",
+			settings: loadProvisionalSettingsFromStorage(),
+		});
+
 		// ロード完了をマーク
 		setIsInitialized(true);
 	}, []); // 依存配列を空に
@@ -627,6 +640,12 @@ export default function TeamTimelineApp() {
 		if (!isInitialized) return;
 		saveCookingSettingsToStorage(state.cookingSettings);
 	}, [state.cookingSettings, isInitialized]);
+
+	// 仮設定の永続化（初期化完了後のみ）
+	useEffect(() => {
+		if (!isInitialized) return;
+		saveProvisionalSettingsToStorage(state.provisionalSettings);
+	}, [state.provisionalSettings, isInitialized]);
 
 	// 個体値計算機連動フラグの永続化（初期化完了後のみ）
 	useEffect(() => {
@@ -805,6 +824,7 @@ export default function TeamTimelineApp() {
 				noCollectCells: state.noCollectCells,
 				box: timelineRuntimeBoxRef.current || undefined,
 				cookingSettings: state.cookingSettings,
+				provisionalSettings: state.provisionalSettings,
 			});
 			dispatch({ type: "setSimulationResult", result });
 			dispatch({
@@ -845,6 +865,7 @@ export default function TeamTimelineApp() {
 			state.swaps,
 			state.noCollectCells,
 			state.cookingSettings,
+			state.provisionalSettings,
 			currentSimulationContextHash,
 		],
 	);
@@ -865,6 +886,7 @@ export default function TeamTimelineApp() {
 				},
 				bonusSettings: state.bonusSettings,
 				cookingSettings: state.cookingSettings,
+				provisionalSettings: state.provisionalSettings,
 				swaps: state.swaps,
 				noCollectCells: state.noCollectCells,
 				box: timelineRuntimeBoxRef.current || undefined,
@@ -924,6 +946,7 @@ export default function TeamTimelineApp() {
 				noCollectCells: state.noCollectCells,
 				box: timelineRuntimeBoxRef.current || undefined,
 				cookingSettings: state.cookingSettings,
+				provisionalSettings: state.provisionalSettings,
 			});
 			dispatch({ type: "setSimulationResult", result: fullResult });
 			dispatch({
@@ -969,6 +992,7 @@ export default function TeamTimelineApp() {
 			state.noCollectCells,
 			state.multiTrialCount,
 			state.cookingSettings,
+			state.provisionalSettings,
 			currentSimulationContextHash,
 		],
 	);
@@ -1250,6 +1274,7 @@ export default function TeamTimelineApp() {
 					noCollectCells: state.noCollectCells,
 					box: timelineRuntimeBoxRef.current || undefined,
 					cookingSettings: state.cookingSettings,
+					provisionalSettings: state.provisionalSettings,
 				});
 				dispatch({ type: "setSimulationResult", result });
 			} catch (e) {
@@ -1266,6 +1291,7 @@ export default function TeamTimelineApp() {
 			state.swaps,
 			state.noCollectCells,
 			state.cookingSettings,
+			state.provisionalSettings,
 		],
 	);
 
@@ -1480,6 +1506,13 @@ export default function TeamTimelineApp() {
 	const handleCookingSettingsChange = useCallback(
 		(settings: CookingSimulationSettings) => {
 			dispatch({ type: "setCookingSettings", settings });
+		},
+		[],
+	);
+
+	const handleProvisionalSettingsChange = useCallback(
+		(settings: ProvisionalSettings) => {
+			dispatch({ type: "setProvisionalSettings", settings });
 		},
 		[],
 	);
@@ -2001,6 +2034,7 @@ export default function TeamTimelineApp() {
 					noCollectCells: state.noCollectCells,
 					box: timelineRuntimeBoxRef.current || undefined,
 					cookingSettings: state.cookingSettings,
+					provisionalSettings: state.provisionalSettings,
 					analysisOptions: {
 						disabledPokemonIds: options.disabledPokemonIds,
 						keepDisabledPokemonTargetable: true,
@@ -2066,6 +2100,7 @@ export default function TeamTimelineApp() {
 			state.swaps,
 			state.noCollectCells,
 			state.cookingSettings,
+			state.provisionalSettings,
 		],
 	);
 
@@ -3483,6 +3518,10 @@ export default function TeamTimelineApp() {
 							onReset={handleResetTimeSlots}
 						/>
 					</Box>
+					<ProvisionalSettingsPanel
+						settings={state.provisionalSettings}
+						onChange={handleProvisionalSettingsChange}
+					/>
 				</Box>
 			)}
 
