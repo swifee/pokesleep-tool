@@ -17,6 +17,7 @@ import PokemonIv from "../../../../util/PokemonIv";
 import SeededRandom from "./SeededRandom";
 import {
 	classifySkill,
+	isNonEPSkill,
 	type PokemonSkillBonusContext,
 	processSkillTriggers,
 	resolveSkillLevelForSkill,
@@ -2118,5 +2119,29 @@ describe("SkillEffectProcessor", () => {
 
 		expect(result.energizingCheerEvents).toHaveLength(2);
 		expect(result.nuzzleTriggeredSkillEvents).toHaveLength(0);
+	});
+});
+
+describe("上流で追加されたメインスキルの分類", () => {
+	it("Dream Shard Magnet S (Aura Sphere) をゆめのかけらスキルとして扱う", () => {
+		expect(classifySkill("Dream Shard Magnet S (Aura Sphere)")).toBe(
+			"dreamShard",
+		);
+		expect(isNonEPSkill("Dream Shard Magnet S (Aura Sphere)")).toBe(true);
+	});
+
+	it("Aura Sphere のスキル値は Dream Shard Magnet S と同じ", () => {
+		for (let level = 1; level <= 7; level += 1) {
+			expect(getSkillValue("Dream Shard Magnet S (Aura Sphere)", level)).toBe(
+				getSkillValue("Dream Shard Magnet S", level),
+			);
+		}
+	});
+
+	it("Berry Zone は上流で数値未実装のため効果なしとして扱う", () => {
+		// 上流にスキル値が入った時点で TeamTimeline 側の実装も必要になる。
+		expect(classifySkill("Berry Zone")).toBe("none");
+		expect(classifySkill("Berry Zone (Psystrike)")).toBe("none");
+		expect(isNonEPSkill("Berry Zone")).toBe(false);
 	});
 });

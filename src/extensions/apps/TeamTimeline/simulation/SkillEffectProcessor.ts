@@ -462,7 +462,8 @@ export function classifySkill(
 	}
 	if (
 		skillName === "Dream Shard Magnet S" ||
-		skillName === "Dream Shard Magnet S (Random)"
+		skillName === "Dream Shard Magnet S (Random)" ||
+		skillName === "Dream Shard Magnet S (Aura Sphere)"
 	) {
 		return "dreamShard";
 	}
@@ -495,6 +496,7 @@ export function isNonEPSkill(skillName: string): boolean {
 		skillName === "Cooking Assist S (Bulk Up)" ||
 		skillName === "Dream Shard Magnet S" ||
 		skillName === "Dream Shard Magnet S (Random)" ||
+		skillName === "Dream Shard Magnet S (Aura Sphere)" ||
 		skillName === "Ingredient Draw S" ||
 		skillName === "Ingredient Draw S (Super Luck)" ||
 		skillName === "Ingredient Draw S (Hyper Cutter)"
