@@ -1,3 +1,4 @@
+import { cbexFieldIndex } from "../data/fields";
 import pokemons, {
 	getDecendants,
 	type IngredientName,
@@ -15,10 +16,12 @@ import Nature from "./Nature";
 import { clamp, trunc } from "./NumberUtil";
 import { type IngredientType, IngredientTypes } from "./PokemonRp";
 import {
+	cbexMainBerrySpeedBonus,
+	cbexNonFavoriteBerrySpeedPenalty,
 	expertFavoriteIngredientAdditionalBonus,
 	expertFavoriteIngredientBonus,
-	expertMainBerrySpeedBonus,
-	expertNonFavoriteBerrySpeedPenalty,
+	ggexMainBerrySpeedBonus,
+	ggexNonFavoriteBerrySpeedPenalty,
 } from "./PokemonStrength";
 import SubSkill from "./SubSkill";
 import SubSkillList from "./SubSkillList";
@@ -42,7 +45,7 @@ export interface InventoryBonus {
 	/** Ingredient count bonus from events (0 or 1) */
 	ingredient: 0 | 1;
 	/** Carry limit bonus (add) */
-	carryLimitAdd: 0 | 8 | 15;
+	carryLimitAdd: number;
 	/** Carry limit bonus (multiply) */
 	carryLimitMul: 1 | 1.5;
 	/**
@@ -622,12 +625,20 @@ class PokemonIv {
 		isGoodCampTicketSet: boolean,
 		isMainBerry: boolean,
 		isNonFavoriteBerry: boolean,
+		fieldIndex: number = 7,
 	): number {
+		const isCbex = fieldIndex === cbexFieldIndex;
+		const mainBerrySpeedBonus = isCbex
+			? cbexMainBerrySpeedBonus
+			: ggexMainBerrySpeedBonus;
+		const nonFavoriteBerrySpeedPenalty = isCbex
+			? cbexNonFavoriteBerrySpeedPenalty
+			: ggexNonFavoriteBerrySpeedPenalty;
 		return (
 			(this.frequencyWithHelpingBonus(helpBonusCount) /
 				(isGoodCampTicketSet ? 1.2 : 1)) *
-			(isMainBerry ? 1 - expertMainBerrySpeedBonus : 1) *
-			(isNonFavoriteBerry ? 1 + expertNonFavoriteBerrySpeedPenalty : 1)
+			(isMainBerry ? 1 - mainBerrySpeedBonus : 1) *
+			(isNonFavoriteBerry ? 1 + nonFavoriteBerrySpeedPenalty : 1)
 		);
 	}
 
@@ -653,8 +664,7 @@ class PokemonIv {
 			pokemonName: params.pokemonName,
 			level: params.level ?? 30,
 			skillLevel: params.skillLevel ?? Math.max(pokemon.evolutionCount + 1, 1),
-			ingredient:
-				params.ingredient ?? (pokemon.ing3 !== undefined ? "ABC" : "ABB"),
+			ingredient: params.ingredient ?? "ABC",
 			subSkills: params.subSkills ?? new SubSkillList(),
 			nature:
 				params.nature ??
@@ -672,18 +682,54 @@ class PokemonIv {
 		};
 
 		// 4. Validate and normalize values
+		// Clamp level to [1, 100]
+		ret.level = clamp(1, Math.trunc(ret.level), 100);
+
 		// Clamp skillLevel to valid range
 		const maxSkillLevel = getMaxSkillLevel(pokemon.skill);
-		ret.skillLevel = clamp(1, ret.skillLevel, maxSkillLevel);
+		ret.skillLevel = clamp(1, Math.trunc(ret.skillLevel), maxSkillLevel);
+
+		// Fix invalid ingredient: reset to default if not a known IngredientType
+		if (!IngredientTypes.includes(ret.ingredient)) {
+			ret.ingredient = pokemon.ing3 !== undefined ? "ABC" : "ABB";
+		}
 
 		// Fix ingredient if ing3 doesn't exist
 		if (ret.ingredient.endsWith("C") && pokemon.ing3 === undefined) {
 			ret.ingredient = ret.ingredient.replace("C", "A") as IngredientType;
 		}
 
+		// Clamp ribbon to [0, 4]
+		ret.ribbon = clamp(0, Math.trunc(ret.ribbon), 4) as 0 | 1 | 2 | 3 | 4;
+
 		// Handle mythical pokemon ingredient defaults
 		const isMythical = pokemon.mythIng !== undefined;
-		if (isMythical) {
+		const mythIng = pokemon.mythIng;
+		if (isMythical && mythIng !== undefined) {
+			// Fixed ingredients are always valid for any slot
+			const fixedNames = new Set<string>([
+				pokemon.ing1.name,
+				pokemon.ing2.name,
+				...(pokemon.ing3 ? [pokemon.ing3.name] : []),
+			]);
+			const isValidForSlot = (
+				name: string,
+				slot: "c1" | "c2" | "c3",
+			): boolean => {
+				if (name === "unknown" || fixedNames.has(name)) return true;
+				const entry = mythIng.find((m) => m.name === name);
+				return entry !== undefined && entry[slot] > 0;
+			};
+			if (!isValidForSlot(ret.mythIng1, "c1")) {
+				ret.mythIng1 = "unknown";
+			}
+			if (!isValidForSlot(ret.mythIng2, "c2")) {
+				ret.mythIng2 = "unknown";
+			}
+			if (!isValidForSlot(ret.mythIng3, "c3")) {
+				ret.mythIng3 = "unknown";
+			}
+
 			if (ret.mythIng1 === "unknown") {
 				ret.mythIng1 = pokemon.ing1.name;
 			}
@@ -875,6 +921,7 @@ class PokemonIv {
 			Medium: 8,
 			Large: 9,
 			Jumbo: 10,
+			Captain: 11,
 		};
 
 		return formMap[this.pokemon.form] ?? 0;
@@ -898,6 +945,7 @@ class PokemonIv {
 			"Medium",
 			"Large",
 			"Jumbo",
+			"Captain",
 		];
 		return formNames[form] ?? "";
 	}
@@ -963,7 +1011,7 @@ class PokemonIv {
 	 *
 	 * * 6bit  : Form (0: normal, 1: Halloween, 2: Holiday, 3: Alola,
 	 *           4: Paldea, 5: Amped, 6: Low-Key, 7: Small, 8: Medium,
-	 *           9: Large, 10: Jumbo)
+	 *           9: Large, 10: Jumbo, 11: Captain)
 	 * * 7bit  : level
 	 * * 3bit  : Ingredient (0: AAA, 1: AAB, 2: ABA, 3: ABB, 4: ABC)
 	 *
@@ -975,10 +1023,10 @@ class PokemonIv {
 	 *
 	 * * 5bit  : Sub-skill Lv25
 	 * * 5bit  : Sub-skill Lv50
-	 * * 5bit  : Sub-skill Lv75
+	 * * 5bit  : Sub-skill Lv70
 	 * * 1bit  : reserved
 	 *
-	 * * 5bit  : Sub-skill Lv100
+	 * * 5bit  : Sub-skill Lv80
 	 * * 3bit  : Ribbon (0: none, 1: 200hrs~, 2: 500hrs~, 3: 1000hrs~, 4: 2000hrs~)
 	 * * 4bit  : Versatile skill index (0: not set, 1-12: VersatileCandidates index)
 	 * * 4bit  : reserved
@@ -1018,13 +1066,13 @@ class PokemonIv {
 		array16[3] =
 			(this.subSkills.lv25 === null ? 31 : this.subSkills.lv25.index) +
 			((this.subSkills.lv50 === null ? 31 : this.subSkills.lv50.index) << 5) +
-			((this.subSkills.lv75 === null ? 31 : this.subSkills.lv75.index) << 10);
+			((this.subSkills.lv70 === null ? 31 : this.subSkills.lv70.index) << 10);
 		const versatileIndex =
 			this.pokemon.skill === "Versatile"
 				? VersatileCandidates.indexOf(this.versatileSkill) + 1
 				: 0;
 		array16[4] =
-			(this.subSkills.lv100 === null ? 31 : this.subSkills.lv100.index) +
+			(this.subSkills.lv80 === null ? 31 : this.subSkills.lv80.index) +
 			(this.ribbon << 5) +
 			(versatileIndex << 8);
 
@@ -1153,8 +1201,8 @@ class PokemonIv {
 			lv10: getSubSkill((array16[2] >> 11) & 31, 10),
 			lv25: getSubSkill((array16[3] >> 0) & 31, 25),
 			lv50: getSubSkill((array16[3] >> 5) & 31, 50),
-			lv75: getSubSkill((array16[3] >> 10) & 31, 75),
-			lv100: getSubSkill((array16[4] >> 0) & 31, 100),
+			lv70: getSubSkill((array16[3] >> 10) & 31, 75),
+			lv80: getSubSkill((array16[4] >> 0) & 31, 100),
 		});
 
 		// ribbon

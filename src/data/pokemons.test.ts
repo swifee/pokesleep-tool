@@ -1,5 +1,9 @@
 import { assert } from "vitest";
-import pokemons, { getCandyName, getDecendants } from "./pokemons";
+import pokemons, {
+	getCandyName,
+	getDecendants,
+	getPokemonRarity,
+} from "./pokemons";
 
 describe("getDecendants", () => {
 	test("returns itself when non evolved pokemon is specified", () => {
@@ -146,6 +150,30 @@ describe("getDecendants", () => {
 	});
 });
 
+describe("getPokemonRarity", () => {
+	const rarityOf = (name: string) => {
+		const p = pokemons.find((x) => x.name === name);
+		if (p === undefined) {
+			assert.fail(`${name} should not be undefined`);
+		}
+		return getPokemonRarity(p);
+	};
+
+	test("returns 'normal' for ordinary Pokémon", () => {
+		expect(rarityOf("Pikachu")).toBe("normal");
+	});
+
+	test("returns 'legendary' for 1080 EXP Pokémon", () => {
+		expect(rarityOf("Raikou")).toBe("legendary");
+		expect(rarityOf("Mewtwo")).toBe("legendary");
+	});
+
+	test("returns 'mythical' for 1320 EXP Pokémon", () => {
+		expect(rarityOf("Darkrai")).toBe("mythical");
+		expect(rarityOf("Mew")).toBe("mythical");
+	});
+});
+
 describe("getCandyName", () => {
 	test("returns ascendant name for some baby Pokémon", () => {
 		expect(getCandyName(172)).toBe("Pikachu"); // Pichu → Pikachu
@@ -208,6 +236,9 @@ describe("JSON data verification", () => {
 		for (const pokemon of pokemons) {
 			if (pokemon.ancestor === null) {
 				expect(pokemon.evolutionCount, `id=${pokemon.name}`).toBe(-1);
+			}
+			if (pokemon.evolutionCount === -1) {
+				expect(pokemon.ancestor).toBeNull();
 			}
 		}
 	});
@@ -275,7 +306,8 @@ describe("JSON data verification", () => {
 				pokemon.skill === "Helper Boost" ||
 				pokemon.skill === "Energy for Everyone S (Lunar Blessing)" ||
 				pokemon.skill === "Energizing Cheer S (Heal Pulse)" ||
-				pokemon.skill === "Berry Burst (Draco Meteor)"
+				pokemon.skill === "Berry Burst (Draco Meteor)" ||
+				pokemon.skill === "Berry Zone (Psystrike)"
 			) {
 				expect(pokemon.exp).toBe(1080);
 				continue;

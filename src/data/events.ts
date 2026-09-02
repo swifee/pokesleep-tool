@@ -133,6 +133,7 @@ export function fillBonusEffects(data: Partial<BonusEffects>): BonusEffects {
 		berryBurst: data.berryBurst ?? 1,
 		dish: data.dish ?? 1,
 		energyFromDish: data.energyFromDish ?? 0,
+		potSize: data.potSize ?? 1,
 		carryLimitAdd: data.carryLimitAdd ?? 0,
 		carryLimitMul: data.carryLimitMul ?? 1,
 		fixedBerries: data.fixedBerries ?? [],
@@ -277,8 +278,10 @@ export interface BonusEffects {
 	dish: 1 | 1.1 | 1.25 | 1.5;
 	/** Energy recovery bonus by dish */
 	energyFromDish: 0 | 5;
+	/** Cooking pot size bonus (multiply) */
+	potSize: 1 | 1.6 | 2;
 	/** Carry limit bonus (add) */
-	carryLimitAdd: 0 | 8 | 15;
+	carryLimitAdd: number;
 	/** Carry limit bonus (multiply) */
 	carryLimitMul: 1 | 1.5;
 	/**
@@ -312,6 +315,7 @@ export const emptyBonusEffects: Readonly<BonusEffects> = {
 	berryBurst: 1,
 	dish: 1,
 	energyFromDish: 0,
+	potSize: 1,
 	carryLimitAdd: 0,
 	carryLimitMul: 1,
 	fixedBerries: [],
@@ -468,8 +472,14 @@ export function loadHelpEventBonus(data: unknown): HelpEventBonus {
 			ret.effects.energyFromDish = effects.energyFromDish;
 		}
 		if (
+			typeof effects.potSize === "number" &&
+			[1, 1.6, 2].includes(effects.potSize)
+		) {
+			ret.effects.potSize = effects.potSize;
+		}
+		if (
 			typeof effects.carryLimitAdd === "number" &&
-			[8, 15].includes(effects.carryLimitAdd)
+			[0, 8, 15].includes(effects.carryLimitAdd)
 		) {
 			ret.effects.carryLimitAdd = effects.carryLimitAdd;
 		}
@@ -483,11 +493,19 @@ export function loadHelpEventBonus(data: unknown): HelpEventBonus {
 	return ret;
 }
 
-export function isInLatiosEvent() {
+export function isInMewtwoEvent1stWeek() {
 	const now = new Date();
 	return (
-		new Date("2026-06-08T04:00:00") <= now &&
-		now <= new Date("2026-06-22T04:00:00")
+		new Date("2026-09-14T04:00:00") <= now &&
+		now <= new Date("2026-09-21T04:00:00")
+	);
+}
+
+export function isInMewtwoEvent2ndWeek() {
+	const now = new Date();
+	return (
+		new Date("2026-09-21T04:00:00") <= now &&
+		now <= new Date("2026-09-28T04:00:00")
 	);
 }
 

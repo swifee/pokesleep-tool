@@ -72,6 +72,12 @@
 			"desc": "$t(skills.Dream Shard Magnet S.desc)",
 			"detail": "$t(skills.random)"
 		},
+		"Dream Shard Magnet S (Aura Sphere)": {
+			"name": "波导弹 (梦之碎片获取S)",
+			"strength": "",
+			"desc": "获得梦之碎片，且增加卡比兽的能量。",
+			"detail": "$t(skills.Dream Shard Magnet S.detail)"
+		},
 		"Energizing Cheer S": {
 			"name": "活力疗愈S",
 			"strength": "技能造成的体力回复没有换算成合计能量值。",
@@ -110,13 +116,13 @@
 		},
 		"Energy for Everyone S (Berry Juice)": {
 			"name": "树果汁 (活力全体疗愈S)",
-			"strength": "$t(skills.Energy for Everyone S.strength)$t(berry juice assumption)",
+			"strength": "$t(skills.Energy for Everyone S.strength)树果汁获取概率基于 RaenonX 的统计数据 (18.5%)。",
 			"desc": "$t(skills.Energy for Everyone S.desc)有时候还会额外获得树果汁。",
 			"detail": "$t(skills.Energy for Everyone S.detail) 树果汁最多可持有5个。获取率约为20%。"
 		},
 		"Extra Helpful S": {
 			"name": "帮手支援S",
-			"strength": "显示为技能发动带来的 [帮助次数] 。总能量按照1次帮助 300 能量 (不含营地奖励) 进行预估。",
+			"strength": "显示为技能发动带来的 [帮助次数] 。$t(other member calculation)",
 			"desc": "帮手宝可梦中的某1只会立刻完成帮忙。",
 			"detail": "包括自己在内随机选择目标。不会触发主技能抽签。不受$t(expert mode)和$t(event bonus)引起的树果·食材数量变化的影响。"
 		},
@@ -140,7 +146,7 @@
 		},
 		"Helper Boost": {
 			"name": "帮手加速",
-			"strength": "显示为1只宝可梦的帮手次数 (有 3 只同类型宝可梦的情况) 。总能量按照1次帮助 300 (不含营地奖励) 进行预估。",
+			"strength": "显示为1只宝可梦的帮手次数 (有 3 只同类型宝可梦的情况) 。$t(other member calculation)",
 			"desc": "队伍中的所有宝可梦会立刻完成帮忙。满足特定条件时，效果会进一步提升。",
 			"detail": "帮忙宝可梦可超过$t(carry limit)，最多持有999个树果·食材。"
 		},
@@ -213,6 +219,16 @@
 			"strength": "",
 			"desc": "获得自己以及队伍中的宝可梦会捡来的树果。队伍中有越多不同种类的龙属性帮手宝可梦，树果数量就会增加得越多。队伍中有拉帝亚斯时，自己获得的树果数量会增加得更多。",
 			"detail": ""
+		},
+		"Berry Zone": {
+			"name": "树果领域",
+			"strength": ""
+		},
+		"Berry Zone (Psystrike)": {
+			"name": "精神冲击 (树果领域)",
+			"strength": "",
+			"desc": "增加卡比兽能量的同时，还会在营地展开“树果领域”。",
+			"detail": "通过精神冲击 (树果领域) 展开“树果领域”期间，通过芒芒果 (超能力属性) 获得的能量会提升。"
 		},
 		"unknown": {
 			"name": "(未知)",

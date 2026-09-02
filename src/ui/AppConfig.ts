@@ -8,6 +8,8 @@ export default interface AppConfig {
 	language: string;
 	/** PWA notify check counter */
 	pwacnt: number;
+	/** Whether to show tap ripple effect */
+	tapRippleEffect: boolean;
 	/** Last news closed */
 	news: {
 		ResearchCalc: string;
@@ -22,6 +24,7 @@ export const AppConfigContext = React.createContext<AppConfig>({
 	iconUrl: null,
 	language: "",
 	pwacnt: 0,
+	tapRippleEffect: false,
 	news: { ResearchCalc: "", IvCalc: "", TeamTimeline: "" },
 });
 
@@ -30,6 +33,7 @@ export function loadConfig(language: string): AppConfig {
 		iconUrl: null,
 		language,
 		pwacnt: -1,
+		tapRippleEffect: false,
 		news: { ResearchCalc: "", IvCalc: "", TeamTimeline: "" },
 	};
 
@@ -49,6 +53,9 @@ export function loadConfig(language: string): AppConfig {
 	}
 	if (typeof json.pwacnt === "number") {
 		config.pwacnt = json.pwacnt;
+	}
+	if (typeof json.tapRippleEffect === "boolean") {
+		config.tapRippleEffect = json.tapRippleEffect;
 	}
 	if (typeof json.news === "object" && json.news != null) {
 		if (typeof json.news.ResearchCalc === "string") {

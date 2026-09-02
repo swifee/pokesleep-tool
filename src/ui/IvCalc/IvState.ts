@@ -1,12 +1,11 @@
-import { getEventBonus } from "../../data/events";
-import { isExpertField } from "../../data/fields";
-import { PokemonTypes } from "../../data/pokemons";
 import i18n from "../../i18n";
 import PokemonBox, { type PokemonBoxItem } from "../../util/PokemonBox";
 import PokemonIv from "../../util/PokemonIv";
 import {
 	loadStrengthParameter,
+	normalizeStrengthParameter,
 	type StrengthParameter,
+	saveStrengthParameter,
 } from "../../util/PokemonStrength";
 
 export type IvAction =
@@ -223,7 +222,7 @@ export function ivStateReducer(state: IvState, action: IvAction): IvState {
 	if (type === "changeParameter") {
 		const value = action.payload.parameter;
 		const newState = normalizeState({ ...state, parameter: value });
-		localStorage.setItem("PstStrenghParam", JSON.stringify(newState.parameter));
+		saveStrengthParameter(newState.parameter);
 		return newState;
 	}
 	if (type === "openEnergyDialog") {
@@ -383,43 +382,7 @@ export function normalizeState(state: IvState): IvState {
 	const selectedItem = state.box.getById(state.selectedItemId);
 
 	// apply event fixedBerries type
-	const event = getEventBonus(
-		state.parameter.event,
-		state.parameter.customEventBonus,
-	);
-	if (
-		event.fixedBerries.length === 3 &&
-		event.fixedAreas.includes(state.parameter.fieldIndex)
-	) {
-		let fixRequired = false;
-		const isExpert = isExpertField(state.parameter.fieldIndex);
-		for (let i = 0; i < 3; i++) {
-			if (event.fixedBerries[i] !== null) {
-				if (
-					(isExpert &&
-						!state.parameter.favoriteType.includes(event.fixedBerries[i])) ||
-					(!isExpert &&
-						state.parameter.favoriteType[i] !== event.fixedBerries[i])
-				) {
-					fixRequired = true;
-					break;
-				}
-			}
-		}
-		if (fixRequired) {
-			state.parameter.favoriteType = [...event.fixedBerries];
-			if (state.parameter.favoriteType[1] === null) {
-				state.parameter.favoriteType[1] =
-					PokemonTypes.find((x) => !state.parameter.favoriteType.includes(x)) ??
-					"normal";
-			}
-			if (state.parameter.favoriteType[2] === null) {
-				state.parameter.favoriteType[2] =
-					PokemonTypes.find((x) => !state.parameter.favoriteType.includes(x)) ??
-					"normal";
-			}
-		}
-	}
+	state.parameter = normalizeStrengthParameter(state.parameter);
 
 	// fix species count
 	if (

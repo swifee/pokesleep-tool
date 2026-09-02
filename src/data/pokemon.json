@@ -648,6 +648,41 @@
 		"form": "Halloween"
 	},
 	{
+		"id": 25,
+		"name": "Pikachu (Captain)",
+		"arrival": "2026-08-17",
+		"sleepType": "snoozing",
+		"exp": 600,
+		"type": "electric",
+		"specialty": "Berries",
+		"skill": "Ingredient Magnet S",
+		"fp": 7,
+		"frequency": 2500,
+		"ingRate": 17.5,
+		"skillRate": 1.8,
+		"ancestor": null,
+		"evolutionCount": -1,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 21,
+		"ing1": {
+			"name": "apple",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "ginger",
+			"c2": 2,
+			"c3": 3
+		},
+		"ing3": {
+			"name": "egg",
+			"c3": 3
+		},
+		"form": "Captain"
+	},
+	{
 		"id": 26,
 		"name": "Raichu",
 		"arrival": "2023-07-17",
@@ -795,7 +830,7 @@
 		"fp": 20,
 		"frequency": 2800,
 		"ingRate": 16.8,
-		"skillRate": 3.6,
+		"skillRate": 4,
 		"ancestor": 173,
 		"evolutionCount": 2,
 		"evolutionLeft": 0,
@@ -2464,6 +2499,40 @@
 		}
 	},
 	{
+		"id": 150,
+		"name": "Mewtwo",
+		"arrival": "2026-09-14",
+		"sleepType": "snoozing",
+		"exp": 1080,
+		"type": "psychic",
+		"specialty": "Skills",
+		"skill": "Berry Zone (Psystrike)",
+		"fp": 30,
+		"frequency": 0,
+		"ingRate": 0,
+		"skillRate": 0,
+		"ancestor": null,
+		"evolutionCount": -1,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 0,
+		"ing1": {
+			"name": "unknown1",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "unknown2",
+			"c2": 4,
+			"c3": 0
+		},
+		"ing3": {
+			"name": "unknown3",
+			"c3": 0
+		}
+	},
+	{
 		"id": 151,
 		"name": "Mew",
 		"arrival": "2026-03-05",
@@ -2476,7 +2545,7 @@
 		"frequency": 2900,
 		"ingRate": 20,
 		"skillRate": 4,
-		"ancestor": 151,
+		"ancestor": null,
 		"evolutionCount": -1,
 		"evolutionLeft": 0,
 		"isFullyEvolved": true,
@@ -5343,6 +5412,312 @@
 		}
 	},
 	{
+		"id": 387,
+		"name": "Turtwig",
+		"arrival": "2026-07-13",
+		"sleepType": "dozing",
+		"exp": 600,
+		"type": "grass",
+		"specialty": "Skills",
+		"skill": "Energy for Everyone S",
+		"fp": 5,
+		"frequency": 4500,
+		"ingRate": 13.2,
+		"skillRate": 4.1,
+		"ancestor": 387,
+		"evolutionCount": 0,
+		"evolutionLeft": 2,
+		"isFullyEvolved": false,
+		"carryLimit": 12,
+		"ing1": {
+			"name": "mushroom",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "potato",
+			"c2": 3,
+			"c3": 5
+		},
+		"ing3": {
+			"name": "ginger",
+			"c3": 6
+		}
+	},
+	{
+		"id": 388,
+		"name": "Grotle",
+		"arrival": "2026-07-13",
+		"sleepType": "dozing",
+		"exp": 600,
+		"type": "grass",
+		"specialty": "Skills",
+		"skill": "Energy for Everyone S",
+		"fp": 12,
+		"frequency": 3700,
+		"ingRate": 15,
+		"skillRate": 4.6,
+		"ancestor": 387,
+		"evolutionCount": 1,
+		"evolutionLeft": 1,
+		"isFullyEvolved": false,
+		"carryLimit": 14,
+		"ing1": {
+			"name": "mushroom",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "potato",
+			"c2": 3,
+			"c3": 5
+		},
+		"ing3": {
+			"name": "ginger",
+			"c3": 6
+		}
+	},
+	{
+		"id": 389,
+		"name": "Torterra",
+		"arrival": "2026-07-13",
+		"sleepType": "slumbering",
+		"exp": 600,
+		"type": "ground",
+		"specialty": "Skills",
+		"skill": "Energy for Everyone S",
+		"fp": 20,
+		"frequency": 2900,
+		"ingRate": 15.6,
+		"skillRate": 4.8,
+		"ancestor": 387,
+		"evolutionCount": 2,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 17,
+		"ing1": {
+			"name": "mushroom",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "potato",
+			"c2": 3,
+			"c3": 5
+		},
+		"ing3": {
+			"name": "ginger",
+			"c3": 6
+		}
+	},
+	{
+		"id": 390,
+		"name": "Chimchar",
+		"arrival": "2026-07-13",
+		"sleepType": "snoozing",
+		"exp": 600,
+		"type": "fire",
+		"specialty": "Skills",
+		"skill": "Berry Burst",
+		"fp": 5,
+		"frequency": 4100,
+		"ingRate": 11.4,
+		"skillRate": 3.3,
+		"ancestor": 390,
+		"evolutionCount": 0,
+		"evolutionLeft": 2,
+		"isFullyEvolved": false,
+		"carryLimit": 10,
+		"ing1": {
+			"name": "herb",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "ginger",
+			"c2": 3,
+			"c3": 4
+		},
+		"ing3": {
+			"name": "coffee",
+			"c3": 3
+		}
+	},
+	{
+		"id": 391,
+		"name": "Monferno",
+		"arrival": "2026-07-13",
+		"sleepType": "slumbering",
+		"exp": 600,
+		"type": "fighting",
+		"specialty": "Skills",
+		"skill": "Berry Burst",
+		"fp": 12,
+		"frequency": 3100,
+		"ingRate": 11.4,
+		"skillRate": 3.3,
+		"ancestor": 390,
+		"evolutionCount": 1,
+		"evolutionLeft": 1,
+		"isFullyEvolved": false,
+		"carryLimit": 14,
+		"ing1": {
+			"name": "herb",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "ginger",
+			"c2": 3,
+			"c3": 4
+		},
+		"ing3": {
+			"name": "coffee",
+			"c3": 3
+		}
+	},
+	{
+		"id": 392,
+		"name": "Infernape",
+		"arrival": "2026-07-13",
+		"sleepType": "slumbering",
+		"exp": 600,
+		"type": "fighting",
+		"specialty": "Skills",
+		"skill": "Berry Burst",
+		"fp": 20,
+		"frequency": 2400,
+		"ingRate": 10.6,
+		"skillRate": 3.3,
+		"ancestor": 390,
+		"evolutionCount": 2,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 18,
+		"ing1": {
+			"name": "herb",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "ginger",
+			"c2": 3,
+			"c3": 4
+		},
+		"ing3": {
+			"name": "coffee",
+			"c3": 3
+		}
+	},
+	{
+		"id": 393,
+		"name": "Piplup",
+		"arrival": "2026-07-13",
+		"sleepType": "slumbering",
+		"exp": 600,
+		"type": "water",
+		"specialty": "Berries",
+		"skill": "Extra Helpful S",
+		"fp": 5,
+		"frequency": 4500,
+		"ingRate": 15.9,
+		"skillRate": 2.6,
+		"ancestor": 393,
+		"evolutionCount": 0,
+		"evolutionLeft": 2,
+		"isFullyEvolved": false,
+		"carryLimit": 11,
+		"ing1": {
+			"name": "egg",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "leek",
+			"c2": 1,
+			"c3": 2
+		},
+		"ing3": {
+			"name": "honey",
+			"c3": 4
+		}
+	},
+	{
+		"id": 394,
+		"name": "Prinplup",
+		"arrival": "2026-07-13",
+		"sleepType": "slumbering",
+		"exp": 600,
+		"type": "water",
+		"specialty": "Berries",
+		"skill": "Extra Helpful S",
+		"fp": 12,
+		"frequency": 3700,
+		"ingRate": 16.3,
+		"skillRate": 3.5,
+		"ancestor": 393,
+		"evolutionCount": 1,
+		"evolutionLeft": 1,
+		"isFullyEvolved": false,
+		"carryLimit": 15,
+		"ing1": {
+			"name": "egg",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "leek",
+			"c2": 1,
+			"c3": 2
+		},
+		"ing3": {
+			"name": "honey",
+			"c3": 4
+		}
+	},
+	{
+		"id": 395,
+		"name": "Empoleon",
+		"arrival": "2026-07-13",
+		"sleepType": "slumbering",
+		"exp": 600,
+		"type": "steel",
+		"specialty": "Berries",
+		"skill": "Extra Helpful S",
+		"fp": 20,
+		"frequency": 3200,
+		"ingRate": 16.8,
+		"skillRate": 3.8,
+		"ancestor": 393,
+		"evolutionCount": 2,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 18,
+		"ing1": {
+			"name": "egg",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "leek",
+			"c2": 1,
+			"c3": 2
+		},
+		"ing3": {
+			"name": "honey",
+			"c3": 4
+		}
+	},
+	{
 		"id": 403,
 		"name": "Shinx",
 		"arrival": "2024-10-02",
@@ -5724,7 +6099,7 @@
 		"exp": 600,
 		"type": "fighting",
 		"specialty": "Skills",
-		"skill": "Dream Shard Magnet S",
+		"skill": "Dream Shard Magnet S (Aura Sphere)",
 		"fp": 20,
 		"frequency": 2600,
 		"ingRate": 15,
@@ -6460,6 +6835,40 @@
 		"ing3": {
 			"name": "sausage",
 			"c3": 3
+		}
+	},
+	{
+		"id": 701,
+		"name": "Hawlucha",
+		"arrival": "2026-08-10",
+		"sleepType": "slumbering",
+		"exp": 600,
+		"type": "flying",
+		"specialty": "Skills",
+		"skill": "Ingredient Draw S",
+		"fp": 16,
+		"frequency": 2400,
+		"ingRate": 19.2,
+		"skillRate": 5.2,
+		"ancestor": null,
+		"evolutionCount": -1,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 21,
+		"ing1": {
+			"name": "herb",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "ginger",
+			"c2": 3,
+			"c3": 4
+		},
+		"ing3": {
+			"name": "sausage",
+			"c3": 5
 		}
 	},
 	{
@@ -7762,6 +8171,108 @@
 		"ing3": {
 			"name": "egg",
 			"c3": 5
+		}
+	},
+	{
+		"id": 957,
+		"name": "Tinkatink",
+		"arrival": "2026-08-17",
+		"sleepType": "snoozing",
+		"exp": 600,
+		"type": "fairy",
+		"specialty": "Berries",
+		"skill": "Charge Strength M",
+		"fp": 5,
+		"frequency": 4500,
+		"ingRate": 20.2,
+		"skillRate": 1.6,
+		"ancestor": 957,
+		"evolutionCount": 0,
+		"evolutionLeft": 2,
+		"isFullyEvolved": false,
+		"carryLimit": 12,
+		"ing1": {
+			"name": "tomato",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "cacao",
+			"c2": 2,
+			"c3": 3
+		},
+		"ing3": {
+			"name": "potato",
+			"c3": 3
+		}
+	},
+	{
+		"id": 958,
+		"name": "Tinkatuff",
+		"arrival": "2026-08-17",
+		"sleepType": "snoozing",
+		"exp": 600,
+		"type": "fairy",
+		"specialty": "Berries",
+		"skill": "Charge Strength M",
+		"fp": 12,
+		"frequency": 3300,
+		"ingRate": 18.6,
+		"skillRate": 1.8,
+		"ancestor": 957,
+		"evolutionCount": 1,
+		"evolutionLeft": 1,
+		"isFullyEvolved": false,
+		"carryLimit": 16,
+		"ing1": {
+			"name": "tomato",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "cacao",
+			"c2": 2,
+			"c3": 3
+		},
+		"ing3": {
+			"name": "potato",
+			"c3": 3
+		}
+	},
+	{
+		"id": 959,
+		"name": "Tinkaton",
+		"arrival": "2026-08-17",
+		"sleepType": "snoozing",
+		"exp": 600,
+		"type": "fairy",
+		"specialty": "Berries",
+		"skill": "Charge Strength M",
+		"fp": 20,
+		"frequency": 2400,
+		"ingRate": 18.5,
+		"skillRate": 2,
+		"ancestor": 957,
+		"evolutionCount": 2,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 20,
+		"ing1": {
+			"name": "tomato",
+			"c1": 1,
+			"c2": 2,
+			"c3": 4
+		},
+		"ing2": {
+			"name": "cacao",
+			"c2": 2,
+			"c3": 3
+		},
+		"ing3": {
+			"name": "potato",
+			"c3": 3
 		}
 	},
 	{

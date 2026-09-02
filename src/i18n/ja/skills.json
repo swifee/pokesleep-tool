@@ -72,6 +72,12 @@
 			"desc": "$t(skills.Dream Shard Magnet S.desc)",
 			"detail": "$t(skills.random)"
 		},
+		"Dream Shard Magnet S (Aura Sphere)": {
+			"name": "はどうだん (ゆめのかけらゲットS)",
+			"strength": "",
+			"desc": "ゆめのかけらをゲットし、さらにカビゴンのエナジーを増やします。",
+			"detail": "$t(skills.Dream Shard Magnet S.detail)"
+		},
 		"Energizing Cheer S": {
 			"name": "げんきエールS",
 			"strength": "スキルによるげんき回復は、合計エナジー量には換算していません。",
@@ -110,13 +116,13 @@
 		},
 		"Energy for Everyone S (Berry Juice)": {
 			"name": "きのみジュース (げんきオールS)",
-			"strength": "$t(skills.Energy for Everyone S.strength)$t(berry juice assumption)",
+			"strength": "$t(skills.Energy for Everyone S.strength)きのみジュース取得確率は RaenonX での集計結果 (18.5%) を利用しています。",
 			"desc": "$t(skills.Energy for Everyone S.desc)ときどき、追加できのみジュースをゲットします。",
 			"detail": "$t(skills.Energy for Everyone S.detail)きのみジュースは最大5個まで保持できます。きのみジュースの取得率は約20%程度と考えられています。"
 		},
 		"Extra Helpful S": {
 			"name": "おてつだいサポートS",
-			"strength": "スキルによって発動する [おてつだい回数] を表示してます。合計エナジー量へは、1おてつだいあたり 300 (フィールドボーナスなしのとき) として計算しています。",
+			"strength": "スキルによって発動する [おてつだい回数] を表示してます。$t(other member calculation)",
 			"desc": "チーム内の1匹のおてつだいがすぐに完了します。",
 			"detail": "自分を含めて対象がランダムに選ばれます。メインスキルの抽選は行われません。$t(expert mode)や$t(event bonus)によるきのみ・食材の数の変化の影響は受けません。"
 		},
@@ -140,7 +146,7 @@
 		},
 		"Helper Boost": {
 			"name": "おてつだいブースト",
-			"strength": "同タイプのポケモン 3 体と仮定しています。エナジー量への影響は、1おてつだいあたり 300 (フィールドボーナスなしのとき) として見積もっています。",
+			"strength": "同タイプのポケモン 3 体と仮定しています。$t(other member calculation)",
 			"desc": "チーム内のポケモン全員のおてつだいがすぐに完了します。チームに同一タイプの異なる種類のポケモンが多いほど効果量がアップします。",
 			"detail": "おてつだいポケモンは$t(carry limit)を超えて999個まで、きのみ・食材を保持できます。"
 		},
@@ -213,6 +219,16 @@
 			"strength": "",
 			"desc": "自分とチーム内のポケモンのきのみを獲得します。チームに異なる種類のドラゴンタイプのポケモンが多いほど、さらにきのみの数がUPします。チームにラティアスがいる場合、獲得する自分のきのみの数がさらにUPします。",
 			"detail": ""
+		},
+		"Berry Zone": {
+			"name": "きのみゾーン",
+			"strength": ""
+		},
+		"Berry Zone (Psystrike)": {
+			"name": "サイコブレイク (きのみゾーン)",
+			"strength": "",
+			"desc": "カビゴンのエナジーを増やすとともに、フィールドに「きのみゾーン」を展開します。",
+			"detail": "サイコブレイク (きのみゾーン) による「きのみゾーン」の展開中は、マゴのみ (エスパータイプ) から得られるエナジーがUPします。"
 		},
 		"unknown": {
 			"name": "(不明)",
