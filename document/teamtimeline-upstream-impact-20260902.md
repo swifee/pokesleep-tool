@@ -54,9 +54,9 @@ six places; they now share `MIN_RECIPE_LEVEL` / `MAX_RECIPE_LEVEL` from `types/C
   `Dream Shard Magnet S`, so `classifySkill` and `isNonEPSkill` treat it the same way.
   It was deliberately **not** added to `METRONOME_SKILL_POOL`: the pool already contains the generic
   Dream Shard Magnet S, and adding the Lucario-specific variant would double that skill's draw weight.
-- `Berry Zone` / `Berry Zone (Psystrike)` are **TODO**. Upstream ships them as placeholders with no
-  skill values, and `classifySkill` already returns `"none"` for unknown skills. A test pins that
-  behavior down so the gap surfaces once upstream fills in the numbers.
+- `Berry Zone` / `Berry Zone (Psystrike)` ship as placeholders with no skill values upstream.
+  They are now simulated through user-supplied provisional settings; see
+  `document/teamtimeline-provisional-settings.md`.
 
 ### 5. Placeholder Pokemon caused an infinite loop (fixed)
 
@@ -78,6 +78,7 @@ style object because `FooterArea` already handles the spacing.
 
 ## Follow-up
 
-- Implement `Berry Zone` once upstream publishes its skill values.
+- Replace the `Berry Zone` provisional parameters with upstream's values once they are published
+  (see `document/teamtimeline-provisional-settings.md`).
 - Re-check the Cyan Beach (Expert) carry limit rule if upstream reconciles
   `PokemonStrength.bonusEffects` with `FrequencyInfoPanel`.
