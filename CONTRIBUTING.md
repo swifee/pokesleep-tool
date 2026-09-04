@@ -27,6 +27,17 @@ We're happy to help guide you!
 - Run `npm run lint:fix`
 - Run `npm run test`
 
+CI runs `npm run verify` (typecheck + lint + test + build) on every push and
+pull request.
+
+## Fork operations
+
+This repository is a fork of [nitoyon/pokesleep-tool](https://github.com/nitoyon/pokesleep-tool).
+
+- [Upstream sync](document/upstream-sync.md) — merging `upstream/main` into
+  `develop`, and the files that conflict every time.
+- [Deploying to the self-hosted VPS](document/deploy-vps.md) — `npm run deploy`.
+
 ## Questions?
 
 If you have any questions or are unsure about something,  
