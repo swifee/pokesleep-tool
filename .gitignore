@@ -23,6 +23,9 @@ GEMINI.md
 # production
 /dist
 
+# deploy settings (local only)
+/scripts/deploy-vps.env
+
 # dev sw.js
 /public/sw.js
 
