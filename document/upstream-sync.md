@@ -68,6 +68,7 @@ These are the seams where the fork edits upstream-owned files. Keep both sides.
 | `src/ui/App.tsx` | `TeamTimelineApp` import, the `curApp === "TeamTimeline"` render branch, and the `/pokesleep-tool/timeline/` route in `useRouter`. |
 | `src/ui/ToolBar.tsx` | The `teamTimelineClick` handler and its `MenuItem`. |
 | `src/ui/NewsInfo.tsx` | The early `return null` for `appType === "TeamTimeline"`. |
+| `vite.config.ts` | The five `timeline*` entries in `build.rollupOptions.input`. Only entry points may be changed here (`AGENTS.md`); `base` must stay `/pokesleep-tool/`. The `timeline/` and `public/timeline/` directories are fork-only and never conflict. |
 | `.gitignore` | The fork ignores AI tool configs (`AGENTS.md`, `CLAUDE.md`, `.claude/`, …) and `scripts/deploy-vps.env`. Upstream's `.claude/settings.local.json` entries are superseded. |
 | `CLAUDE.md`, `.claude/settings.json` | Deleted in the fork on purpose. Keep them deleted. |
 | `package.json` | The `deploy` script and the explicit `typescript` devDependency. |

@@ -19,6 +19,11 @@ export default defineConfig({
 				ivKo: path.resolve(__dirname, "iv/index.ko.html"),
 				ivZhCn: path.resolve(__dirname, "iv/index.zh-cn.html"),
 				ivZhTw: path.resolve(__dirname, "iv/index.zh-tw.html"),
+				timelineEn: path.resolve(__dirname, "timeline/index.html"),
+				timelineJa: path.resolve(__dirname, "timeline/index.ja.html"),
+				timelineKo: path.resolve(__dirname, "timeline/index.ko.html"),
+				timelineZhCn: path.resolve(__dirname, "timeline/index.zh-cn.html"),
+				timelineZhTw: path.resolve(__dirname, "timeline/index.zh-tw.html"),
 			},
 			output: {
 				manualChunks(id) {
