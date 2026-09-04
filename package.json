@@ -24,6 +24,7 @@
 		"lint": "oxlint && biome check --error-on-warnings",
 		"lint:fix": "oxlint --fix && biome check --write --error-on-warnings",
 		"verify": "npm run typecheck && npm run lint && npm run test -- run && npm run build -- -l silent",
+		"deploy": "bash scripts/deploy-vps.sh",
 		"preview": "vite preview",
 		"rpfit": "npx ts-node --project scripts/tsconfig.json scripts/rpfit.ts",
 		"rptest": "npx ts-node --project scripts/tsconfig.json scripts/rptest.ts",
