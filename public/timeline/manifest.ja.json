@@ -1,0 +1,20 @@
+{
+	"short_name": "チームタイムライン",
+	"name": "チームタイムライン for ポケモンスリープ",
+	"description": "アプリ起動間隔、所持数溢れ、スキルの発動を含めたチームの獲得EPをシミュレーションします。",
+	"icons": [
+		{
+			"src": "favicon.svg",
+			"sizes": "24x24"
+		},
+		{
+			"src": "logo192.png",
+			"sizes": "192x192",
+			"purpose": "any maskable"
+		}
+	],
+	"start_url": "./index.ja.html?utm_source=homescreen",
+	"display": "standalone",
+	"theme_color": "#f9f9f9",
+	"background_color": "#ffffff"
+}

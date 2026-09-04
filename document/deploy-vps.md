@@ -95,9 +95,11 @@ to ship something that has not passed `npm run verify`.
   outside this repository. Nothing here touches them.
 - Clients cache aggressively through the service worker. After a deploy, a hard
   reload may be needed before the new version appears.
-- `vite.config.ts` builds HTML entry points for the research calculator and
-  `iv/` only, so `dist/` has no `timeline/` directory. TeamTimeline is reached
-  from the toolbar menu and `useRouter` then rewrites the URL; loading
-  `/pokesleep-tool/timeline/` directly returns 404 from Caddy's `file_server`.
-  Fixing that means adding `timeline/index*.html` entry points, which
-  `AGENTS.md` permits, or a Caddy rewrite — neither is done today.
+- Each app needs its own HTML entry points in `vite.config.ts`, because the
+  router in `src/ui/App.tsx` picks the app from `window.location.pathname` and
+  Caddy's `file_server` only serves files that exist. `timeline/index*.html` and
+  `public/timeline/` mirror `iv/` for that reason; adding another app means
+  adding both.
+- TeamTimeline has no artwork of its own, so `public/timeline/favicon.svg` and
+  `logo192.png` are copies of the Research Calc icons. Replace them when a
+  dedicated icon exists.
