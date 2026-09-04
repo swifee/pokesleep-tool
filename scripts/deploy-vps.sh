@@ -18,10 +18,10 @@
 
 set -euo pipefail
 
-# Git Bash rewrites arguments that look like POSIX paths into Windows paths,
-# which would corrupt the remote paths passed to ssh.
-export MSYS_NO_PATHCONV=1
-export MSYS2_ARG_CONV_EXCL='*'
+# Git Bash rewrites arguments that look like POSIX paths into Windows paths
+# before handing them to native binaries. `git` depends on that, so the two ssh
+# calls below disable it inline, for themselves only, to keep the remote paths
+# intact. Exporting it for the whole script breaks `git`.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
@@ -177,7 +177,7 @@ check_artifacts() {
 
 check_remote() {
 	log "Connecting to $(ssh_target)"
-	ssh "${ssh_opts[@]}" "$(ssh_target)" \
+	MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ssh "${ssh_opts[@]}" "$(ssh_target)" \
 		"test -d '${DEPLOY_REMOTE_DIR}' && test -w '${DEPLOY_REMOTE_DIR}'" ||
 		die "${DEPLOY_REMOTE_DIR} is not a writable directory on $(ssh_target)"
 }
@@ -187,7 +187,7 @@ check_remote() {
 upload() {
 	log "Uploading dist/ to $(ssh_target):${DEPLOY_REMOTE_DIR}"
 	tar -C "$DIST_DIR" -cf - . |
-		ssh "${ssh_opts[@]}" "$(ssh_target)" \
+		MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ssh "${ssh_opts[@]}" "$(ssh_target)" \
 			"set -e; find '${DEPLOY_REMOTE_DIR}' -mindepth 1 -delete; tar -C '${DEPLOY_REMOTE_DIR}' -xf -"
 }
 
