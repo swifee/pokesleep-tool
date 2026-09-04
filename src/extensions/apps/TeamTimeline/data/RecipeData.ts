@@ -678,7 +678,7 @@ export const RECIPES: readonly RecipeDefinition[] = [
 		name: "thrillingScaryFacePancake",
 		category: "dessert",
 		ingredients: [
-			{ name: "potato", count: 18 },
+			{ name: "pumpkin", count: 18 },
 			{ name: "egg", count: 24 },
 			{ name: "honey", count: 32 },
 			{ name: "tomato", count: 29 },
