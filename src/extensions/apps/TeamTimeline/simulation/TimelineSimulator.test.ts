@@ -345,27 +345,16 @@ describe("TimelineSimulator", () => {
 		).toBeUndefined();
 	});
 
-	it("Mew をシミュレーション投入時に保存済み Mew rate で正規化する", () => {
+	it("Mew をシミュレーション投入時にオールマイティスキルに応じた固定 skill rate で正規化する", () => {
 		processSkillTriggersMock.mockImplementation(
 			(pokemon: PokemonBoxItem, ...args: unknown[]) => {
 				const energy = typeof args[1] === "number" ? args[1] : 50;
-				expect(pokemon.iv.baseIngRate).toBe(16);
-				expect(pokemon.iv.baseSkillRate).toBe(2.8);
+				// 食材率は pokemon.json の値のまま、スキル率は上流 getMewSkillRate と同じ固定値
+				expect(pokemon.iv.baseIngRate).toBeUndefined();
+				expect(pokemon.iv.pokemon.ingRate).toBe(20);
+				expect(pokemon.iv.baseSkillRate).toBe(3.37);
 				return createNeutralSkillEffectResult(energy);
 			},
-		);
-		localStorage.setItem(
-			"PstStrenghParam",
-			JSON.stringify({
-				...defaultBonusSettings,
-				mew: {
-					ing: 16,
-					skill1: 8,
-					skill2: 4.4,
-					skill3: 2.8,
-					success: 30,
-				},
-			}),
 		);
 
 		const mew = createMewPokemon(6, "Energy for Everyone S");
