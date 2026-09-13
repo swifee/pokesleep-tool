@@ -77,6 +77,8 @@ interface TimelineTableProps {
 	compactEmptyCells?: boolean;
 	alwaysShowSwapButton?: boolean;
 	displayMode?: TimelineDisplayMode;
+	/** 入れ替え・回収しないの操作 UI を出さず、表示専用にする */
+	readOnly?: boolean;
 }
 
 const TEAM_SLOT_KEYS = [
@@ -121,6 +123,7 @@ const TimelineTable = React.memo(
 		compactEmptyCells = false,
 		alwaysShowSwapButton = false,
 		displayMode = "detailed",
+		readOnly = false,
 	}: TimelineTableProps) => {
 		const { t } = useTranslation();
 		const [swapDragSource, setSwapDragSource] =
@@ -725,7 +728,10 @@ const TimelineTable = React.memo(
 									alwaysShowSwapButton={alwaysShowSwapButton}
 									isFirstTimelineSlot={isFirstTimelineSlot}
 									fitToViewport={fitToViewport}
-									onSwapLongPressStart={handleSwapLongPressStart}
+									readOnly={readOnly}
+									onSwapLongPressStart={
+										readOnly ? undefined : handleSwapLongPressStart
+									}
 									swapDragSource={swapDragSource}
 									swapDragTarget={swapDragTarget}
 									displayMode={displayMode}
