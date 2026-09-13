@@ -33,14 +33,13 @@ function buildBaseDaySlots(timeSlots: TimeSlot[]): TimeSlot[] {
 		return sortedSlots;
 	}
 
-	const normalizedSlots = [...sortedSlots];
-	const sleepIndex = normalizedSlots.findIndex(
-		(slot) => slot.id === sleepSlot.id,
-	);
-	if (sleepIndex > 0) {
-		normalizedSlots.splice(sleepIndex, 1);
-		normalizedSlots.unshift(sleepSlot);
-	}
+	// 就寝スロットを先頭にし、残りは時系列のまま回転させる。
+	// 就寝〜AM4:00 の間にあるスロットも就寝の直後に並ぶ。
+	const sleepIndex = sortedSlots.findIndex((slot) => slot.id === sleepSlot.id);
+	const normalizedSlots =
+		sleepIndex > 0
+			? [...sortedSlots.slice(sleepIndex), ...sortedSlots.slice(0, sleepIndex)]
+			: [...sortedSlots];
 
 	const endSlot: TimeSlot = {
 		...sleepSlot,
