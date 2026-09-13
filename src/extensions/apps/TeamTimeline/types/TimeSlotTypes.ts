@@ -105,6 +105,18 @@ export function migrateTimeSlot(oldSlot: TimeSlot | LegacyTimeSlot): TimeSlot {
 }
 
 /**
+ * 曜日（`Date#getDay` と同じ並び。0=日曜、1=月曜、…、6=土曜）
+ */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/** 日曜日 */
+export const SUNDAY: Weekday = 0;
+/** 月曜日 */
+export const MONDAY: Weekday = 1;
+/** 1週間の日数 */
+export const DAYS_PER_WEEK = 7;
+
+/**
  * シミュレーション設定
  */
 export interface SimulationConfig {
@@ -114,6 +126,10 @@ export interface SimulationConfig {
 	initialEnergy: number;
 	/** シミュレーション期間（日数） */
 	simulationDays: number;
+	/** スキル連続不発天井（一定回数連続不発で次回確定発動）を考慮するか */
+	pityProc: boolean;
+	/** 集計期間の開始曜日（日曜は料理ルールが変わる） */
+	startDayOfWeek: Weekday;
 }
 
 /** シミュレーション日数の最小値 */
@@ -132,12 +148,42 @@ export function clampSimulationDays(days: number): number {
 }
 
 /**
+ * 値が曜日（0〜6 の整数）かどうかを判定する
+ */
+export function isWeekday(value: unknown): value is Weekday {
+	return (
+		typeof value === "number" &&
+		Number.isInteger(value) &&
+		value >= 0 &&
+		value < DAYS_PER_WEEK
+	);
+}
+
+/**
+ * 集計期間の開始曜日を確定する。
+ *
+ * 期間が1週間（最大日数）のときは最終日が日曜になるよう月曜固定とし、
+ * それ以外の期間では指定された曜日をそのまま使う。
+ */
+export function resolveStartDayOfWeek(
+	simulationDays: number,
+	startDayOfWeek: Weekday,
+): Weekday {
+	if (clampSimulationDays(simulationDays) >= MAX_SIMULATION_DAYS) {
+		return MONDAY;
+	}
+	return startDayOfWeek;
+}
+
+/**
  * デフォルトのシミュレーション設定
  */
 export const DEFAULT_SIMULATION_CONFIG: SimulationConfig = {
 	seed: 123456,
 	initialEnergy: 50,
 	simulationDays: MIN_SIMULATION_DAYS,
+	pityProc: true,
+	startDayOfWeek: MONDAY,
 };
 
 /**

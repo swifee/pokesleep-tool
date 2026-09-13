@@ -8,12 +8,18 @@ import {
 	type CookingCategory,
 	type CookingEventResult,
 	type CookingIngredientUsage,
+	DEFAULT_DAY_POT_SIZE_MULTIPLIER,
 	DEFAULT_RECIPE_LEVEL,
+	GREAT_SUCCESS_EP_MULTIPLIER,
 	type IngredientBag,
 	type LeftoverIngredients,
+	MAX_GREAT_SUCCESS_CHANCE,
 	MAX_RECIPE_LEVEL,
 	type PokemonCookingAttribution,
 	type RecipeDefinition,
+	SUNDAY_GREAT_SUCCESS_CHANCE,
+	SUNDAY_GREAT_SUCCESS_EP_MULTIPLIER,
+	SUNDAY_POT_SIZE_MULTIPLIER,
 } from "../types/CookingTypes";
 import type { MealType } from "../types/TimeSlotTypes";
 import type { SeededRandom } from "./SeededRandom";
@@ -41,6 +47,8 @@ interface ExecuteMealCookingParams {
 	isGoodCampTicket: boolean;
 	/** イベントによる鍋容量倍率（1 / 1.6 / 2） */
 	potSizeMultiplier?: number;
+	/** 日曜日の料理かどうか（鍋容量2倍・大成功30%・大成功EP3倍） */
+	isSunday?: boolean;
 	cookingPowerUpBonus: number;
 	tastyChanceAccumulated: number;
 	fieldBonus: number;
@@ -49,6 +57,65 @@ interface ExecuteMealCookingParams {
 	random: SeededRandom;
 	mealSlotId: string;
 	mealType: MealType;
+}
+
+/** 曜日によって変わる料理ルール */
+interface DayCookingRule {
+	/** 鍋容量倍率 */
+	potSizeMultiplier: number;
+	/** 大成功の基礎確率(%) */
+	baseGreatSuccessChance: number;
+	/** 大成功時のEP倍率 */
+	greatSuccessMultiplier: number;
+}
+
+const WEEKDAY_COOKING_RULE: DayCookingRule = {
+	potSizeMultiplier: DEFAULT_DAY_POT_SIZE_MULTIPLIER,
+	baseGreatSuccessChance: BASE_GREAT_SUCCESS_CHANCE,
+	greatSuccessMultiplier: GREAT_SUCCESS_EP_MULTIPLIER,
+};
+
+const SUNDAY_COOKING_RULE: DayCookingRule = {
+	potSizeMultiplier: SUNDAY_POT_SIZE_MULTIPLIER,
+	baseGreatSuccessChance: SUNDAY_GREAT_SUCCESS_CHANCE,
+	greatSuccessMultiplier: SUNDAY_GREAT_SUCCESS_EP_MULTIPLIER,
+};
+
+/**
+ * 曜日に応じた料理ルールを取得する
+ */
+export function getDayCookingRule(isSunday: boolean): DayCookingRule {
+	return isSunday ? SUNDAY_COOKING_RULE : WEEKDAY_COOKING_RULE;
+}
+
+/**
+ * 大成功確率(%)を計算する
+ *
+ * 基礎確率に料理チャンスの蓄積分を加算し、上限で頭打ちにする。
+ *
+ * @param baseGreatSuccessChance 基礎確率(%)
+ * @param tastyChanceAccumulated 料理チャンスによる蓄積分(%)
+ * @returns 大成功確率(%)
+ */
+export function calculateGreatSuccessChance(
+	baseGreatSuccessChance: number,
+	tastyChanceAccumulated: number,
+): number {
+	return Math.min(
+		MAX_GREAT_SUCCESS_CHANCE,
+		baseGreatSuccessChance + Math.max(0, tastyChanceAccumulated),
+	);
+}
+
+/**
+ * 大成功倍率を適用した料理EPを計算する
+ */
+export function applyGreatSuccessMultiplier(
+	eFinal: number,
+	isGreatSuccess: boolean,
+	greatSuccessMultiplier: number,
+): number {
+	return isGreatSuccess ? eFinal * greatSuccessMultiplier : eFinal;
 }
 
 /**
@@ -139,13 +206,14 @@ const GOOD_CAMP_TICKET_POT_MULTIPLIER = 1.5;
 /**
  * 有効鍋容量を計算する
  *
- * 基礎容量にイベント倍率・キャンプチケット倍率・料理パワーアップボーナスを
- * 適用する。倍率は乗算で重ねてから丸める。
+ * 基礎容量にイベント倍率・曜日倍率（日曜2倍）・キャンプチケット倍率を
+ * 乗算で重ねてから丸め、料理パワーアップボーナスを加算する。
  *
  * @param basePotCapacity 鍋の基礎容量
  * @param isGoodCampTicket おこうグッドキャンプチケット使用中かどうか
  * @param cookingPowerUpBonus 料理パワーアップスキルによる追加容量
  * @param potSizeMultiplier イベントによる鍋容量倍率（1 / 1.6 / 2）
+ * @param dayPotMultiplier 曜日による鍋容量倍率（日曜は2、それ以外は1）
  * @returns 有効鍋容量
  */
 export function calculateEffectivePotCapacity(
@@ -153,17 +221,23 @@ export function calculateEffectivePotCapacity(
 	isGoodCampTicket: boolean,
 	cookingPowerUpBonus: number,
 	potSizeMultiplier: number = DEFAULT_POT_SIZE_MULTIPLIER,
+	dayPotMultiplier: number = DEFAULT_DAY_POT_SIZE_MULTIPLIER,
 ): number {
 	const eventMultiplier = Math.max(
 		DEFAULT_POT_SIZE_MULTIPLIER,
 		potSizeMultiplier,
 	);
+	const dayMultiplier = Math.max(
+		DEFAULT_DAY_POT_SIZE_MULTIPLIER,
+		dayPotMultiplier,
+	);
 	const campTicketMultiplier = isGoodCampTicket
 		? GOOD_CAMP_TICKET_POT_MULTIPLIER
 		: 1;
 	return (
-		Math.round(basePotCapacity * eventMultiplier * campTicketMultiplier) +
-		cookingPowerUpBonus
+		Math.round(
+			basePotCapacity * eventMultiplier * dayMultiplier * campTicketMultiplier,
+		) + cookingPowerUpBonus
 	);
 }
 
@@ -534,6 +608,7 @@ export function executeMealCooking(
 		basePotCapacity,
 		isGoodCampTicket,
 		potSizeMultiplier,
+		isSunday = false,
 		cookingPowerUpBonus,
 		tastyChanceAccumulated,
 		fieldBonus,
@@ -544,12 +619,19 @@ export function executeMealCooking(
 		mealType,
 	} = params;
 
+	const dayRule = getDayCookingRule(isSunday);
 	const effectivePotCapacity = calculateEffectivePotCapacity(
 		basePotCapacity,
 		isGoodCampTicket,
 		cookingPowerUpBonus,
 		potSizeMultiplier,
+		dayRule.potSizeMultiplier,
 	);
+	const tastyChancePercent = calculateGreatSuccessChance(
+		dayRule.baseGreatSuccessChance,
+		tastyChanceAccumulated,
+	);
+	const greatSuccessMultiplier = dayRule.greatSuccessMultiplier;
 	const bagIngredientsBeforeCooking = createBagIngredientSnapshot(bag);
 
 	const selected = selectBestRecipe(
@@ -564,8 +646,6 @@ export function executeMealCooking(
 
 	// 作れるレシピがない場合はスキップ結果を返す
 	if (selected == null) {
-		const tastyChancePercent =
-			BASE_GREAT_SUCCESS_CHANCE + tastyChanceAccumulated;
 		const isGreatSuccess = random.chance(tastyChancePercent / 100);
 		const newTastyChanceAccumulated = isGreatSuccess
 			? 0
@@ -575,6 +655,7 @@ export function executeMealCooking(
 			mealType,
 			recipeName: null,
 			isGreatSuccess,
+			greatSuccessMultiplier,
 			cookingEP: 0,
 			eBase: 0,
 			eDisplay: 0,
@@ -601,11 +682,14 @@ export function executeMealCooking(
 	const remainingPotCapacity = effectivePotCapacity - totalIngredientCount;
 
 	// 大成功判定
-	const tastyChancePercent = BASE_GREAT_SUCCESS_CHANCE + tastyChanceAccumulated;
 	const isGreatSuccess = random.chance(tastyChancePercent / 100);
 
-	// 最終EP計算（大成功は2倍）
-	const cookingEP = isGreatSuccess ? selected.eFinal * 2 : selected.eFinal;
+	// 最終EP計算（大成功は月〜土2倍、日曜3倍）
+	const cookingEP = applyGreatSuccessMultiplier(
+		selected.eFinal,
+		isGreatSuccess,
+		greatSuccessMultiplier,
+	);
 
 	// 大成功蓄積の更新（成功したらリセット）
 	const newTastyChanceAccumulated = isGreatSuccess ? 0 : tastyChanceAccumulated;
@@ -615,6 +699,7 @@ export function executeMealCooking(
 		mealType,
 		recipeName: selected.recipe.name,
 		isGreatSuccess,
+		greatSuccessMultiplier,
 		cookingEP,
 		eBase: selected.eBase,
 		eDisplay: selected.eDisplay,

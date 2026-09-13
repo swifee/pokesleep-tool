@@ -9,7 +9,6 @@ import {
 	cbexNonFavoriteBerrySpeedPenalty,
 	ggexMainBerrySpeedBonus,
 	ggexNonFavoriteBerrySpeedPenalty,
-	type StrengthParameter,
 } from "../../../../util/PokemonStrength";
 import type { PlaceholderPokemonProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 
@@ -24,23 +23,27 @@ const CARRY_LIMIT_PER_SUB_SKILL = 6;
 /** 進化1段階あたりの最大所持数 */
 const CARRY_LIMIT_PER_EVOLUTION = 5;
 
-function getMewSkillRate(
-	versatileSkill: MainSkillName,
-	mew: StrengthParameter["mew"],
-): number {
-	if (
-		versatileSkill === "Charge Strength S (Random)" ||
-		versatileSkill === "Charge Energy S"
-	) {
-		return mew.skill1;
-	}
-	if (
-		versatileSkill === "Energy for Everyone S" ||
-		versatileSkill === "Berry Burst"
-	) {
-		return mew.skill3;
-	}
-	return mew.skill2;
+/**
+ * Mew の「オールマイティ」で選択中のスキルに対応するスキル発動率（%）。
+ * 上流 PokemonStrength.getMewSkillRate と同じ値。
+ * ref: https://pks.raenonx.cc/en/mainskill/info/34
+ */
+const MEW_SKILL_RATE_BY_VERSATILE_SKILL: Partial<
+	Record<MainSkillName, number>
+> = {
+	"Charge Strength S (Random)": 6.4,
+	"Charge Energy S": 6.4,
+	"Energizing Cheer S": 4.39,
+	"Energy for Everyone S": 3.37,
+	"Berry Burst": 2.84,
+};
+/** 上記以外のスキルを選択した Mew のスキル発動率（%） */
+const MEW_DEFAULT_SKILL_RATE = 4;
+
+function getMewSkillRate(versatileSkill: MainSkillName): number {
+	return (
+		MEW_SKILL_RATE_BY_VERSATILE_SKILL[versatileSkill] ?? MEW_DEFAULT_SKILL_RATE
+	);
 }
 
 function toPokemonIv(source: PokemonIv | PokemonBoxItem): PokemonIv {
@@ -213,13 +216,11 @@ export function getTimelineCarryLimit(
 
 export function normalizeTimelinePokemonIv(
 	iv: PokemonIv,
-	strengthParameter: StrengthParameter,
 	placeholderStats?: PlaceholderPokemonProvisionalSettings,
 ): PokemonIv {
 	if (iv.pokemon.name === "Mew") {
 		return iv.clone({
-			baseIngRate: strengthParameter.mew.ing,
-			baseSkillRate: getMewSkillRate(iv.versatileSkill, strengthParameter.mew),
+			baseSkillRate: getMewSkillRate(iv.versatileSkill),
 		});
 	}
 
@@ -235,14 +236,9 @@ export function normalizeTimelinePokemonIv(
 
 export function normalizeTimelinePokemon(
 	pokemon: PokemonBoxItem,
-	strengthParameter: StrengthParameter,
 	placeholderStats?: PlaceholderPokemonProvisionalSettings,
 ): PokemonBoxItem {
-	const normalizedIv = normalizeTimelinePokemonIv(
-		pokemon.iv,
-		strengthParameter,
-		placeholderStats,
-	);
+	const normalizedIv = normalizeTimelinePokemonIv(pokemon.iv, placeholderStats);
 	if (normalizedIv === pokemon.iv) {
 		return pokemon;
 	}

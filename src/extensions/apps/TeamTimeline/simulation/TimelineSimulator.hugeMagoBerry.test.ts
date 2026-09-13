@@ -7,6 +7,7 @@ import {
 	type ProvisionalSettings,
 } from "../types/ProvisionalSettingsTypes";
 import {
+	DEFAULT_SIMULATION_CONFIG,
 	DEFAULT_TIME_SLOTS,
 	type NoCollectCellSetting,
 	type TimeSlotResult,
@@ -64,7 +65,12 @@ function simulate(
 	return runSimulation({
 		team,
 		timeSlots: DEFAULT_TIME_SLOTS,
-		config: { seed: 20260914, initialEnergy: 80, simulationDays: 1 },
+		config: {
+			...DEFAULT_SIMULATION_CONFIG,
+			seed: 20260914,
+			initialEnergy: 80,
+			simulationDays: 1,
+		},
 		bonusSettings: createDefaultTimelineBonusSettings(),
 		provisionalSettings,
 		noCollectCells,

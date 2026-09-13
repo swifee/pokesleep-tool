@@ -4,8 +4,6 @@ import {
 	FormControlLabel,
 	Slider,
 	Switch,
-	Tab,
-	Tabs,
 	Typography,
 	useMediaQuery,
 	useTheme,
@@ -20,6 +18,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import type { AppType } from "../../../ui/AppConfig";
 import PokemonBox, { type PokemonBoxItem } from "../../../util/PokemonBox";
 import AdditionalAnalysisPanel from "./components/AdditionalAnalysisPanel";
 import BoxSelectDialog from "./components/BoxSelectDialog";
@@ -36,6 +35,9 @@ import SwapRemoveConfirmDialog from "./components/SwapRemoveConfirmDialog";
 import SwapSupplementBar from "./components/SwapSupplementBar";
 import TeamSetToolbar from "./components/TeamSetToolbar";
 import TeamSummaryRow from "./components/TeamSummaryRow";
+import TeamTimelineTabs, {
+	type TeamTimelineTab,
+} from "./components/TeamTimelineTabs";
 import TimelineBonusSettingsPanel from "./components/TimelineBonusSettingsPanel";
 import type { TimelineDisplayMode } from "./components/TimelineCell";
 import TimelineHeader from "./components/TimelineHeader";
@@ -95,6 +97,7 @@ import {
 	SWAP_NONE_POKEMON_ID,
 	type TeamSummary,
 	type TimeSlot,
+	type Weekday,
 } from "./types/TimeSlotTypes";
 import {
 	buildEnergySkillContributionTargets,
@@ -383,10 +386,15 @@ function createTeamSetId(): string {
 	return `team-set-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+interface TeamTimelineAppProps {
+	/** Switches to another app (e.g. the IV calculator). Enables the "Box" link tab when provided. */
+	onAppChange?: (value: AppType) => void;
+}
+
 /**
  * チームタイムラインアプリのメインコンポーネント
  */
-export default function TeamTimelineApp() {
+export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 	const { t } = useTranslation();
 	const theme = useTheme();
 	const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
@@ -537,6 +545,8 @@ export default function TeamTimelineApp() {
 				cookingSettings: state.cookingSettings,
 				initialEnergy: state.simulationConfig.initialEnergy,
 				simulationDays: state.simulationConfig.simulationDays,
+				pityProc: state.simulationConfig.pityProc,
+				startDayOfWeek: state.simulationConfig.startDayOfWeek,
 				timeSlots: state.timeSlots,
 				provisionalSettings: state.provisionalSettings,
 			}),
@@ -546,6 +556,8 @@ export default function TeamTimelineApp() {
 			state.provisionalSettings,
 			state.simulationConfig.initialEnergy,
 			state.simulationConfig.simulationDays,
+			state.simulationConfig.pityProc,
+			state.simulationConfig.startDayOfWeek,
 			state.timeSlots,
 		],
 	);
@@ -814,11 +826,7 @@ export default function TeamTimelineApp() {
 			const result = runSimulation({
 				team: state.team,
 				timeSlots: state.timeSlots,
-				config: {
-					seed,
-					initialEnergy: state.simulationConfig.initialEnergy,
-					simulationDays: state.simulationConfig.simulationDays,
-				},
+				config: { ...state.simulationConfig, seed },
 				bonusSettings: state.bonusSettings,
 				swaps: state.swaps,
 				noCollectCells: state.noCollectCells,
@@ -859,8 +867,7 @@ export default function TeamTimelineApp() {
 		[
 			state.team,
 			state.timeSlots,
-			state.simulationConfig.initialEnergy,
-			state.simulationConfig.simulationDays,
+			state.simulationConfig,
 			state.bonusSettings,
 			state.swaps,
 			state.noCollectCells,
@@ -880,10 +887,8 @@ export default function TeamTimelineApp() {
 			const multiResult = await runMultiTrialSimulationWithProgress({
 				team: state.team,
 				timeSlots: state.timeSlots,
-				config: {
-					initialEnergy: state.simulationConfig.initialEnergy,
-					simulationDays: state.simulationConfig.simulationDays,
-				},
+				// seed は試行ごとに付与されるため、設定はそのまま渡す
+				config: state.simulationConfig,
 				bonusSettings: state.bonusSettings,
 				cookingSettings: state.cookingSettings,
 				provisionalSettings: state.provisionalSettings,
@@ -936,11 +941,7 @@ export default function TeamTimelineApp() {
 			const fullResult = runSimulation({
 				team: state.team,
 				timeSlots: state.timeSlots,
-				config: {
-					seed: selectedSeed,
-					initialEnergy: state.simulationConfig.initialEnergy,
-					simulationDays: state.simulationConfig.simulationDays,
-				},
+				config: { ...state.simulationConfig, seed: selectedSeed },
 				bonusSettings: state.bonusSettings,
 				swaps: state.swaps,
 				noCollectCells: state.noCollectCells,
@@ -984,9 +985,7 @@ export default function TeamTimelineApp() {
 		[
 			state.team,
 			state.timeSlots,
-			state.simulationConfig.initialEnergy,
-			state.simulationConfig.simulationDays,
-			state.simulationConfig.seed,
+			state.simulationConfig,
 			state.bonusSettings,
 			state.swaps,
 			state.noCollectCells,
@@ -1264,11 +1263,7 @@ export default function TeamTimelineApp() {
 				const result = runSimulation({
 					team: state.team,
 					timeSlots: state.timeSlots,
-					config: {
-						seed: trial.seed,
-						initialEnergy: state.simulationConfig.initialEnergy,
-						simulationDays: state.simulationConfig.simulationDays,
-					},
+					config: { ...state.simulationConfig, seed: trial.seed },
 					bonusSettings: state.bonusSettings,
 					swaps: state.swaps,
 					noCollectCells: state.noCollectCells,
@@ -1285,8 +1280,7 @@ export default function TeamTimelineApp() {
 			state.multiTrialResults,
 			state.team,
 			state.timeSlots,
-			state.simulationConfig.initialEnergy,
-			state.simulationConfig.simulationDays,
+			state.simulationConfig,
 			state.bonusSettings,
 			state.swaps,
 			state.noCollectCells,
@@ -1313,6 +1307,18 @@ export default function TeamTimelineApp() {
 	const handleSimulationDaysChange = useCallback((simulationDays: number) => {
 		dispatch({ type: "updateSimulationConfig", config: { simulationDays } });
 	}, []);
+	const handleStartDayOfWeekChange = useCallback((startDayOfWeek: Weekday) => {
+		dispatch({ type: "updateSimulationConfig", config: { startDayOfWeek } });
+	}, []);
+	const handlePityProcChange = useCallback(
+		(_event: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
+			dispatch({
+				type: "updateSimulationConfig",
+				config: { pityProc: checked },
+			});
+		},
+		[],
+	);
 	const handleSummaryValueModeChange = useCallback((mode: SummaryValueMode) => {
 		setSummaryValueMode(mode);
 	}, []);
@@ -1324,12 +1330,17 @@ export default function TeamTimelineApp() {
 	);
 
 	// タブ切り替えハンドラー
-	const handleTabChange = useCallback(
-		(_: React.SyntheticEvent, newValue: "team" | "settings" | "cooking") => {
-			dispatch({ type: "selectTab", tab: newValue });
-		},
-		[],
-	);
+	const handleTabChange = useCallback((newValue: TeamTimelineTab) => {
+		dispatch({ type: "selectTab", tab: newValue });
+	}, []);
+
+	// 「ボックス」タブから個体値計算機へ移動する
+	const handleNavigateToBox = useMemo(() => {
+		if (onAppChange === undefined) {
+			return undefined;
+		}
+		return () => onAppChange("IvCalc");
+	}, [onAppChange]);
 
 	const createDefaultTeamSetName = useCallback(
 		(index: number) =>
@@ -2024,11 +2035,7 @@ export default function TeamTimelineApp() {
 				const result = runSimulation({
 					team: state.team,
 					timeSlots: state.timeSlots,
-					config: {
-						seed,
-						initialEnergy: state.simulationConfig.initialEnergy,
-						simulationDays: state.simulationConfig.simulationDays,
-					},
+					config: { ...state.simulationConfig, seed },
 					bonusSettings: state.bonusSettings,
 					swaps: state.swaps,
 					noCollectCells: state.noCollectCells,
@@ -2094,8 +2101,7 @@ export default function TeamTimelineApp() {
 			analysisSeeds,
 			state.team,
 			state.timeSlots,
-			state.simulationConfig.initialEnergy,
-			state.simulationConfig.simulationDays,
+			state.simulationConfig,
 			state.bonusSettings,
 			state.swaps,
 			state.noCollectCells,
@@ -3075,22 +3081,11 @@ export default function TeamTimelineApp() {
 			}}
 		>
 			{/* タブUI */}
-			<Box sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}>
-				<Tabs value={state.activeTab} onChange={handleTabChange}>
-					<Tab
-						label={t("TeamTimeline.tab simulation", "シミュレーション")}
-						value="team"
-					/>
-					<Tab
-						label={t("TeamTimeline.tab basic settings", "基本設定")}
-						value="settings"
-					/>
-					<Tab
-						label={t("TeamTimeline.tab cooking settings", "料理設定")}
-						value="cooking"
-					/>
-				</Tabs>
-			</Box>
+			<TeamTimelineTabs
+				activeTab={state.activeTab}
+				onTabChange={handleTabChange}
+				onNavigateToBox={handleNavigateToBox}
+			/>
 
 			{/* チームタブ */}
 			{state.activeTab === "team" && (
@@ -3145,6 +3140,7 @@ export default function TeamTimelineApp() {
 							seedMode={state.seedMode}
 							seed={state.simulationConfig.seed}
 							simulationDays={state.simulationConfig.simulationDays}
+							startDayOfWeek={state.simulationConfig.startDayOfWeek}
 							multiTrialCount={state.multiTrialCount}
 							simulationLoading={state.simulationLoading}
 							simulationProgress={simulationProgress}
@@ -3157,6 +3153,7 @@ export default function TeamTimelineApp() {
 							onSeedModeChange={handleSeedModeChange}
 							onSeedChange={handleSeedChange}
 							onSimulationDaysChange={handleSimulationDaysChange}
+							onStartDayOfWeekChange={handleStartDayOfWeekChange}
 							onTrialCountChange={handleTrialCountChange}
 							onRunSimulation={handleRunSimulation}
 						/>
@@ -3318,6 +3315,7 @@ export default function TeamTimelineApp() {
 										team={state.team}
 										timeSlots={state.timeSlots}
 										simulationDays={state.simulationConfig.simulationDays}
+										startDayOfWeek={state.simulationConfig.startDayOfWeek}
 										result={EMPTY_SIMULATION_RESULT}
 										swaps={state.swaps}
 										noCollectCells={state.noCollectCells}
@@ -3418,6 +3416,7 @@ export default function TeamTimelineApp() {
 												team={state.team}
 												timeSlots={state.timeSlots}
 												simulationDays={state.simulationConfig.simulationDays}
+												startDayOfWeek={state.simulationConfig.startDayOfWeek}
 												result={simulationResult}
 												swaps={state.swaps}
 												noCollectCells={state.noCollectCells}
@@ -3508,6 +3507,31 @@ export default function TeamTimelineApp() {
 								{state.simulationConfig.initialEnergy}
 							</Typography>
 						</Box>
+					</Box>
+					{/* スキル連続不発天井 */}
+					<Box sx={{ mb: 3, px: 2 }}>
+						<FormControlLabel
+							control={
+								<Switch
+									checked={state.simulationConfig.pityProc}
+									onChange={handlePityProcChange}
+									inputProps={{
+										"aria-label": "pity-proc-switch",
+									}}
+									data-testid="team-timeline-pity-proc-switch"
+								/>
+							}
+							label={t(
+								"TeamTimeline.include pity proc",
+								"スキル連続不発天井を考慮",
+							)}
+						/>
+						<Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+							{t(
+								"TeamTimeline.pity proc note",
+								"最後のスキル発動から一定回数連続で不発だったとき、次のおてつだいでメインスキルが必ず発動します。",
+							)}
+						</Typography>
 					</Box>
 					<Box id={TIME_SLOT_SETTINGS_SECTION_ID}>
 						<TimeSlotEditor

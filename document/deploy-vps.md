@@ -15,8 +15,8 @@ the finished `dist/` is shipped, streamed over ssh with `tar` so no intermediate
 archive is written.
 
 The VPS is also unreachable from GitHub Actions: it is only exposed through
-Tailscale, and its OCI security list opens port 22 alone. Deploying from CI is
-therefore not an option — `npm run deploy` is always run by hand.
+Tailscale. Deploying from CI is therefore not an option — `npm run deploy` is
+always run by hand.
 
 ## The `/pokesleep-tool/` prefix is load-bearing
 
@@ -35,9 +35,8 @@ referencing the prefix, or if `dist/sw.js` is missing.
 cp scripts/deploy-vps.env.example scripts/deploy-vps.env
 ```
 
-Then edit `scripts/deploy-vps.env`. It is git-ignored: this fork is public and
-the VPS address is reachable from the internet on port 22, so the connection
-details stay out of the repository.
+Then edit `scripts/deploy-vps.env`. It is git-ignored: this fork is public, so
+the host, the account and the key path stay out of the repository.
 
 | Variable | Meaning |
 |---|---|
@@ -52,7 +51,7 @@ Environment variables of the same name override the file for a single run, and
 an explicitly empty value wins too:
 
 ```bash
-DEPLOY_HOST=apps.tail935846.ts.net npm run deploy
+DEPLOY_HOST=staging.example.com npm run deploy
 DEPLOY_SSH_KEY= npm run deploy          # use ssh-agent instead of the file's key
 ```
 

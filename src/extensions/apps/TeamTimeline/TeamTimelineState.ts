@@ -25,9 +25,11 @@ import {
 	clampSimulationDays,
 	DEFAULT_SIMULATION_CONFIG,
 	DEFAULT_TIME_SLOTS,
+	isWeekday,
 	migrateTimeSlot,
 	type NoCollectCellSetting,
 	type PokemonSwap,
+	resolveStartDayOfWeek,
 	type SimulationConfig,
 	STORAGE_KEY_CONFIG,
 	STORAGE_KEY_SLOTS,
@@ -573,6 +575,11 @@ export function teamTimelineReducer(
 					action.config.simulationDays,
 				);
 			}
+			// 期間が1週間のときは開始曜日を月曜に固定する（最終日が日曜）
+			mergedConfig.startDayOfWeek = resolveStartDayOfWeek(
+				mergedConfig.simulationDays,
+				mergedConfig.startDayOfWeek,
+			);
 			return {
 				...state,
 				simulationConfig: mergedConfig,
@@ -1413,14 +1420,24 @@ export function loadConfigFromStorage(): SimulationConfig {
 			return DEFAULT_SIMULATION_CONFIG;
 		}
 
+		const simulationDays = clampSimulationDays(
+			typeof parsed.simulationDays === "number"
+				? parsed.simulationDays
+				: DEFAULT_SIMULATION_CONFIG.simulationDays,
+		);
+		const startDayOfWeek = isWeekday(parsed.startDayOfWeek)
+			? parsed.startDayOfWeek
+			: DEFAULT_SIMULATION_CONFIG.startDayOfWeek;
+
 		return {
 			seed: parsed.seed,
 			initialEnergy: parsed.initialEnergy,
-			simulationDays: clampSimulationDays(
-				typeof parsed.simulationDays === "number"
-					? parsed.simulationDays
-					: DEFAULT_SIMULATION_CONFIG.simulationDays,
-			),
+			simulationDays,
+			pityProc:
+				typeof parsed.pityProc === "boolean"
+					? parsed.pityProc
+					: DEFAULT_SIMULATION_CONFIG.pityProc,
+			startDayOfWeek: resolveStartDayOfWeek(simulationDays, startDayOfWeek),
 		};
 	} catch {
 		return DEFAULT_SIMULATION_CONFIG;

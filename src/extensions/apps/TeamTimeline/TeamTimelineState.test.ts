@@ -3,6 +3,7 @@ import type { PokemonBoxItem } from "../../../util/PokemonBox";
 import PokemonBox from "../../../util/PokemonBox";
 import {
 	createInitialState,
+	loadConfigFromStorage,
 	loadLeftoverIncludeExtraUsageFromStorage,
 	loadSeedModeFromStorage,
 	loadSummaryValueModeFromStorage,
@@ -15,6 +16,7 @@ import {
 	STORAGE_KEY_SYNC_IV_PARAMETER,
 	STORAGE_KEY_TEAM_SETS,
 	STORAGE_KEY_TRIAL_COUNT,
+	saveConfigToStorage,
 	saveLeftoverIncludeExtraUsageToStorage,
 	saveSeedModeToStorage,
 	saveSummaryValueModeToStorage,
@@ -23,7 +25,14 @@ import {
 	teamTimelineReducer,
 } from "./TeamTimelineState";
 import type { TeamSetState } from "./types/TeamTimelineTypes";
-import type { PokemonSwap, SimulationResult } from "./types/TimeSlotTypes";
+import {
+	DEFAULT_SIMULATION_CONFIG,
+	MONDAY,
+	type PokemonSwap,
+	type SimulationResult,
+	STORAGE_KEY_CONFIG,
+	SUNDAY,
+} from "./types/TimeSlotTypes";
 import { createDefaultTimelineBonusSettings } from "./utils/TimelineBonusSettingsBridge";
 
 function createSimulationResult(grandTotalEP: number): SimulationResult {
@@ -69,6 +78,8 @@ describe("teamTimelineReducer", () => {
 		expect(state.simulationConfig.simulationDays).toBe(1);
 		expect(state.simulationConfig.initialEnergy).toBe(50);
 		expect(state.simulationConfig.seed).toBe(123456);
+		expect(state.simulationConfig.pityProc).toBe(true);
+		expect(state.simulationConfig.startDayOfWeek).toBe(MONDAY);
 		expect(state.seedMode).toBe("random");
 		expect(state.multiTrialCount).toBe(1000);
 		expect(state.noCollectCells).toEqual([]);
@@ -1166,6 +1177,152 @@ describe("confirmSwap with repeat", () => {
 		// Day 2: repeat-generated
 		expect(next.swaps[2].dayIndex).toBe(2);
 		expect(next.swaps[2].isRepeatGenerated).toBe(true);
+	});
+});
+
+describe("updateSimulationConfig with pity proc and start day of week", () => {
+	it("toggles pityProc", () => {
+		const state = createInitialState();
+
+		const disabled = teamTimelineReducer(state, {
+			type: "updateSimulationConfig",
+			config: { pityProc: false },
+		});
+		expect(disabled.simulationConfig.pityProc).toBe(false);
+		expect(disabled.simulationConfig.startDayOfWeek).toBe(
+			state.simulationConfig.startDayOfWeek,
+		);
+
+		const enabled = teamTimelineReducer(disabled, {
+			type: "updateSimulationConfig",
+			config: { pityProc: true },
+		});
+		expect(enabled.simulationConfig.pityProc).toBe(true);
+	});
+
+	it("stores the selected start day of week for periods shorter than a week", () => {
+		const state = createInitialState();
+
+		const next = teamTimelineReducer(state, {
+			type: "updateSimulationConfig",
+			config: { simulationDays: 3, startDayOfWeek: SUNDAY },
+		});
+
+		expect(next.simulationConfig.simulationDays).toBe(3);
+		expect(next.simulationConfig.startDayOfWeek).toBe(SUNDAY);
+	});
+
+	it("forces Monday when the period becomes 7 days", () => {
+		const state = teamTimelineReducer(createInitialState(), {
+			type: "updateSimulationConfig",
+			config: { simulationDays: 3, startDayOfWeek: 4 },
+		});
+
+		const fullWeek = teamTimelineReducer(state, {
+			type: "updateSimulationConfig",
+			config: { simulationDays: 7 },
+		});
+		expect(fullWeek.simulationConfig.startDayOfWeek).toBe(MONDAY);
+
+		// 7日間の間は他の曜日を指定しても月曜のまま
+		const attempted = teamTimelineReducer(fullWeek, {
+			type: "updateSimulationConfig",
+			config: { startDayOfWeek: SUNDAY },
+		});
+		expect(attempted.simulationConfig.startDayOfWeek).toBe(MONDAY);
+
+		// 期間を短くすると再び曜日を選べる
+		const shortened = teamTimelineReducer(attempted, {
+			type: "updateSimulationConfig",
+			config: { simulationDays: 2, startDayOfWeek: SUNDAY },
+		});
+		expect(shortened.simulationConfig.startDayOfWeek).toBe(SUNDAY);
+	});
+
+	it("does not mutate the previous state", () => {
+		const state = createInitialState();
+		const before = { ...state.simulationConfig };
+
+		teamTimelineReducer(state, {
+			type: "updateSimulationConfig",
+			config: { pityProc: false, startDayOfWeek: SUNDAY, simulationDays: 7 },
+		});
+
+		expect(state.simulationConfig).toEqual(before);
+	});
+});
+
+describe("simulation config storage", () => {
+	it("saves and restores pityProc and startDayOfWeek", () => {
+		saveConfigToStorage({
+			seed: 777,
+			initialEnergy: 40,
+			simulationDays: 4,
+			pityProc: false,
+			startDayOfWeek: SUNDAY,
+		});
+
+		expect(loadConfigFromStorage()).toEqual({
+			seed: 777,
+			initialEnergy: 40,
+			simulationDays: 4,
+			pityProc: false,
+			startDayOfWeek: SUNDAY,
+		});
+	});
+
+	it("falls back to defaults for missing pityProc and startDayOfWeek (legacy config)", () => {
+		localStorage.setItem(
+			STORAGE_KEY_CONFIG,
+			JSON.stringify({ seed: 12, initialEnergy: 60, simulationDays: 2 }),
+		);
+
+		expect(loadConfigFromStorage()).toEqual({
+			seed: 12,
+			initialEnergy: 60,
+			simulationDays: 2,
+			pityProc: DEFAULT_SIMULATION_CONFIG.pityProc,
+			startDayOfWeek: DEFAULT_SIMULATION_CONFIG.startDayOfWeek,
+		});
+	});
+
+	it("ignores invalid pityProc and startDayOfWeek values", () => {
+		localStorage.setItem(
+			STORAGE_KEY_CONFIG,
+			JSON.stringify({
+				seed: 12,
+				initialEnergy: 60,
+				simulationDays: 2,
+				pityProc: "yes",
+				startDayOfWeek: 9,
+			}),
+		);
+
+		const loaded = loadConfigFromStorage();
+		expect(loaded.pityProc).toBe(DEFAULT_SIMULATION_CONFIG.pityProc);
+		expect(loaded.startDayOfWeek).toBe(
+			DEFAULT_SIMULATION_CONFIG.startDayOfWeek,
+		);
+	});
+
+	it("forces Monday when a stored 7-day config has another start day", () => {
+		localStorage.setItem(
+			STORAGE_KEY_CONFIG,
+			JSON.stringify({
+				seed: 12,
+				initialEnergy: 60,
+				simulationDays: 7,
+				pityProc: true,
+				startDayOfWeek: SUNDAY,
+			}),
+		);
+
+		expect(loadConfigFromStorage().startDayOfWeek).toBe(MONDAY);
+	});
+
+	it("returns defaults when storage is missing", () => {
+		localStorage.removeItem(STORAGE_KEY_CONFIG);
+		expect(loadConfigFromStorage()).toEqual(DEFAULT_SIMULATION_CONFIG);
 	});
 });
 

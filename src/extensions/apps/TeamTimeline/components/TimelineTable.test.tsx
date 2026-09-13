@@ -277,6 +277,49 @@ describe("TimelineTable", () => {
 		);
 	});
 
+	it("shows weekday labels in day bands when startDayOfWeek is given", () => {
+		render(
+			<TimelineTable
+				team={[null, null, null, null, null]}
+				timeSlots={BASE_TIME_SLOTS}
+				simulationDays={3}
+				startDayOfWeek={6}
+				result={EMPTY_RESULT}
+				swaps={[]}
+				box={new PokemonBox([])}
+			/>,
+		);
+
+		expect(screen.getByTestId("timeline-day-band-weekday-1").textContent).toBe(
+			"土曜",
+		);
+		expect(screen.getByTestId("timeline-day-band-weekday-2").textContent).toBe(
+			"日曜",
+		);
+		expect(screen.getByTestId("timeline-day-band-weekday-3").textContent).toBe(
+			"月曜",
+		);
+		expect(screen.getByTestId("timeline-day-band-1").textContent).toBe(
+			"1日目土曜",
+		);
+	});
+
+	it("does not show weekday labels when startDayOfWeek is omitted", () => {
+		render(
+			<TimelineTable
+				team={[null, null, null, null, null]}
+				timeSlots={BASE_TIME_SLOTS}
+				simulationDays={2}
+				result={EMPTY_RESULT}
+				swaps={[]}
+				box={new PokemonBox([])}
+			/>,
+		);
+
+		expect(screen.queryByTestId("timeline-day-band-weekday-1")).toBeNull();
+		expect(screen.getByTestId("timeline-day-band-1").textContent).toBe("1日目");
+	});
+
 	it("computes actual cumulative EP for day-end bands", () => {
 		const testPokemon: PokemonBoxItem = {
 			id: 1,

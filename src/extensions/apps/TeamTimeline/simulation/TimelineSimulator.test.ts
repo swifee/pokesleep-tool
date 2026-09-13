@@ -7,6 +7,7 @@ import PokemonIv from "../../../../util/PokemonIv";
 import SubSkill from "../../../../util/SubSkill";
 import SubSkillList from "../../../../util/SubSkillList";
 import {
+	DEFAULT_SIMULATION_CONFIG,
 	type NoCollectCellSetting,
 	type PokemonSwap,
 	type SimulationResult,
@@ -178,7 +179,12 @@ describe("TimelineSimulator", () => {
 		runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 12345, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 12345,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -239,7 +245,12 @@ describe("TimelineSimulator", () => {
 		const result = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 23456, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 23456,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -284,7 +295,12 @@ describe("TimelineSimulator", () => {
 			timeSlots: [
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 34567, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 34567,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -329,7 +345,12 @@ describe("TimelineSimulator", () => {
 			timeSlots: [
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 45678, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 45678,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -345,27 +366,16 @@ describe("TimelineSimulator", () => {
 		).toBeUndefined();
 	});
 
-	it("Mew をシミュレーション投入時に保存済み Mew rate で正規化する", () => {
+	it("Mew をシミュレーション投入時にオールマイティスキルに応じた固定 skill rate で正規化する", () => {
 		processSkillTriggersMock.mockImplementation(
 			(pokemon: PokemonBoxItem, ...args: unknown[]) => {
 				const energy = typeof args[1] === "number" ? args[1] : 50;
-				expect(pokemon.iv.baseIngRate).toBe(16);
-				expect(pokemon.iv.baseSkillRate).toBe(2.8);
+				// 食材率は pokemon.json の値のまま、スキル率は上流 getMewSkillRate と同じ固定値
+				expect(pokemon.iv.baseIngRate).toBeUndefined();
+				expect(pokemon.iv.pokemon.ingRate).toBe(20);
+				expect(pokemon.iv.baseSkillRate).toBe(3.37);
 				return createNeutralSkillEffectResult(energy);
 			},
-		);
-		localStorage.setItem(
-			"PstStrenghParam",
-			JSON.stringify({
-				...defaultBonusSettings,
-				mew: {
-					ing: 16,
-					skill1: 8,
-					skill2: 4.4,
-					skill3: 2.8,
-					success: 30,
-				},
-			}),
 		);
 
 		const mew = createMewPokemon(6, "Energy for Everyone S");
@@ -377,7 +387,12 @@ describe("TimelineSimulator", () => {
 		runSimulation({
 			team: [mew, null, null, null, null],
 			timeSlots,
-			config: { seed: 24680, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 24680,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -400,13 +415,23 @@ describe("TimelineSimulator", () => {
 		const oneDay = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 34567, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 34567,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 		const twoDays = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 34567, initialEnergy: 50, simulationDays: 2 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 34567,
+				initialEnergy: 50,
+				simulationDays: 2,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -432,7 +457,12 @@ describe("TimelineSimulator", () => {
 				{ id: "sleep", time: "22:30", sleepState: "sleep", hasMeal: false },
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 67890, initialEnergy: 50, simulationDays: 3 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 67890,
+				initialEnergy: 50,
+				simulationDays: 3,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -461,7 +491,12 @@ describe("TimelineSimulator", () => {
 				{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 45678, initialEnergy: 50, simulationDays: 2 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 45678,
+				initialEnergy: 50,
+				simulationDays: 2,
+			},
 			bonusSettings: defaultBonusSettings,
 			swaps: [
 				{
@@ -506,7 +541,12 @@ describe("TimelineSimulator", () => {
 				{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 56789, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 56789,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			swaps: [legacySwap],
 			box,
@@ -534,7 +574,12 @@ describe("TimelineSimulator", () => {
 				{ id: "lunch", time: "12:00", sleepState: "none", hasMeal: false },
 				{ id: "dinner", time: "18:00", sleepState: "none", hasMeal: false },
 			],
-			config: { seed: 14567, initialEnergy: 40, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 14567,
+				initialEnergy: 40,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			swaps: [
 				{
@@ -592,7 +637,12 @@ describe("TimelineSimulator", () => {
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 				{ id: "lunch", time: "12:00", sleepState: "none", hasMeal: false },
 			],
-			config: { seed: 33445, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 33445,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			noCollectCells,
 		});
@@ -623,7 +673,12 @@ describe("TimelineSimulator", () => {
 				{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
 				{ id: "wake", time: "18:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 44001, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 44001,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			noCollectCells: [{ dayIndex: 0, slotId: "wake", teamSlotIndex: 0 }],
 		});
@@ -659,14 +714,24 @@ describe("TimelineSimulator", () => {
 		const baseResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 44002, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 44002,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			noCollectCells,
 		});
 		const eventResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 44002, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 44002,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				event: "custom",
@@ -710,7 +775,12 @@ describe("TimelineSimulator", () => {
 				{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 44556, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 44556,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			noCollectCells: [{ dayIndex: 0, slotId: "wake", teamSlotIndex: 0 }],
 			swaps: [
@@ -749,7 +819,12 @@ describe("TimelineSimulator", () => {
 				{ id: "sleep", time: "23:55", sleepState: "sleep", hasMeal: false },
 				{ id: "wake", time: "00:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 24680, initialEnergy: 20, simulationDays: 2 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 24680,
+				initialEnergy: 20,
+				simulationDays: 2,
+			},
 			bonusSettings: defaultBonusSettings,
 			swaps: [
 				{
@@ -810,13 +885,23 @@ describe("TimelineSimulator", () => {
 		const resultWithHelpingBonus = runSimulation({
 			team: [pokemonWithHelpingBonus, null, null, null, null],
 			timeSlots,
-			config: { seed: 90123, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 90123,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 		const resultWithoutHelpingBonus = runSimulation({
 			team: [pokemonWithoutHelpingBonus, null, null, null, null],
 			timeSlots,
-			config: { seed: 90123, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 90123,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 
@@ -850,13 +935,23 @@ describe("TimelineSimulator", () => {
 		const normal = runSimulation({
 			team: [pokemonWithHelpingBonus, null, null, null, null],
 			timeSlots,
-			config: { seed: 90234, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 90234,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 		const disabledHelpingBonus = runSimulation({
 			team: [pokemonWithHelpingBonus, null, null, null, null],
 			timeSlots,
-			config: { seed: 90234, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 90234,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			analysisOptions: {
 				disableHelpingBonus: true,
@@ -886,7 +981,12 @@ describe("TimelineSimulator", () => {
 		const withoutCamp = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 91234, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 91234,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				isGoodCampTicketSet: false,
@@ -895,7 +995,12 @@ describe("TimelineSimulator", () => {
 		const withCamp = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 91234, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 91234,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				isGoodCampTicketSet: true,
@@ -921,13 +1026,23 @@ describe("TimelineSimulator", () => {
 		const baseResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 92345, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 92345,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 		const eventResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 92345, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 92345,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				event: "custom",
@@ -942,7 +1057,12 @@ describe("TimelineSimulator", () => {
 		const expertResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 92345, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 92345,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				fieldIndex: 7,
@@ -974,14 +1094,24 @@ describe("TimelineSimulator", () => {
 		const baseResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 92346, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 92346,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			noCollectCells: [{ dayIndex: 0, slotId: "wake", teamSlotIndex: 0 }],
 		});
 		const eventResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 92346, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 92346,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				event: "custom",
@@ -1020,7 +1150,12 @@ describe("TimelineSimulator", () => {
 				{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
 				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 			],
-			config: { seed: 93456, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 93456,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			analysisOptions: {
 				disabledPokemonIds: [pokemonB.id],
@@ -1035,7 +1170,12 @@ describe("TimelineSimulator", () => {
 					{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
 					{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 				],
-				config: { seed: 93456, initialEnergy: 50, simulationDays: 1 },
+				config: {
+					...DEFAULT_SIMULATION_CONFIG,
+					seed: 93456,
+					initialEnergy: 50,
+					simulationDays: 1,
+				},
 				bonusSettings: defaultBonusSettings,
 				analysisOptions: {
 					disabledPokemonIds: [pokemonB.id],
@@ -1051,7 +1191,12 @@ describe("TimelineSimulator", () => {
 					{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
 					{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
 				],
-				config: { seed: 93456, initialEnergy: 50, simulationDays: 1 },
+				config: {
+					...DEFAULT_SIMULATION_CONFIG,
+					seed: 93456,
+					initialEnergy: 50,
+					simulationDays: 1,
+				},
 				bonusSettings: defaultBonusSettings,
 				analysisOptions: {
 					disabledPokemonIds: [pokemonB.id],
@@ -1100,13 +1245,23 @@ describe("TimelineSimulator", () => {
 		const normal = runSimulation({
 			team: [pokemonWithErb, null, null, null, null],
 			timeSlots,
-			config: { seed: 94567, initialEnergy: 99, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 94567,
+				initialEnergy: 99,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 		});
 		const disabledErb = runSimulation({
 			team: [pokemonWithErb, null, null, null, null],
 			timeSlots,
-			config: { seed: 94567, initialEnergy: 99, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 94567,
+				initialEnergy: 99,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			analysisOptions: {
 				disableEnergyRecoveryBonus: true,
@@ -1132,7 +1287,12 @@ describe("TimelineSimulator", () => {
 			timeSlots: [
 				{ id: "meal-only", time: "07:00", sleepState: "wake", hasMeal: true },
 			],
-			config: { seed: 32100, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 32100,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			cookingSettings: {
 				enabled: true,
@@ -1176,7 +1336,12 @@ describe("TimelineSimulator", () => {
 				{ id: "meal-2", time: "07:01", sleepState: "none", hasMeal: true },
 				{ id: "meal-3", time: "07:02", sleepState: "none", hasMeal: true },
 			],
-			config: { seed: 32101, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 32101,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			cookingSettings: {
 				enabled: true,
@@ -1246,14 +1411,24 @@ describe("TimelineSimulator", () => {
 		const baseResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 55001, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 55001,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			cookingSettings,
 		});
 		const eventResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 55001, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 55001,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				event: "custom",
@@ -1324,14 +1499,24 @@ describe("TimelineSimulator", () => {
 		const baseResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 55002, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 55002,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			cookingSettings,
 		});
 		const eventResult = runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots,
-			config: { seed: 55002, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 55002,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: {
 				...defaultBonusSettings,
 				event: "custom",
@@ -1359,5 +1544,485 @@ describe("TimelineSimulator", () => {
 		expect(eventCookingEvent?.cookingEP ?? 0).toBeGreaterThan(
 			baseCookingEvent?.cookingEP ?? 0,
 		);
+	});
+});
+
+describe("TimelineSimulator スキル連続不発天井", () => {
+	/** 乱数では実質発動しないスキル発動率 */
+	const NEVER_SKILL_RATE = 1e-9;
+
+	beforeEach(() => {
+		processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+			const energy = typeof args[2] === "number" ? args[2] : 50;
+			return createNeutralSkillEffectResult(energy);
+		});
+	});
+
+	function createPityPokemon(): PokemonBoxItem {
+		const pokemon = createNonSkillSpecialtyPokemon(1);
+		Object.defineProperty(pokemon.iv, "ingredientRate", {
+			configurable: true,
+			get: () => 0,
+		});
+		Object.defineProperty(pokemon.iv, "skillRate", {
+			configurable: true,
+			get: () => NEVER_SKILL_RATE,
+		});
+		// 所持数が満杯（いつのまに育成）のおてつだいは天井の対象外のため、
+		// 全おてつだいが判定対象になるよう所持数上限を十分大きくする
+		Object.defineProperty(pokemon.iv, "carryLimit", {
+			configurable: true,
+			get: () => 9999,
+		});
+		return pokemon;
+	}
+
+	function setPityThreshold(pokemon: PokemonBoxItem, threshold: number): void {
+		Object.defineProperty(pokemon.iv, "pityProcHelpCount", {
+			configurable: true,
+			get: () => threshold,
+		});
+	}
+
+	function collectResults(
+		result: SimulationResult,
+		pokemonId: number,
+	): { slotId: string; helpCount: number; skillTriggerCount: number }[] {
+		const rows: {
+			slotId: string;
+			helpCount: number;
+			skillTriggerCount: number;
+		}[] = [];
+		result.slotResults.forEach((slotResults, slotId) => {
+			const own = slotResults.find((r) => r.pokemonId === pokemonId);
+			if (own) {
+				rows.push({
+					slotId,
+					helpCount: own.helpCount,
+					skillTriggerCount: own.skillTriggerCount,
+				});
+			}
+		});
+		return rows;
+	}
+
+	function sumSkillTriggers(rows: { skillTriggerCount: number }[]): number {
+		return rows.reduce((sum, row) => sum + row.skillTriggerCount, 0);
+	}
+
+	const twoSlotDay: TimeSlot[] = [
+		{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
+		{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
+		{ id: "noon", time: "12:00", sleepState: "none", hasMeal: false },
+	];
+
+	it("不発カウンタは時間帯をまたいで持ち越され、閾値到達で確定発動する", () => {
+		const pokemon = createPityPokemon();
+		const baseInput = {
+			team: [pokemon, null, null, null, null],
+			timeSlots: twoSlotDay,
+			bonusSettings: defaultBonusSettings,
+		};
+
+		const withoutPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70001,
+				simulationDays: 1,
+				pityProc: false,
+			},
+		});
+		const rowsWithoutPity = collectResults(withoutPity, pokemon.id);
+		const wakeHelps =
+			rowsWithoutPity.find((row) => row.slotId === "wake__day0")?.helpCount ??
+			0;
+		const noonHelps =
+			rowsWithoutPity.find((row) => row.slotId === "noon__day0")?.helpCount ??
+			0;
+		expect(wakeHelps).toBeGreaterThan(0);
+		expect(noonHelps).toBeGreaterThan(1);
+		expect(sumSkillTriggers(rowsWithoutPity)).toBe(0);
+
+		// 起床時間帯の不発回数に1回足りない閾値 → 次の時間帯の2回目で確定発動する
+		setPityThreshold(pokemon, wakeHelps + 1);
+		const withPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70001,
+				simulationDays: 1,
+				pityProc: true,
+			},
+		});
+		const rowsWithPity = collectResults(withPity, pokemon.id);
+
+		expect(
+			rowsWithPity.find((row) => row.slotId === "wake__day0")
+				?.skillTriggerCount,
+		).toBe(0);
+		expect(
+			rowsWithPity.find((row) => row.slotId === "noon__day0")
+				?.skillTriggerCount,
+		).toBe(1);
+	});
+
+	it("不発カウンタは日をまたいで持ち越される", () => {
+		const pokemon = createPityPokemon();
+		const baseInput = {
+			team: [pokemon, null, null, null, null],
+			timeSlots: twoSlotDay,
+			bonusSettings: defaultBonusSettings,
+		};
+
+		const withoutPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70002,
+				simulationDays: 2,
+				pityProc: false,
+			},
+		});
+		const rowsWithoutPity = collectResults(withoutPity, pokemon.id);
+		const day0Helps = rowsWithoutPity
+			.filter((row) => row.slotId.endsWith("__day0"))
+			.reduce((sum, row) => sum + row.helpCount, 0);
+		const day1WakeHelps =
+			rowsWithoutPity.find((row) => row.slotId === "wake__day1")?.helpCount ??
+			0;
+		expect(day0Helps).toBeGreaterThan(0);
+		expect(day1WakeHelps).toBeGreaterThan(0);
+
+		// 1日目の不発回数ちょうどを閾値にすると、2日目最初のおてつだいで確定発動する
+		setPityThreshold(pokemon, day0Helps);
+		const withPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70002,
+				simulationDays: 2,
+				pityProc: true,
+			},
+		});
+		const rowsWithPity = collectResults(withPity, pokemon.id);
+
+		const day0Triggers = sumSkillTriggers(
+			rowsWithPity.filter((row) => row.slotId.endsWith("__day0")),
+		);
+		expect(day0Triggers).toBe(0);
+		expect(
+			rowsWithPity.find((row) => row.slotId === "wake__day1")
+				?.skillTriggerCount,
+		).toBe(1);
+	});
+
+	it("天井OFFでは持ち越しがあっても確定発動しない", () => {
+		const pokemon = createPityPokemon();
+		setPityThreshold(pokemon, 1);
+
+		const result = runSimulation({
+			team: [pokemon, null, null, null, null],
+			timeSlots: twoSlotDay,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70003,
+				simulationDays: 2,
+				pityProc: false,
+			},
+			bonusSettings: defaultBonusSettings,
+		});
+
+		expect(sumHelpCount(result, pokemon.id)).toBeGreaterThan(2);
+		expect(sumSkillTriggers(collectResults(result, pokemon.id))).toBe(0);
+	});
+
+	it("入れ替えで投入されたポケモンの不発カウンタは0から始まる", () => {
+		const pokemonA = createPityPokemon();
+		const pokemonB = createPityPokemon();
+		const box = new PokemonBox([pokemonA, pokemonB]);
+		const timeSlots: TimeSlot[] = [
+			{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
+			{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
+			{ id: "noon", time: "12:00", sleepState: "none", hasMeal: false },
+			{ id: "evening", time: "18:00", sleepState: "none", hasMeal: false },
+		];
+		const swaps: PokemonSwap[] = [
+			{
+				dayIndex: 0,
+				slotId: "wake",
+				teamSlotIndex: 0,
+				newPokemonId: pokemonB.id,
+				initialEnergy: 100,
+			},
+		];
+		const baseInput = {
+			team: [pokemonA, null, null, null, null],
+			timeSlots,
+			bonusSettings: defaultBonusSettings,
+			swaps,
+			box,
+		};
+
+		const withoutPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70004,
+				simulationDays: 1,
+				pityProc: false,
+			},
+		});
+		const helpsA = sumHelpCount(withoutPity, pokemonA.id);
+		const helpsB = sumHelpCount(withoutPity, pokemonB.id);
+		expect(helpsA).toBeGreaterThan(0);
+		expect(helpsB).toBeGreaterThan(1);
+
+		// B の総おてつだい回数を閾値にすると、カウンタが0始まりなら期間中に確定発動しない
+		setPityThreshold(pokemonA, 1);
+		setPityThreshold(pokemonB, helpsB);
+		const withPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70004,
+				simulationDays: 1,
+				pityProc: true,
+			},
+		});
+		expect(sumSkillTriggers(collectResults(withPity, pokemonB.id))).toBe(0);
+
+		// 閾値を1つ下げると最後のおてつだいで確定発動する（天井が機能している確認）
+		setPityThreshold(pokemonB, helpsB - 1);
+		const withLowerThreshold = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70004,
+				simulationDays: 1,
+				pityProc: true,
+			},
+		});
+		expect(
+			sumSkillTriggers(collectResults(withLowerThreshold, pokemonB.id)),
+		).toBe(1);
+	});
+
+	it("同じポケモンを外して再投入した場合も不発カウンタは0に戻る", () => {
+		const pokemonA = createPityPokemon();
+		const box = new PokemonBox([pokemonA]);
+		const timeSlots: TimeSlot[] = [
+			{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
+			{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
+			{ id: "noon", time: "12:00", sleepState: "none", hasMeal: false },
+			{ id: "evening", time: "18:00", sleepState: "none", hasMeal: false },
+		];
+		const swaps: PokemonSwap[] = [
+			{
+				dayIndex: 0,
+				slotId: "wake",
+				teamSlotIndex: 0,
+				newPokemonId: SWAP_NONE_POKEMON_ID,
+				initialEnergy: 0,
+			},
+			{
+				dayIndex: 0,
+				slotId: "noon",
+				teamSlotIndex: 0,
+				newPokemonId: pokemonA.id,
+				initialEnergy: 100,
+			},
+		];
+		const baseInput = {
+			team: [pokemonA, null, null, null, null],
+			timeSlots,
+			bonusSettings: defaultBonusSettings,
+			swaps,
+			box,
+		};
+
+		const withoutPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70005,
+				simulationDays: 1,
+				pityProc: false,
+			},
+		});
+		const rows = collectResults(withoutPity, pokemonA.id);
+		const wakeHelps =
+			rows.find((row) => row.slotId === "wake__day0")?.helpCount ?? 0;
+		const helpsAfterReturn = rows
+			.filter((row) => row.slotId !== "wake__day0")
+			.reduce((sum, row) => sum + row.helpCount, 0);
+		expect(wakeHelps).toBeGreaterThan(0);
+		expect(helpsAfterReturn).toBeGreaterThan(1);
+
+		// 外す前の不発が持ち越されていれば最後のおてつだいで確定発動する閾値。
+		// 再投入時に0へ戻っていれば期間中に確定発動しない。
+		setPityThreshold(pokemonA, wakeHelps + helpsAfterReturn - 1);
+		const withPity = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70005,
+				simulationDays: 1,
+				pityProc: true,
+			},
+		});
+		expect(sumSkillTriggers(collectResults(withPity, pokemonA.id))).toBe(0);
+
+		// 再投入後の回数だけで到達する閾値なら、再投入後の最後のおてつだいで確定発動する
+		setPityThreshold(pokemonA, helpsAfterReturn - 1);
+		const withReachableThreshold = runSimulation({
+			...baseInput,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 70005,
+				simulationDays: 1,
+				pityProc: true,
+			},
+		});
+		const triggersAfterReturn = sumSkillTriggers(
+			collectResults(withReachableThreshold, pokemonA.id).filter(
+				(row) => row.slotId !== "wake__day0",
+			),
+		);
+		expect(triggersAfterReturn).toBe(1);
+	});
+});
+
+describe("TimelineSimulator 日曜料理ルール", () => {
+	beforeEach(() => {
+		processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+			const energy = typeof args[2] === "number" ? args[2] : 50;
+			return createNeutralSkillEffectResult(energy);
+		});
+	});
+
+	const mealTimeline: TimeSlot[] = [
+		{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
+		{ id: "breakfast", time: "07:00", sleepState: "wake", hasMeal: true },
+	];
+
+	function createAppleCookingSettings(appleCount: number) {
+		return {
+			enabled: true,
+			category: "curry" as const,
+			recipeLevels: {},
+			basePotCapacity: 7,
+			initialIngredients: { apple: appleCount },
+			disabledRecipes: {},
+			disabledExtraIngredients: {},
+		};
+	}
+
+	it("開始曜日から数えて日曜にあたる日は鍋2倍・大成功30%・EP3倍で料理する", () => {
+		const pokemon = createBerryBurstDisguisePokemon(1);
+		const result = runSimulation({
+			team: [pokemon, null, null, null, null],
+			timeSlots: mealTimeline,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 80001,
+				simulationDays: 2,
+				startDayOfWeek: 6,
+			},
+			bonusSettings: defaultBonusSettings,
+			cookingSettings: createAppleCookingSettings(30),
+		});
+
+		const saturday = result.cookingResult?.dailySummaries[0]?.events[0];
+		const sunday = result.cookingResult?.dailySummaries[1]?.events[0];
+		expect(saturday).toBeDefined();
+		expect(sunday).toBeDefined();
+
+		expect(saturday?.effectivePotCapacity).toBe(7);
+		expect(saturday?.tastyChancePercent).toBe(10);
+		expect(saturday?.greatSuccessMultiplier).toBe(2);
+
+		expect(sunday?.effectivePotCapacity).toBe(14);
+		expect(sunday?.tastyChancePercent).toBe(30);
+		expect(sunday?.greatSuccessMultiplier).toBe(3);
+	});
+
+	it("日曜の大成功はあまり食材の後配分後も3倍が維持される", () => {
+		const pokemon = createBerryBurstDisguisePokemon(1);
+		const findSundayGreatSuccess = () => {
+			for (let seed = 80100; seed < 80200; seed++) {
+				const result = runSimulation({
+					team: [pokemon, null, null, null, null],
+					timeSlots: mealTimeline,
+					config: {
+						...DEFAULT_SIMULATION_CONFIG,
+						seed,
+						simulationDays: 2,
+						startDayOfWeek: 6,
+					},
+					bonusSettings: defaultBonusSettings,
+					cookingSettings: createAppleCookingSettings(30),
+				});
+				const sunday = result.cookingResult?.dailySummaries[1]?.events[0];
+				if (sunday?.isGreatSuccess) {
+					return sunday;
+				}
+			}
+			return undefined;
+		};
+
+		const sunday = findSundayGreatSuccess();
+		expect(sunday).toBeDefined();
+		if (sunday === undefined) {
+			throw new Error("Expected a Sunday great success within the seed range");
+		}
+		// 鍋空きにリンゴが後配分され eFinal が増えても、料理EPは eFinal の3倍
+		expect((sunday.extraIngredientsUsed ?? []).length).toBeGreaterThan(0);
+		expect(sunday.cookingEP).toBe(sunday.eFinal * 3);
+	});
+
+	it("開始曜日が日曜以外なら日曜ルールは適用されない", () => {
+		const pokemon = createBerryBurstDisguisePokemon(1);
+		const result = runSimulation({
+			team: [pokemon, null, null, null, null],
+			timeSlots: mealTimeline,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 80002,
+				simulationDays: 2,
+				startDayOfWeek: 1,
+			},
+			bonusSettings: defaultBonusSettings,
+			cookingSettings: createAppleCookingSettings(30),
+		});
+
+		for (const daySummary of result.cookingResult?.dailySummaries ?? []) {
+			for (const event of daySummary.events) {
+				expect(event.effectivePotCapacity).toBe(7);
+				expect(event.tastyChancePercent).toBe(10);
+				expect(event.greatSuccessMultiplier).toBe(2);
+			}
+		}
+	});
+
+	it("7日間のときは開始曜日の指定に関わらず月曜開始とし、最終日が日曜になる", () => {
+		const pokemon = createBerryBurstDisguisePokemon(1);
+		const result = runSimulation({
+			team: [pokemon, null, null, null, null],
+			timeSlots: mealTimeline,
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 80003,
+				simulationDays: 7,
+				startDayOfWeek: 0,
+			},
+			bonusSettings: defaultBonusSettings,
+			cookingSettings: createAppleCookingSettings(60),
+		});
+
+		const multipliers = (result.cookingResult?.dailySummaries ?? []).map(
+			(daySummary) => daySummary.events[0]?.greatSuccessMultiplier,
+		);
+		expect(multipliers).toEqual([2, 2, 2, 2, 2, 2, 3]);
 	});
 });

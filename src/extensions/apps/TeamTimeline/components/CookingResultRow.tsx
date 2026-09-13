@@ -4,7 +4,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import type { IngredientName } from "../../../../data/pokemons";
 import IngredientIcon from "../../../../ui/IvCalc/IngredientIcon";
-import type { CookingEventResult } from "../types/CookingTypes";
+import {
+	type CookingEventResult,
+	GREAT_SUCCESS_EP_MULTIPLIER,
+} from "../types/CookingTypes";
 import {
 	formatIngredientCount,
 	sortIngredientsByCountDesc,
@@ -41,6 +44,11 @@ const CookingResultRow = React.memo(
 			event.recipeName == null
 				? null
 				: t(`TeamTimeline.recipe ${event.recipeName}`, event.recipeName);
+		// 日曜など通常(2倍)と異なる倍率のときだけ倍率を明示する
+		const greatSuccessMultiplierLabel =
+			event.greatSuccessMultiplier !== GREAT_SUCCESS_EP_MULTIPLIER
+				? ` ×${event.greatSuccessMultiplier}`
+				: "";
 
 		const usedIngredients = sortIngredientsByCountDesc(
 			event.ingredientsUsed.map((u) => ({ name: u.name, count: u.count })),
@@ -219,7 +227,11 @@ const CookingResultRow = React.memo(
 							data-testid={`cooking-row-icon-${event.mealSlotId}`}
 						/>
 						{event.isGreatSuccess && (
-							<GreatSuccessBadge>大成功!</GreatSuccessBadge>
+							<GreatSuccessBadge
+								data-testid={`cooking-great-success-${event.mealSlotId}`}
+							>
+								大成功!{greatSuccessMultiplierLabel}
+							</GreatSuccessBadge>
 						)}
 						<RecipeName>{localizedRecipeName}</RecipeName>
 						<CookingEP>

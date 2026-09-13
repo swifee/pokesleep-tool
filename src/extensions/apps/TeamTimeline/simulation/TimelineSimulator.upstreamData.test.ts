@@ -4,7 +4,10 @@ import fields, { cbexFieldIndex } from "../../../../data/fields";
 import pokemons from "../../../../data/pokemons";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
-import { DEFAULT_TIME_SLOTS } from "../types/TimeSlotTypes";
+import {
+	DEFAULT_SIMULATION_CONFIG,
+	DEFAULT_TIME_SLOTS,
+} from "../types/TimeSlotTypes";
 import {
 	createDefaultTimelineBonusSettings,
 	normalizeTimelineBonusSettings,
@@ -23,7 +26,12 @@ describe("TeamTimeline が上流追加データを扱えること", () => {
 		return runSimulation({
 			team: [pokemon, null, null, null, null],
 			timeSlots: DEFAULT_TIME_SLOTS,
-			config: { seed: 4649, initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 4649,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: normalizeTimelineBonusSettings({
 				...createDefaultTimelineBonusSettings(),
 				fieldIndex,
