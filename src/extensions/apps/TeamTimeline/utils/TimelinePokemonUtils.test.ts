@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { cbexFieldIndex, ggexFieldIndex } from "../../../../data/fields";
+import type { MainSkillName } from "../../../../util/MainSkill";
 import Nature from "../../../../util/Nature";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
-import { createStrengthParameter } from "../../../../util/PokemonStrength";
 import SubSkill from "../../../../util/SubSkill";
 import SubSkillList from "../../../../util/SubSkillList";
 import {
@@ -41,27 +41,30 @@ describe("TimelinePokemonUtils", () => {
 		expect(getEffectiveMainSkillName(raichu)).toBe(raichu.pokemon.skill);
 	});
 
-	it("Mew の食材率とスキル率を StrengthParameter.mew に合わせて上書きする", () => {
-		const mew = new PokemonIv({
-			pokemonName: "Mew",
-			skillLevel: 6,
-			versatileSkill: "Berry Burst",
-		});
-		const parameter = createStrengthParameter({
-			mew: {
-				ing: 17,
-				skill1: 9,
-				skill2: 5,
-				skill3: 2.75,
-				success: 40,
-			},
-		});
+	it("Mew のスキル率を選択中のオールマイティスキルに応じた固定値で上書きする", () => {
+		const cases: [MainSkillName, number][] = [
+			["Charge Strength S (Random)", 6.4],
+			["Charge Energy S", 6.4],
+			["Energizing Cheer S", 4.39],
+			["Energy for Everyone S", 3.37],
+			["Berry Burst", 2.84],
+			["Ingredient Magnet S", 4],
+		];
 
-		const normalized = normalizeTimelinePokemonIv(mew, parameter);
+		for (const [versatileSkill, expected] of cases) {
+			const mew = new PokemonIv({
+				pokemonName: "Mew",
+				skillLevel: 6,
+				versatileSkill,
+			});
 
-		expect(normalized).not.toBe(mew);
-		expect(normalized.baseIngRate).toBe(17);
-		expect(normalized.baseSkillRate).toBe(2.75);
+			const normalized = normalizeTimelinePokemonIv(mew);
+
+			expect(normalized).not.toBe(mew);
+			expect(normalized.baseSkillRate).toBe(expected);
+			// 食材率は上流データ（pokemon.json）の値をそのまま使う
+			expect(normalized.baseIngRate).toBe(mew.baseIngRate);
+		}
 	});
 
 	it("normalizeTimelinePokemon は id と nickname を維持したまま Mew を差し替える", () => {
@@ -74,23 +77,21 @@ describe("TimelinePokemonUtils", () => {
 			"MyMew",
 			321,
 		);
-		const parameter = createStrengthParameter({
-			mew: {
-				ing: 19,
-				skill1: 7.5,
-				skill2: 4,
-				skill3: 3,
-				success: 30,
-			},
-		});
 
-		const normalized = normalizeTimelinePokemon(item, parameter);
+		const normalized = normalizeTimelinePokemon(item);
 
 		expect(normalized).not.toBe(item);
 		expect(normalized.id).toBe(321);
 		expect(normalized.nickname).toBe("MyMew");
-		expect(normalized.iv.baseIngRate).toBe(19);
-		expect(normalized.iv.baseSkillRate).toBe(7.5);
+		expect(normalized.iv.baseSkillRate).toBe(6.4);
+	});
+
+	it("Mew 以外で仮ステータスが無ければ同じインスタンスを返す", () => {
+		const raichu = new PokemonIv({ pokemonName: "Raichu", skillLevel: 6 });
+		const item = new PokemonBoxItem(raichu, "Rai", 1);
+
+		expect(normalizeTimelinePokemonIv(raichu)).toBe(raichu);
+		expect(normalizeTimelinePokemon(item)).toBe(item);
 	});
 });
 
@@ -194,17 +195,12 @@ describe("TimelinePokemonUtils データ未公開ポケモンの仮ステータ�
 
 	it("仮ステータスのスキル発動率を IV に反映する", () => {
 		const mewtwo = new PokemonIv({ pokemonName: "Mewtwo", level: 50 });
-		const parameter = createStrengthParameter({});
 
-		const normalized = normalizeTimelinePokemonIv(
-			mewtwo,
-			parameter,
-			placeholderStats,
-		);
+		const normalized = normalizeTimelinePokemonIv(mewtwo, placeholderStats);
 
 		expect(normalized.baseSkillRate).toBe(2.5);
 		expect(normalized.skillRate).toBeCloseTo(0.025, 10);
-		expect(normalizeTimelinePokemonIv(mewtwo, parameter)).toBe(mewtwo);
+		expect(normalizeTimelinePokemonIv(mewtwo)).toBe(mewtwo);
 	});
 
 	it("おてつだい間隔は仮のおてつだいスピードから計算される", () => {

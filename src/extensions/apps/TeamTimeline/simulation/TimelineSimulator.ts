@@ -697,11 +697,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		if (cached) {
 			return cached;
 		}
-		const normalized = normalizeTimelinePokemon(
-			pokemon,
-			strengthParameter,
-			placeholderStats,
-		);
+		const normalized = normalizeTimelinePokemon(pokemon, placeholderStats);
 		normalizedPokemonById.set(pokemon.id, normalized);
 		return normalized;
 	};
