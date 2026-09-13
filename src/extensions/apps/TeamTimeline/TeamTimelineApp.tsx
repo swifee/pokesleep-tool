@@ -26,6 +26,7 @@ import CookingSettingsPanel from "./components/CookingSettingsPanel";
 import DailySummaryRow from "./components/DailySummaryRow";
 import NoCollectSupplementBar from "./components/NoCollectSupplementBar";
 import ProvisionalSettingsPanel from "./components/ProvisionalSettingsPanel";
+import QuickSimTab from "./components/QuickSimTab";
 import type { ResimulationDeltaSummary } from "./components/ResimulationNoticeBar";
 import ResimulationNoticeBar from "./components/ResimulationNoticeBar";
 import SimulationControls from "./components/SimulationControls";
@@ -3087,7 +3088,70 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				onNavigateToBox={handleNavigateToBox}
 			/>
 
-			{/* チームタブ */}
+			{/* 簡易シミュタブ */}
+			{state.activeTab === "quick" && (
+				<Box
+					sx={{
+						width: "100%",
+						maxWidth: `${TEAM_TIMELINE_CONTENT_WIDTH_PX}px`,
+					}}
+				>
+					<Box
+						sx={{
+							transform: `scale(${teamScale})`,
+							transformOrigin: "top left",
+							width: "100%",
+						}}
+					>
+						<QuickSimTab
+							userBox={userBox}
+							runtimeBox={timelineRuntimeBox}
+							team={state.team}
+							swaps={state.swaps}
+							timeSlots={state.timeSlots}
+							simulationConfig={state.simulationConfig}
+							bonusSettings={state.bonusSettings}
+							cookingSettings={state.cookingSettings}
+							provisionalSettings={state.provisionalSettings}
+							seedMode={state.seedMode}
+							multiTrialCount={state.multiTrialCount}
+							onCookingSettingsChange={handleCookingSettingsChange}
+							onSeedChange={handleSeedChange}
+							renderSimulationControls={(quickSim) => (
+								<SimulationControls
+									bonusSettings={state.bonusSettings}
+									fieldIndex={state.bonusSettings.fieldIndex}
+									isGoodCampTicketSet={state.bonusSettings.isGoodCampTicketSet}
+									cookingSimEnabled={state.cookingSettings.enabled}
+									cookingCategory={state.cookingSettings.category}
+									eventName={state.bonusSettings.event}
+									seedMode={state.seedMode}
+									seed={state.simulationConfig.seed}
+									simulationDays={state.simulationConfig.simulationDays}
+									startDayOfWeek={state.simulationConfig.startDayOfWeek}
+									multiTrialCount={state.multiTrialCount}
+									simulationLoading={quickSim.simulationLoading}
+									simulationProgress={quickSim.simulationProgress}
+									isTeamEmpty={quickSim.isTeamEmpty}
+									onFieldIndexChange={handleFieldIndexChange}
+									onGoodCampTicketChange={handleGoodCampTicketChange}
+									onCookingSimEnabledChange={handleCookingSimEnabledChange}
+									onCookingCategoryChange={handleCookingCategoryChange}
+									onOpenSettingsTab={handleOpenSettingsTab}
+									onSeedModeChange={handleSeedModeChange}
+									onSeedChange={handleSeedChange}
+									onSimulationDaysChange={handleSimulationDaysChange}
+									onStartDayOfWeekChange={handleStartDayOfWeekChange}
+									onTrialCountChange={handleTrialCountChange}
+									onRunSimulation={quickSim.onRunSimulation}
+								/>
+							)}
+						/>
+					</Box>
+				</Box>
+			)}
+
+			{/* 詳細シミュタブ */}
 			{state.activeTab === "team" && (
 				<Box
 					sx={{

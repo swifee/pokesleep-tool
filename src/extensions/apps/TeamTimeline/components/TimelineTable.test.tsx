@@ -330,7 +330,18 @@ describe("TimelineTable", () => {
 			},
 			filledNickname: () => "テスト",
 		} as unknown as PokemonBoxItem;
+		// The day 2 band sits after the last slot before AM 4:00 (night-snack at 03:30),
+		// so only results collected up to that slot count toward "day 1 end".
 		const slotResults = new Map<string, TimeSlotResult[]>();
+		slotResults.set("night-snack__day0", [
+			createTimeSlotResult({
+				slotId: "night-snack__day0",
+				pokemonId: 1,
+				teamIndex: 0,
+				berryCount: 3,
+				directSkillEP: 16,
+			}),
+		]);
 		slotResults.set("wake__day0", [
 			createTimeSlotResult({
 				slotId: "wake__day0",

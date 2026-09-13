@@ -73,8 +73,8 @@ export interface TeamTimelineState {
 	simulationLoading: boolean;
 	/** シミュレーションエラー */
 	simulationError: string | null;
-	/** アクティブなタブ */
-	activeTab: "team" | "settings" | "cooking";
+	/** アクティブなタブ（quick = 簡易シミュ、team = 詳細シミュ） */
+	activeTab: "quick" | "team" | "settings" | "cooking";
 	/** 編集中の時間帯スロットインデックス */
 	editingSlotIndex: number | null;
 	/** 時間帯編集ダイアログの開閉状態 */
@@ -160,7 +160,7 @@ export type TeamTimelineAction =
 	| { type: "setSimulationError"; error: string }
 	| { type: "clearSimulationResult" }
 	// Phase 3: UI状態
-	| { type: "selectTab"; tab: "team" | "settings" | "cooking" }
+	| { type: "selectTab"; tab: "quick" | "team" | "settings" | "cooking" }
 	| { type: "openTimeSlotDialog"; index?: number }
 	| { type: "closeTimeSlotDialog" }
 	// Phase 4: ポケモン入れ替え
