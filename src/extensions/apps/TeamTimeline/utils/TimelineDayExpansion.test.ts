@@ -20,6 +20,24 @@ describe("buildExpandedTimeline", () => {
 		expect(ids).not.toContain("sleep__day1");
 	});
 
+	it("就寝〜AM4:00 の間のスロットは就寝の直後に時系列で並ぶ", () => {
+		const timeSlots: TimeSlot[] = [
+			{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
+			{ id: "dinner", time: "18:00", sleepState: "none", hasMeal: true },
+			{ id: "sleep", time: "23:00", sleepState: "sleep", hasMeal: false },
+			{ id: "late-night", time: "01:00", sleepState: "none", hasMeal: false },
+		];
+
+		const expanded = buildExpandedTimeline(timeSlots, 1);
+		expect(expanded.baseDaySlots.map((slot) => slot.id)).toEqual([
+			"sleep",
+			"late-night",
+			"wake",
+			"dinner",
+			"sleep-end",
+		]);
+	});
+
 	it("日付帯は各日のAM4:00より前の最後セルの直後に配置される", () => {
 		const timeSlots: TimeSlot[] = [
 			{ id: "sleep", time: "23:00", sleepState: "sleep", hasMeal: false },
