@@ -35,6 +35,8 @@
 2. PR の CI(`npm run verify`)を待つ。
 3. マージコミット方式でマージする(squash / rebase は使わない。`develop` と `main` の履歴を一致させるため)。
 4. CI が赤ならマージしない。`develop` で修正して push し、再試行する。
+5. マージ後、`develop` 上で `git fetch origin && git merge --ff-only origin/main` を実行して push し、
+   マージコミットを `develop` にも取り込む(省略すると `main` が先行し、次回の PR で競合する)。
 
 ## デプロイ(手動のみ)
 
