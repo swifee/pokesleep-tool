@@ -194,6 +194,7 @@ function renderControls(
 		seedMode: "random",
 		seed: 123,
 		simulationDays: 1,
+		startDayOfWeek: 1,
 		multiTrialCount: 100,
 		simulationLoading: false,
 		simulationProgress: 0,
@@ -206,6 +207,7 @@ function renderControls(
 		onSeedModeChange: vi.fn(),
 		onSeedChange: vi.fn(),
 		onSimulationDaysChange: vi.fn(),
+		onStartDayOfWeekChange: vi.fn(),
 		onTrialCountChange: vi.fn(),
 		onRunSimulation: vi.fn(),
 		...overrides,
@@ -234,6 +236,7 @@ describe("SimulationControls", () => {
 				seedMode="random"
 				seed={123}
 				simulationDays={1}
+				startDayOfWeek={1}
 				multiTrialCount={100}
 				simulationLoading={false}
 				simulationProgress={0}
@@ -246,6 +249,7 @@ describe("SimulationControls", () => {
 				onSeedModeChange={vi.fn()}
 				onSeedChange={vi.fn()}
 				onSimulationDaysChange={vi.fn()}
+				onStartDayOfWeekChange={vi.fn()}
 				onTrialCountChange={vi.fn()}
 				onRunSimulation={vi.fn()}
 			/>,
@@ -335,6 +339,57 @@ describe("SimulationControls", () => {
 		expect(props.onTrialCountChange).toHaveBeenCalledWith(1000);
 	});
 
+	it("renders start weekday select next to the period select with Monday-first options", () => {
+		renderControls({ simulationDays: 3, startDayOfWeek: 3 });
+
+		const select = screen.getByTestId(
+			"start-day-of-week-select",
+		) as HTMLSelectElement;
+		expect(select.disabled).toBe(false);
+		expect(select.value).toBe("3");
+		expect(screen.getByText("開始曜日")).toBeDefined();
+		expect(
+			Array.from(select.options).map((option) => option.textContent),
+		).toEqual(["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"]);
+		expect(Array.from(select.options).map((option) => option.value)).toEqual([
+			"1",
+			"2",
+			"3",
+			"4",
+			"5",
+			"6",
+			"0",
+		]);
+	});
+
+	it("allows choosing any start weekday for 1 to 6 day periods", () => {
+		for (const days of [1, 2, 3, 4, 5, 6]) {
+			const { props, unmount } = renderControls({
+				simulationDays: days,
+				startDayOfWeek: 1,
+			});
+
+			const select = screen.getByTestId(
+				"start-day-of-week-select",
+			) as HTMLSelectElement;
+			expect(select.disabled).toBe(false);
+
+			fireEvent.change(select, { target: { value: "0" } });
+			expect(props.onStartDayOfWeekChange).toHaveBeenCalledWith(0);
+			unmount();
+		}
+	});
+
+	it("locks start weekday to Monday and disables the select for 7 day periods", () => {
+		renderControls({ simulationDays: 7, startDayOfWeek: 5 });
+
+		const select = screen.getByTestId(
+			"start-day-of-week-select",
+		) as HTMLSelectElement;
+		expect(select.disabled).toBe(true);
+		expect(select.value).toBe("1");
+	});
+
 	it("keeps run button enabled while loading and disables only when team is empty", () => {
 		const { rerender } = render(
 			<SimulationControls
@@ -347,6 +402,7 @@ describe("SimulationControls", () => {
 				seedMode="random"
 				seed={123}
 				simulationDays={1}
+				startDayOfWeek={1}
 				multiTrialCount={100}
 				simulationLoading={false}
 				simulationProgress={0}
@@ -359,6 +415,7 @@ describe("SimulationControls", () => {
 				onSeedModeChange={vi.fn()}
 				onSeedChange={vi.fn()}
 				onSimulationDaysChange={vi.fn()}
+				onStartDayOfWeekChange={vi.fn()}
 				onTrialCountChange={vi.fn()}
 				onRunSimulation={vi.fn()}
 			/>,
@@ -383,6 +440,7 @@ describe("SimulationControls", () => {
 				seedMode="random"
 				seed={123}
 				simulationDays={1}
+				startDayOfWeek={1}
 				multiTrialCount={100}
 				simulationLoading
 				simulationProgress={40}
@@ -395,6 +453,7 @@ describe("SimulationControls", () => {
 				onSeedModeChange={vi.fn()}
 				onSeedChange={vi.fn()}
 				onSimulationDaysChange={vi.fn()}
+				onStartDayOfWeekChange={vi.fn()}
 				onTrialCountChange={vi.fn()}
 				onRunSimulation={vi.fn()}
 			/>,
@@ -418,6 +477,7 @@ describe("SimulationControls", () => {
 				seedMode="random"
 				seed={123}
 				simulationDays={1}
+				startDayOfWeek={1}
 				multiTrialCount={100}
 				simulationLoading={false}
 				simulationProgress={100}
@@ -430,6 +490,7 @@ describe("SimulationControls", () => {
 				onSeedModeChange={vi.fn()}
 				onSeedChange={vi.fn()}
 				onSimulationDaysChange={vi.fn()}
+				onStartDayOfWeekChange={vi.fn()}
 				onTrialCountChange={vi.fn()}
 				onRunSimulation={vi.fn()}
 			/>,

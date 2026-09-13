@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CookingSimulationResult } from "../types/CookingTypes";
-import type {
-	DailySummary,
-	SimulationResult,
-	TeamSummary,
+import {
+	type DailySummary,
+	DEFAULT_SIMULATION_CONFIG,
+	type SimulationResult,
+	type TeamSummary,
 } from "../types/TimeSlotTypes";
 import { createDefaultTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import {
@@ -98,6 +99,7 @@ function createCookingEventWithExtraUsages(
 		mealType: "breakfast",
 		recipeName,
 		isGreatSuccess: false,
+		greatSuccessMultiplier: 2,
 		cookingEP,
 		eBase: cookingEP,
 		eDisplay: cookingEP,
@@ -139,7 +141,11 @@ describe("runMultiTrialSimulation", () => {
 		const result = runMultiTrialSimulation({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 2,
 			initialSeed: 500,
@@ -176,7 +182,11 @@ describe("runMultiTrialSimulation", () => {
 		const result = runMultiTrialSimulation({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 80, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 80,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 2,
 			initialSeed: 700,
@@ -212,7 +222,11 @@ describe("runMultiTrialSimulation", () => {
 		runMultiTrialSimulation({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 60, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 60,
+				simulationDays: 1,
+			},
 			bonusSettings,
 			trialCount: 1,
 			initialSeed: 999,
@@ -236,7 +250,11 @@ describe("runMultiTrialSimulation", () => {
 		runMultiTrialSimulation({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 3,
 		});
@@ -260,7 +278,11 @@ describe("runMultiTrialSimulation", () => {
 		await runMultiTrialSimulationWithProgress({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 3,
 			initialSeed: 100,
@@ -287,7 +309,11 @@ describe("runMultiTrialSimulation", () => {
 		await runMultiTrialSimulationWithProgress({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 5,
 			initialSeed: 200,
@@ -312,7 +338,11 @@ describe("runMultiTrialSimulation", () => {
 		const result = await runMultiTrialSimulationWithProgress({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 5,
 			initialSeed: 10,
@@ -342,7 +372,11 @@ describe("runMultiTrialSimulation", () => {
 		await runMultiTrialSimulationWithProgress({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 2,
 			initialSeed: 300,
@@ -380,6 +414,7 @@ describe("runMultiTrialSimulation", () => {
 							mealType: "breakfast",
 							recipeName: "recipeA",
 							isGreatSuccess: false,
+							greatSuccessMultiplier: 2,
 							cookingEP: 100,
 							eBase: 1000,
 							eDisplay: 1100,
@@ -395,6 +430,7 @@ describe("runMultiTrialSimulation", () => {
 							mealType: "lunch",
 							recipeName: "recipeB",
 							isGreatSuccess: false,
+							greatSuccessMultiplier: 2,
 							cookingEP: 300,
 							eBase: 2000,
 							eDisplay: 2200,
@@ -422,6 +458,7 @@ describe("runMultiTrialSimulation", () => {
 							mealType: "dinner",
 							recipeName: "recipeA",
 							isGreatSuccess: false,
+							greatSuccessMultiplier: 2,
 							cookingEP: 200,
 							eBase: 1000,
 							eDisplay: 1100,
@@ -437,6 +474,7 @@ describe("runMultiTrialSimulation", () => {
 							mealType: "breakfast",
 							recipeName: "recipeB",
 							isGreatSuccess: false,
+							greatSuccessMultiplier: 2,
 							cookingEP: 100,
 							eBase: 2000,
 							eDisplay: 2200,
@@ -452,6 +490,7 @@ describe("runMultiTrialSimulation", () => {
 							mealType: "lunch",
 							recipeName: "recipeB",
 							isGreatSuccess: false,
+							greatSuccessMultiplier: 2,
 							cookingEP: 300,
 							eBase: 2000,
 							eDisplay: 2200,
@@ -471,7 +510,11 @@ describe("runMultiTrialSimulation", () => {
 		const result = runMultiTrialSimulation({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 2,
 			initialSeed: 900,
@@ -518,7 +561,11 @@ describe("runMultiTrialSimulation", () => {
 		const result = runMultiTrialSimulation({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 2,
 			initialSeed: 1000,
@@ -564,7 +611,11 @@ describe("runMultiTrialSimulation", () => {
 		const result = runMultiTrialSimulation({
 			team: [],
 			timeSlots: [],
-			config: { initialEnergy: 50, simulationDays: 1 },
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
 			bonusSettings: defaultBonusSettings,
 			trialCount: 2,
 			initialSeed: 2000,

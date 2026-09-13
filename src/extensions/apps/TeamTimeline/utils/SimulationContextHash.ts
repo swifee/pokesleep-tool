@@ -1,13 +1,17 @@
 import type { CookingSimulationSettings } from "../types/CookingTypes";
 import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
-import type { TimeSlot } from "../types/TimeSlotTypes";
+import type { TimeSlot, Weekday } from "../types/TimeSlotTypes";
 
 interface SimulationContextHashInput {
 	bonusSettings: TimelineBonusSettings;
 	cookingSettings: CookingSimulationSettings;
 	initialEnergy: number;
 	simulationDays: number;
+	/** スキル連続不発天井の考慮 */
+	pityProc: boolean;
+	/** 集計期間の開始曜日 */
+	startDayOfWeek: Weekday;
 	timeSlots: TimeSlot[];
 	/** 仮設定（未指定ならハッシュに含めない） */
 	provisionalSettings?: ProvisionalSettings;
@@ -69,6 +73,8 @@ export function buildSimulationContextHash(
 			cookingSettings: input.cookingSettings,
 			initialEnergy: input.initialEnergy,
 			simulationDays: input.simulationDays,
+			pityProc: input.pityProc,
+			startDayOfWeek: input.startDayOfWeek,
 			timeSlots: input.timeSlots,
 			provisionalSettings: input.provisionalSettings,
 		}),

@@ -82,7 +82,9 @@ export interface CookingEventResult {
 	readonly recipeName: string | null;
 	/** 大成功かどうか */
 	readonly isGreatSuccess: boolean;
-	/** 最終獲得EP(大成功2倍含む) */
+	/** 大成功時のEP倍率(月〜土は2倍、日曜は3倍) */
+	readonly greatSuccessMultiplier: number;
+	/** 最終獲得EP(大成功倍率含む) */
 	readonly cookingEP: number;
 	/** E_base(ステップ①) */
 	readonly eBase: number;
@@ -185,8 +187,26 @@ export interface AverageCookingSummary {
 	readonly averageInitialIngredientEP?: number;
 }
 
-/** 大成功の基礎確率(%) */
+/** 大成功の基礎確率(%)。月〜土に適用 */
 export const BASE_GREAT_SUCCESS_CHANCE = 10;
+
+/** 日曜の大成功の基礎確率(%) */
+export const SUNDAY_GREAT_SUCCESS_CHANCE = 30;
+
+/** 大成功確率の上限(%)。料理チャンスの蓄積と合算してもこれを超えない */
+export const MAX_GREAT_SUCCESS_CHANCE = 100;
+
+/** 大成功時のEP倍率。月〜土に適用 */
+export const GREAT_SUCCESS_EP_MULTIPLIER = 2;
+
+/** 日曜の大成功時のEP倍率 */
+export const SUNDAY_GREAT_SUCCESS_EP_MULTIPLIER = 3;
+
+/** 日曜の鍋容量倍率 */
+export const SUNDAY_POT_SIZE_MULTIPLIER = 2;
+
+/** 日曜以外の鍋容量倍率 */
+export const DEFAULT_DAY_POT_SIZE_MULTIPLIER = 1;
 
 /** デフォルトの鍋基礎容量 */
 export const DEFAULT_POT_CAPACITY = 81;

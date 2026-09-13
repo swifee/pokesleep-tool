@@ -24,6 +24,17 @@ import {
 import type { CookingCategory } from "../types/CookingTypes";
 import { TRIAL_COUNT_OPTIONS } from "../types/MultiTrialTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
+import {
+	isWeekday,
+	MAX_SIMULATION_DAYS,
+	resolveStartDayOfWeek,
+	type Weekday,
+} from "../types/TimeSlotTypes";
+import {
+	getWeekdayDefaultLabel,
+	getWeekdayLabelKey,
+	WEEKDAY_SELECT_ORDER,
+} from "../utils/WeekdayUtils";
 
 interface SimulationControlsProps {
 	bonusSettings: TimelineBonusSettings;
@@ -35,6 +46,8 @@ interface SimulationControlsProps {
 	seedMode: "random" | "fixed";
 	seed: number;
 	simulationDays: number;
+	/** 集計期間の開始曜日 */
+	startDayOfWeek: Weekday;
 	multiTrialCount: number;
 	simulationLoading: boolean;
 	simulationProgress: number;
@@ -47,6 +60,7 @@ interface SimulationControlsProps {
 	onSeedModeChange: (mode: "random" | "fixed") => void;
 	onSeedChange: (seed: number) => void;
 	onSimulationDaysChange: (days: number) => void;
+	onStartDayOfWeekChange: (weekday: Weekday) => void;
 	onTrialCountChange: (count: number) => void;
 	onRunSimulation: () => void;
 }
@@ -92,6 +106,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
 	seedMode,
 	seed,
 	simulationDays,
+	startDayOfWeek,
 	multiTrialCount,
 	simulationLoading,
 	simulationProgress,
@@ -102,10 +117,17 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
 	onSeedModeChange,
 	onSeedChange,
 	onSimulationDaysChange,
+	onStartDayOfWeekChange,
 	onTrialCountChange,
 	onRunSimulation,
 }) => {
 	const { t } = useTranslation();
+	// 1週間のときは最終日が日曜になるよう月曜固定（選択不可）
+	const isStartDayOfWeekLocked = simulationDays >= MAX_SIMULATION_DAYS;
+	const displayedStartDayOfWeek = resolveStartDayOfWeek(
+		simulationDays,
+		startDayOfWeek,
+	);
 	const clampedProgress = Math.max(0, Math.min(100, simulationProgress));
 	const eventLabel =
 		eventName === "none"
@@ -212,6 +234,15 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
 		target: { value: unknown };
 	}) => {
 		onSimulationDaysChange(Number(event.target.value));
+	};
+
+	const handleStartDayOfWeekChange = (event: {
+		target: { value: unknown };
+	}) => {
+		const weekday = Number(event.target.value);
+		if (isWeekday(weekday)) {
+			onStartDayOfWeekChange(weekday);
+		}
 	};
 
 	return (
@@ -364,6 +395,49 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
 						{[1, 2, 3, 4, 5, 6, 7].map((day) => (
 							<MenuItem key={day} value={day} sx={CONTROL_VALUE_STYLE}>
 								{t("TeamTimeline.days unit", "{{count}}日", { count: day })}
+							</MenuItem>
+						))}
+					</Select>
+				</Box>
+
+				<Box
+					sx={{
+						display: "flex",
+						flexDirection: "column",
+						gap: "2px",
+						width: "72px",
+					}}
+				>
+					<Typography sx={CONTROL_LABEL_STYLE}>
+						{t("TeamTimeline.start day of week", "開始曜日")}
+					</Typography>
+					<Select
+						value={displayedStartDayOfWeek}
+						onChange={handleStartDayOfWeekChange}
+						disabled={isStartDayOfWeekLocked}
+						data-testid="start-day-of-week-select"
+						size="small"
+						sx={{
+							width: COMPACT_CONTROL_WIDTH,
+							height: "20px",
+							"& .MuiSelect-select": {
+								...CONTROL_VALUE_STYLE,
+								py: "1px",
+								pl: "5px",
+								pr: "18px !important",
+							},
+							"& .MuiSelect-icon": {
+								right: "2px",
+								fontSize: "18px",
+							},
+						}}
+					>
+						{WEEKDAY_SELECT_ORDER.map((weekday) => (
+							<MenuItem key={weekday} value={weekday} sx={CONTROL_VALUE_STYLE}>
+								{t(
+									getWeekdayLabelKey(weekday),
+									getWeekdayDefaultLabel(weekday),
+								)}
 							</MenuItem>
 						))}
 					</Select>

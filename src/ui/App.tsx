@@ -2,10 +2,10 @@ import "./App.css";
 import { createTheme, ThemeProvider } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import IvCalcAppWithTimelineTab from "../extensions/apps/IvCalcLink/IvCalcAppWithTimelineTab";
 import TeamTimelineApp from "../extensions/apps/TeamTimeline/TeamTimelineApp";
 import type AppConfig from "./AppConfig";
 import { AppConfigContext, type AppType, saveConfig } from "./AppConfig";
-import IvCalcApp from "./IvCalc/IvCalcApp";
 import NewsInfo from "./NewsInfo";
 import PwaNotify from "./PwaBanner";
 import ResearchCalcApp from "./ResearchCalc/ResearchCalcApp";
@@ -75,8 +75,12 @@ export default function App({ config }: { config: AppConfig }) {
 				/>
 				<NewsInfo appType={curApp} onAppConfigChange={onAppConfigChange} />
 				{curApp === "ResearchCalc" && <ResearchCalcApp />}
-				{curApp === "IvCalc" && <IvCalcApp />}
-				{curApp === "TeamTimeline" && <TeamTimelineApp />}
+				{curApp === "IvCalc" && (
+					<IvCalcAppWithTimelineTab onAppChange={onAppChange} />
+				)}
+				{curApp === "TeamTimeline" && (
+					<TeamTimelineApp onAppChange={onAppChange} />
+				)}
 				<PwaNotify
 					app={curApp}
 					pwaCount={config.pwacnt}

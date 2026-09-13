@@ -79,6 +79,13 @@ export interface HelpInput {
 	maxInventory: number;
 	/** 持ち越し秒数 */
 	bankedTimeSeconds: number;
+	/** スキル連続不発天井を考慮するか */
+	pityProcEnabled: boolean;
+	/**
+	 * 最後のスキル発動からの連続不発回数（天井カウンタ）。
+	 * 通常状態かつスキルストックに空きがある判定のみを数える。
+	 */
+	helpsSinceLastSkill: number;
 	/** ボーナス設定（イベント/EX/キャンチケ） */
 	bonusContext?: HelpBonusContext;
 }
@@ -107,6 +114,8 @@ export interface HelpOutput {
 	newInventory: number;
 	/** 次スロットへ持ち越す秒数 */
 	newBankedTimeSeconds: number;
+	/** 更新後の連続不発回数（天井カウンタ） */
+	newHelpsSinceLastSkill: number;
 }
 
 /**
@@ -216,6 +225,35 @@ export function getIngredientForHelp(
 }
 
 /**
+ * スキル連続不発天井の閾値（この回数連続で不発なら次は確定発動）を取得
+ * @param pokemon ポケモン
+ * @returns 連続不発回数の閾値
+ */
+export function getPityProcThreshold(pokemon: PokemonBoxItem): number {
+	return pokemon.iv.pityProcHelpCount;
+}
+
+/**
+ * スキル連続不発天井による確定発動かどうかを判定
+ * @param pityProcEnabled 天井を考慮するか
+ * @param skillRate スキル発動率（0 なら天井も発動しない）
+ * @param helpsSinceLastSkill 連続不発回数
+ * @param threshold 連続不発回数の閾値
+ * @returns 確定発動なら true
+ */
+export function isPityProcTriggered(
+	pityProcEnabled: boolean,
+	skillRate: number,
+	helpsSinceLastSkill: number,
+	threshold: number,
+): boolean {
+	if (!pityProcEnabled || skillRate <= 0) {
+		return false;
+	}
+	return helpsSinceLastSkill >= threshold;
+}
+
+/**
  * 時間帯のおてつだい結果を計算
  * @param input おてつだい計算の入力
  * @returns おてつだい結果
@@ -232,8 +270,13 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		currentInventory,
 		maxInventory,
 		bankedTimeSeconds,
+		pityProcEnabled,
 		bonusContext,
 	} = input;
+	const initialHelpsSinceLastSkill = Math.max(
+		0,
+		Math.floor(input.helpsSinceLastSkill),
+	);
 
 	const noHelpOutput: HelpOutput = {
 		helpCount: 0,
@@ -246,6 +289,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		newSkillStock: currentSkillStock,
 		newInventory: currentInventory,
 		newBankedTimeSeconds: bankedTimeSeconds,
+		newHelpsSinceLastSkill: initialHelpsSinceLastSkill,
 	};
 
 	// 経過時間が0以下の場合は何もしない
@@ -312,12 +356,14 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 	let skillOverflowCount = 0;
 	let totalBerryCount = 0;
 	let totalHugeMagoBerryCount = 0;
+	let helpsSinceLastSkill = initialHelpsSinceLastSkill;
 
 	const ingredientMap = new Map<IngredientName, number>();
 	const overflowIngredientMap = new Map<IngredientName, number>();
 
 	const ingredientRate = pokemon.iv.ingredientRate;
 	const skillRate = Math.min(1, pokemon.iv.skillRate * skillTriggerBonus);
+	const pityProcThreshold = getPityProcThreshold(pokemon);
 	const baseBerryCount = pokemon.iv.berryCount;
 	const ingredientBonusBase = Math.floor(ingredientBonus);
 	const ingredientBonusFraction = Math.max(
@@ -351,6 +397,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 			// inventoryは増えない（溢れるため）
 
 			// スキル判定は行う、成功したら溢れとしてカウント
+			// いつのまに育成中の判定は連続不発天井の対象外（カウンタは増減しない）
 			if (random.chance(skillRate)) {
 				skillOverflowCount++;
 			}
@@ -389,13 +436,25 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 			}
 
 			// スキル発動判定
-			if (random.chance(skillRate)) {
-				if (skillStock < maxSkillStock) {
+			if (skillStock < maxSkillStock) {
+				// 天井到達時は乱数を消費せず確定発動する
+				const triggered =
+					isPityProcTriggered(
+						pityProcEnabled,
+						skillRate,
+						helpsSinceLastSkill,
+						pityProcThreshold,
+					) || random.chance(skillRate);
+				if (triggered) {
 					skillTriggerCount++;
 					skillStock++;
+					helpsSinceLastSkill = 0;
 				} else {
-					skillOverflowCount++;
+					helpsSinceLastSkill++;
 				}
+			} else if (random.chance(skillRate)) {
+				// ストック満杯時の判定は連続不発天井の対象外（カウンタは増減しない）
+				skillOverflowCount++;
 			}
 		}
 	}
@@ -423,6 +482,7 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		newSkillStock: skillStock,
 		newInventory: inventory,
 		newBankedTimeSeconds,
+		newHelpsSinceLastSkill: helpsSinceLastSkill,
 	};
 }
 

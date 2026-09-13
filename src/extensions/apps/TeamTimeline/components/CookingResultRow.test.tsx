@@ -21,6 +21,7 @@ const EVENT: CookingEventResult = {
 	mealType: "breakfast",
 	recipeName: "specialAppleCurry",
 	isGreatSuccess: false,
+	greatSuccessMultiplier: 2,
 	cookingEP: 1200,
 	eBase: 0,
 	eDisplay: 0,
@@ -41,6 +42,40 @@ describe("CookingResultRow", () => {
 		expect(
 			screen.getByText("translated:TeamTimeline.recipe specialAppleCurry"),
 		).toBeDefined();
+	});
+
+	it("does not render great success badge for normal results", () => {
+		render(<CookingResultRow event={EVENT} teamSize={5} />);
+
+		expect(
+			screen.queryByTestId("cooking-great-success-breakfast-1"),
+		).toBeNull();
+	});
+
+	it("renders great success badge without multiplier on weekdays (x2)", () => {
+		render(
+			<CookingResultRow
+				event={{ ...EVENT, isGreatSuccess: true, greatSuccessMultiplier: 2 }}
+				teamSize={5}
+			/>,
+		);
+
+		expect(
+			screen.getByTestId("cooking-great-success-breakfast-1").textContent,
+		).toBe("大成功!");
+	});
+
+	it("renders great success badge with x3 on Sundays", () => {
+		render(
+			<CookingResultRow
+				event={{ ...EVENT, isGreatSuccess: true, greatSuccessMultiplier: 3 }}
+				teamSize={5}
+			/>,
+		);
+
+		expect(
+			screen.getByTestId("cooking-great-success-breakfast-1").textContent,
+		).toBe("大成功! ×3");
 	});
 
 	it("removes top dashed line and uses rounded corners on cooking row", () => {

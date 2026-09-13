@@ -3,7 +3,12 @@ import { cbexFieldIndex, ggexFieldIndex } from "../../../../data/fields";
 import pokemons from "../../../../data/pokemons";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
-import { calculateHelp } from "./HelpCalculator";
+import {
+	calculateHelp,
+	getPityProcThreshold,
+	type HelpInput,
+	isPityProcTriggered,
+} from "./HelpCalculator";
 import SeededRandom from "./SeededRandom";
 
 function createTestPokemon(): PokemonBoxItem {
@@ -47,6 +52,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 0,
 			maxInventory: pokemon.iv.carryLimit,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -68,6 +75,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 0,
 			maxInventory: pokemon.iv.carryLimit,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -104,6 +113,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 10,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -125,6 +136,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 10,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -164,6 +177,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 10,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -186,6 +201,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 10,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -225,6 +242,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 18,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -247,6 +266,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 18,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -279,6 +300,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 10,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 1,
@@ -309,6 +332,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 7,
 			maxInventory: 10,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 1,
@@ -339,6 +364,8 @@ describe("HelpCalculator bonus behavior", () => {
 			currentInventory: 0,
 			maxInventory: 999,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 1,
@@ -373,6 +400,8 @@ describe("HelpCalculator EXフィールド別のきのみ速度補正", () => {
 			currentInventory: 0,
 			maxInventory: 999,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -467,6 +496,8 @@ describe("HelpCalculator 未実装データの扱い", () => {
 			currentInventory: 3,
 			maxInventory: 0,
 			bankedTimeSeconds: 12,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 		});
 
 		expect(result.helpCount).toBe(0);
@@ -498,6 +529,8 @@ describe("HelpCalculator とてもおおきなマゴのみ", () => {
 			currentInventory: overrides.currentInventory ?? 0,
 			maxInventory: overrides.maxInventory ?? pokemon.iv.carryLimit,
 			bankedTimeSeconds: 0,
+			pityProcEnabled: false,
+			helpsSinceLastSkill: 0,
 			bonusContext: {
 				skillTriggerBonus: 1,
 				berryBonus: 0,
@@ -591,5 +624,261 @@ describe("HelpCalculator とてもおおきなマゴのみ", () => {
 		expect(withZeroRate.skillTriggerCount).toBe(
 			withoutContext.skillTriggerCount,
 		);
+	});
+});
+
+describe("HelpCalculator スキル連続不発天井", () => {
+	/** SeededRandom が next() ごとに加算する定数（消費回数の計測用） */
+	const SEED_STEP = 0x6d2b79f5;
+	/** 乱数では実質発動しないスキル発動率 */
+	const NEVER_SKILL_RATE = 1e-9;
+
+	function createPityPokemon(options?: {
+		skillRate?: number;
+		pityProcHelpCount?: number;
+	}): PokemonBoxItem {
+		const pokemon = createTestPokemon();
+		Object.defineProperty(pokemon.iv, "ingredientRate", {
+			configurable: true,
+			get: () => 0,
+		});
+		Object.defineProperty(pokemon.iv, "skillRate", {
+			configurable: true,
+			get: () => options?.skillRate ?? NEVER_SKILL_RATE,
+		});
+		if (options?.pityProcHelpCount !== undefined) {
+			Object.defineProperty(pokemon.iv, "pityProcHelpCount", {
+				configurable: true,
+				get: () => options.pityProcHelpCount,
+			});
+		}
+		return pokemon;
+	}
+
+	function createPityInput(
+		pokemon: PokemonBoxItem,
+		overrides?: Partial<HelpInput>,
+	): HelpInput {
+		return {
+			pokemon,
+			durationMinutes: 600,
+			startEnergy: 100,
+			isSleeping: false,
+			random: new SeededRandom(9001),
+			teamHelpingBonusCount: 0,
+			currentSkillStock: 0,
+			maxSkillStock: 1,
+			currentInventory: 0,
+			maxInventory: 999,
+			bankedTimeSeconds: 0,
+			pityProcEnabled: true,
+			helpsSinceLastSkill: 0,
+			...overrides,
+		};
+	}
+
+	it("閾値は個体値計算機と同じ pityProcHelpCount を参照する", () => {
+		const pokemon = createTestPokemon();
+		expect(getPityProcThreshold(pokemon)).toBe(pokemon.iv.pityProcHelpCount);
+		// きのみとくいのピカチュウは78回
+		expect(getPityProcThreshold(pokemon)).toBe(78);
+	});
+
+	it("閾値回連続で不発なら次のおてつだいで確定発動し、カウンタは0に戻る", () => {
+		const pokemon = createPityPokemon();
+		const threshold = getPityProcThreshold(pokemon);
+
+		const output = calculateHelp(
+			createPityInput(pokemon, { helpsSinceLastSkill: threshold }),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(1);
+		expect(output.skillTriggerCount).toBe(1);
+		expect(output.newSkillStock).toBe(1);
+		// 1回目で確定発動 → 残りのおてつだいはストック満杯のため数えない
+		expect(output.newHelpsSinceLastSkill).toBe(0);
+	});
+
+	it("N回連続不発のあと N+1 回目で確定発動する（閾値未満では発動しない）", () => {
+		const pokemon = createPityPokemon();
+		const threshold = getPityProcThreshold(pokemon);
+		const helpCount = calculateHelp(createPityInput(pokemon)).helpCount;
+		expect(helpCount).toBeGreaterThan(0);
+
+		// この時間帯の終了時点でちょうど閾値回の連続不発になる
+		const reachingThreshold = calculateHelp(
+			createPityInput(pokemon, {
+				helpsSinceLastSkill: threshold - helpCount,
+			}),
+		);
+		expect(reachingThreshold.skillTriggerCount).toBe(0);
+		expect(reachingThreshold.newHelpsSinceLastSkill).toBe(threshold);
+
+		// 次の時間帯の最初のおてつだい（N+1回目）で確定発動する
+		const next = calculateHelp(
+			createPityInput(pokemon, {
+				helpsSinceLastSkill: reachingThreshold.newHelpsSinceLastSkill,
+				maxSkillStock: 999,
+			}),
+		);
+		expect(next.skillTriggerCount).toBe(1);
+		expect(next.newHelpsSinceLastSkill).toBe(next.helpCount - 1);
+	});
+
+	it("天井OFFなら確定発動せず、不発回数はそのまま積み上がる", () => {
+		const pokemon = createPityPokemon();
+		const threshold = getPityProcThreshold(pokemon);
+
+		const output = calculateHelp(
+			createPityInput(pokemon, {
+				pityProcEnabled: false,
+				helpsSinceLastSkill: threshold,
+			}),
+		);
+
+		expect(output.skillTriggerCount).toBe(0);
+		expect(output.newHelpsSinceLastSkill).toBe(threshold + output.helpCount);
+	});
+
+	it("確定発動時は乱数を消費しない", () => {
+		const pokemon = createPityPokemon();
+		const threshold = getPityProcThreshold(pokemon);
+		const seed = 4242;
+
+		const randomWithPity = new SeededRandom(seed);
+		const withPity = calculateHelp(
+			createPityInput(pokemon, {
+				random: randomWithPity,
+				helpsSinceLastSkill: threshold,
+			}),
+		);
+		const randomWithoutPity = new SeededRandom(seed);
+		const withoutPity = calculateHelp(
+			createPityInput(pokemon, {
+				random: randomWithoutPity,
+				pityProcEnabled: false,
+				helpsSinceLastSkill: threshold,
+			}),
+		);
+
+		expect(withPity.helpCount).toBe(withoutPity.helpCount);
+		const drawsWithPity = (randomWithPity.getSeed() - seed) / SEED_STEP;
+		const drawsWithoutPity = (randomWithoutPity.getSeed() - seed) / SEED_STEP;
+		// 確定発動した1回分だけスキル判定の乱数を引いていない
+		expect(drawsWithoutPity - drawsWithPity).toBe(1);
+	});
+
+	it("所持数が満杯（いつのまに育成）の間はカウンタが増減せず確定発動もしない", () => {
+		const pokemon = createPityPokemon();
+		const threshold = getPityProcThreshold(pokemon);
+
+		const output = calculateHelp(
+			createPityInput(pokemon, {
+				helpsSinceLastSkill: threshold,
+				currentInventory: 10,
+				maxInventory: 10,
+			}),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(0);
+		expect(output.skillTriggerCount).toBe(0);
+		expect(output.skillOverflowCount).toBe(0);
+		expect(output.newHelpsSinceLastSkill).toBe(threshold);
+	});
+
+	it("スキルストックが満杯の間はカウンタが増減せず確定発動もしない", () => {
+		const pokemon = createPityPokemon();
+		const threshold = getPityProcThreshold(pokemon);
+
+		const output = calculateHelp(
+			createPityInput(pokemon, {
+				helpsSinceLastSkill: threshold,
+				currentSkillStock: 1,
+				maxSkillStock: 1,
+			}),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(0);
+		expect(output.skillTriggerCount).toBe(0);
+		expect(output.newSkillStock).toBe(1);
+		expect(output.newHelpsSinceLastSkill).toBe(threshold);
+	});
+
+	it("通常発動でもカウンタは0に戻る", () => {
+		const pokemon = createPityPokemon({ skillRate: 1 });
+
+		const output = calculateHelp(
+			createPityInput(pokemon, {
+				helpsSinceLastSkill: 5,
+				maxSkillStock: 999,
+			}),
+		);
+
+		expect(output.skillTriggerCount).toBe(output.helpCount);
+		expect(output.newHelpsSinceLastSkill).toBe(0);
+	});
+
+	it("スキル発動率が0のポケモンは天井でも発動しない", () => {
+		const pokemon = createPityPokemon({ skillRate: 0 });
+		const threshold = getPityProcThreshold(pokemon);
+
+		const output = calculateHelp(
+			createPityInput(pokemon, { helpsSinceLastSkill: threshold }),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(0);
+		expect(output.skillTriggerCount).toBe(0);
+	});
+
+	it("閾値はポケモンごとの pityProcHelpCount に従う", () => {
+		const pokemon = createPityPokemon({ pityProcHelpCount: 3 });
+
+		const output = calculateHelp(
+			createPityInput(pokemon, {
+				helpsSinceLastSkill: 0,
+				maxSkillStock: 999,
+			}),
+		);
+
+		// 3回不発 → 4回目で確定発動を繰り返す
+		expect(output.skillTriggerCount).toBe(Math.floor(output.helpCount / 4));
+		expect(output.newHelpsSinceLastSkill).toBe(output.helpCount % 4);
+	});
+
+	it("おてつだいが0回なら入力のカウンタをそのまま返す", () => {
+		const pokemon = createPityPokemon();
+
+		const output = calculateHelp(
+			createPityInput(pokemon, {
+				durationMinutes: 0,
+				helpsSinceLastSkill: 12,
+			}),
+		);
+
+		expect(output.helpCount).toBe(0);
+		expect(output.newHelpsSinceLastSkill).toBe(12);
+	});
+
+	it("負のカウンタは0として扱う", () => {
+		const pokemon = createPityPokemon({ skillRate: 0 });
+
+		const output = calculateHelp(
+			createPityInput(pokemon, { helpsSinceLastSkill: -5 }),
+		);
+
+		expect(output.newHelpsSinceLastSkill).toBe(output.helpCount);
+	});
+});
+
+describe("isPityProcTriggered", () => {
+	it("閾値以上の連続不発で true になる", () => {
+		expect(isPityProcTriggered(true, 0.02, 78, 78)).toBe(true);
+		expect(isPityProcTriggered(true, 0.02, 79, 78)).toBe(true);
+	});
+
+	it("閾値未満、天井OFF、発動率0では false になる", () => {
+		expect(isPityProcTriggered(true, 0.02, 77, 78)).toBe(false);
+		expect(isPityProcTriggered(false, 0.02, 78, 78)).toBe(false);
+		expect(isPityProcTriggered(true, 0, 78, 78)).toBe(false);
 	});
 });

@@ -272,6 +272,30 @@ describe("TeamTimelineApp pre-simulation timeline", () => {
 		).toBe("50");
 	});
 
+	it("shows pity proc switch enabled by default in settings tab and persists toggling", async () => {
+		render(<TeamTimelineApp />);
+
+		fireEvent.click(
+			screen.getByTestId("timeline-open-time-slot-settings-click"),
+		);
+
+		const pitySwitch = screen
+			.getByTestId("team-timeline-pity-proc-switch")
+			.querySelector("input") as HTMLInputElement;
+		expect(pitySwitch.checked).toBe(true);
+		expect(screen.getByText("スキル連続不発天井を考慮")).toBeDefined();
+
+		fireEvent.click(pitySwitch);
+
+		expect(pitySwitch.checked).toBe(false);
+		await waitFor(() => {
+			const saved = JSON.parse(
+				localStorage.getItem("PstTeamTimelineConfig") ?? "{}",
+			) as { pityProc?: boolean };
+			expect(saved.pityProc).toBe(false);
+		});
+	});
+
 	it("restores saved cooking and field settings from active team set and when switching team set", async () => {
 		localStorage.setItem(
 			"PstTeamTimelineBonusSettings",

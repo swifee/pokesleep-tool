@@ -32,11 +32,13 @@ import {
 	MEAL_LABELS,
 	type NoCollectCellSetting,
 	type PokemonSwap,
+	resolveStartDayOfWeek,
 	type SimulationConfig,
 	type SimulationResult,
 	SWAP_NONE_POKEMON_ID,
 	type TimeSlot,
 	type TimeSlotResult,
+	type Weekday,
 } from "../types/TimeSlotTypes";
 import {
 	addBerryZoneStacks,
@@ -56,8 +58,10 @@ import {
 	normalizeTimelinePokemon,
 } from "../utils/TimelinePokemonUtils";
 import { calculateDuration, isSleepingSlot } from "../utils/TimeSlotUtils";
+import { isSundayForDayIndex } from "../utils/WeekdayUtils";
 import {
 	addIngredientsToBag,
+	applyGreatSuccessMultiplier,
 	computeInitialIngredientAttributedEP,
 	computeLeftoverIngredients,
 	computePokemonCookingAttributions,
@@ -219,6 +223,8 @@ interface PokemonState {
 	carriedSkillIngredients: Map<IngredientName, number>;
 	/** おてつだい周期の余り秒数（次スロットへ持ち越し） */
 	bankedTimeSeconds: number;
+	/** 最後のスキル発動からの連続不発回数（天井カウンタ、スロット・日をまたいで持ち越し） */
+	helpsSinceLastSkill: number;
 	/** スキルストック上限（specialtyから計算） */
 	maxSkillStock: number;
 	/** 最大所持数（carryLimitから計算） */
@@ -492,7 +498,11 @@ function applyExtraIngredientsToBaselineEvents(
 				eBase = mixedBase;
 				eDisplay = mixedBase;
 				eFinal = mixedFinal;
-				cookingEP = baselineEvent.isGreatSuccess ? mixedFinal * 2 : mixedFinal;
+				cookingEP = applyGreatSuccessMultiplier(
+					mixedFinal,
+					baselineEvent.isGreatSuccess,
+					baselineEvent.greatSuccessMultiplier,
+				);
 			} else {
 				recipeName = null;
 				eBase = 0;
@@ -502,7 +512,11 @@ function applyExtraIngredientsToBaselineEvents(
 			}
 		} else if (extraRawStrength > BAG_COUNT_EPSILON) {
 			eFinal = baselineEvent.eFinal + extraFinalStrength;
-			cookingEP = baselineEvent.isGreatSuccess ? eFinal * 2 : eFinal;
+			cookingEP = applyGreatSuccessMultiplier(
+				eFinal,
+				baselineEvent.isGreatSuccess,
+				baselineEvent.greatSuccessMultiplier,
+			);
 		}
 
 		updatedEvents.push({
@@ -533,6 +547,7 @@ function applyExtraIngredientsToBaselineEvents(
  *
  * スロット結果を時系列で走査し、食材をバッグに蓄積しながら
  * 各食事タイミングで最適な料理を選択・作成する。
+ * 日曜にあたる日は鍋容量2倍・大成功率30%・大成功EP3倍の料理ルールを適用する。
  */
 function runCookingPostProcess(
 	expandedSlots: { slot: TimeSlot; dayIndex: number }[],
@@ -540,6 +555,7 @@ function runCookingPostProcess(
 	cookingSettings: CookingSimulationSettings,
 	bonusSettings: TimelineBonusSettings,
 	baseSeed: number,
+	startDayOfWeek: Weekday,
 ): CookingSimulationResult {
 	const bag = createIngredientBag(cookingSettings.initialIngredients);
 	const cookingRandom = new SeededRandom(baseSeed + 9999);
@@ -591,6 +607,7 @@ function runCookingPostProcess(
 				basePotCapacity: cookingSettings.basePotCapacity,
 				isGoodCampTicket: bonusSettings.isGoodCampTicketSet,
 				potSizeMultiplier,
+				isSunday: isSundayForDayIndex(startDayOfWeek, expandedSlot.dayIndex),
 				cookingPowerUpBonus,
 				tastyChanceAccumulated,
 				fieldBonus: bonusSettings.fieldBonus,
@@ -808,6 +825,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			carriedHelpIngredients: new Map<IngredientName, number>(),
 			carriedSkillIngredients: new Map<IngredientName, number>(),
 			bankedTimeSeconds: 0,
+			helpsSinceLastSkill: 0,
 			maxSkillStock: getMaxSkillStock(pokemon.iv.pokemon.specialty),
 			maxInventory: getTimelineCarryLimit(pokemon.iv, placeholderStats),
 			stockpileCount: 0,
@@ -972,6 +990,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				currentInventory: state.inventoryCount,
 				maxInventory: state.maxInventory,
 				bankedTimeSeconds: state.bankedTimeSeconds,
+				pityProcEnabled: config.pityProc,
+				helpsSinceLastSkill: state.helpsSinceLastSkill,
 				bonusContext: getPokemonBonusContext(state.pokemon).help,
 			};
 
@@ -1456,6 +1476,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			// スキルストックは時間帯終了でリセット
 			state.skillStock = 0; // スキルストックをリセット
 			state.bankedTimeSeconds = helpOutput.newBankedTimeSeconds; // 持ち越し秒数を更新
+			// 連続不発天井のカウンタはスロット・日をまたいで持ち越す
+			state.helpsSinceLastSkill = helpOutput.newHelpsSinceLastSkill;
 			state.stockpileCount = skillResult.stockpileCountAfter;
 			state.berryBurstDisguiseLocked =
 				skillResult.berryBurstDisguiseLockedAfter;
@@ -1524,6 +1546,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				carriedHelpIngredients: new Map<IngredientName, number>(),
 				carriedSkillIngredients: new Map<IngredientName, number>(),
 				bankedTimeSeconds: 0,
+				// 入れ替えで投入されたポケモンの天井カウンタは0から
+				helpsSinceLastSkill: 0,
 				maxSkillStock: getMaxSkillStock(simulationPokemon.iv.pokemon.specialty),
 				maxInventory: getTimelineCarryLimit(
 					simulationPokemon.iv,
@@ -1553,6 +1577,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			input.cookingSettings,
 			bonusSettings,
 			config.seed,
+			resolveStartDayOfWeek(config.simulationDays, config.startDayOfWeek),
 		);
 	}
 

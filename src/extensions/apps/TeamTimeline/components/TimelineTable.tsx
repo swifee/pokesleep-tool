@@ -27,9 +27,15 @@ import type {
 	PokemonSwap,
 	SimulationResult,
 	TimeSlot,
+	Weekday,
 } from "../types/TimeSlotTypes";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import { buildExpandedTimeline } from "../utils/TimelineDayExpansion";
+import {
+	getWeekdayDefaultLabel,
+	getWeekdayForDayIndex,
+	getWeekdayLabelKey,
+} from "../utils/WeekdayUtils";
 import CookingResultRow from "./CookingResultRow";
 import DailySummaryRow from "./DailySummaryRow";
 import EpValue from "./EpValue";
@@ -46,6 +52,8 @@ interface TimelineTableProps {
 	team: (PokemonBoxItem | null)[];
 	timeSlots: TimeSlot[];
 	simulationDays: number;
+	/** 集計期間の開始曜日（指定時は日ヘッダに曜日を表示する） */
+	startDayOfWeek?: Weekday;
 	result: SimulationResult;
 	swaps: PokemonSwap[];
 	noCollectCells?: NoCollectCellSetting[];
@@ -106,6 +114,7 @@ const TimelineTable = React.memo(
 		team,
 		timeSlots,
 		simulationDays,
+		startDayOfWeek,
 		result,
 		swaps,
 		noCollectCells = [],
@@ -621,6 +630,21 @@ const TimelineTable = React.memo(
 			return dayLabel;
 		};
 
+		const renderDayBandWeekday = (dayNumber: number): React.ReactNode => {
+			if (startDayOfWeek === undefined) {
+				return null;
+			}
+			const weekday = getWeekdayForDayIndex(startDayOfWeek, dayNumber - 1);
+			return (
+				<span
+					className="day-weekday"
+					data-testid={`timeline-day-band-weekday-${dayNumber}`}
+				>
+					{t(getWeekdayLabelKey(weekday), getWeekdayDefaultLabel(weekday))}
+				</span>
+			);
+		};
+
 		const renderDayBandRow = (dayNumber: number): React.ReactNode => (
 			<DayBandRow
 				data-testid={`timeline-day-band-${dayNumber}`}
@@ -630,6 +654,7 @@ const TimelineTable = React.memo(
 					{renderDayBandLabel(dayNumber)}
 				</DayBandLabelCell>
 				<DayBandSummaryCell>
+					{renderDayBandWeekday(dayNumber)}
 					{dayNumber > 1 && shouldShowDayEndEp && (
 						<>
 							{t("TeamTimeline.day end ep prefix", "{{day}}日目終了時: ", {
@@ -1034,6 +1059,9 @@ const DayBandSummaryCell = styled("div")({
 	letterSpacing: "-0.5px",
 	display: "flex",
 	alignItems: "center",
+	"& .day-weekday": {
+		marginRight: "8px",
+	},
 });
 
 const SwapDragGhost = styled("div")({
