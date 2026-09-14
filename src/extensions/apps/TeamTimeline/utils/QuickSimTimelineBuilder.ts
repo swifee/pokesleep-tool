@@ -9,7 +9,8 @@ import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import {
 	MINUTES_PER_DAY,
 	QUICK_SIM_SWAP_INITIAL_ENERGY,
-	type QuickSimDaySchedule,
+	type QuickSimLaneSegment,
+	type QuickSimSchedule,
 } from "../types/QuickSimTypes";
 import { MAX_TEAM_SIZE } from "../types/TeamTimelineTypes";
 import {
@@ -46,16 +47,31 @@ function toSwapPokemonId(pokemonId: number | null, box: PokemonBox): number {
 }
 
 /**
+ * 指定した日の枠の区間列。スケジュールの日数を超える日は最終日を繰り返す。
+ */
+function resolveDayLanes(
+	schedule: QuickSimSchedule,
+	dayIndex: number,
+): QuickSimLaneSegment[][] {
+	const lanes =
+		schedule.dayLanes[Math.min(dayIndex, schedule.dayLanes.length - 1)] ?? [];
+	return Array.from(
+		{ length: MAX_TEAM_SIZE },
+		(_, index) => lanes[index] ?? [],
+	);
+}
+
+/**
  * スケジュールをシミュレーター入力へ変換する。
  *
- * - 各枠の最初の区間の占有者が初期チームになる。
+ * - 初日の各枠の最初の区間の占有者が初期チームになる。
  * - 区間の切り替わり時刻に既存の時間帯があればそこで入れ替え、なければ
  *   その時刻に時間帯を追加して入れ替える。追加した時間帯では入れ替え対象の
  *   ポケモンだけを回収し（清算）、他のポケモンは回収しない設定にする。
  * - 翌日の先頭区間が前日の最終区間と異なるときは、前日の就寝スロットで入れ替える。
  */
 export function buildQuickSimTimeline(
-	schedule: QuickSimDaySchedule,
+	schedule: QuickSimSchedule,
 	timeSlots: readonly TimeSlot[],
 	simulationDays: number,
 	box: PokemonBox,
@@ -80,25 +96,25 @@ export function buildQuickSimTimeline(
 		return id;
 	};
 
-	const lanes = Array.from(
-		{ length: MAX_TEAM_SIZE },
-		(_, index) => schedule.lanes[index] ?? [],
-	);
-	const team = lanes.map((lane) => {
+	const team = resolveDayLanes(schedule, 0).map((lane) => {
 		const pokemonId = lane[0]?.pokemonId ?? null;
 		return pokemonId === null ? null : box.getById(pokemonId);
 	});
 
 	const swaps: PokemonSwap[] = [];
 	for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+		const lanes = resolveDayLanes(schedule, dayIndex);
+		const previousLanes =
+			dayIndex === 0 ? null : resolveDayLanes(schedule, dayIndex - 1);
 		lanes.forEach((lane, teamSlotIndex) => {
 			lane.forEach((segment, segmentIndex) => {
 				if (segmentIndex === 0) {
-					if (dayIndex === 0) {
+					if (previousLanes === null) {
 						return;
 					}
-					const previousSegment = lane[lane.length - 1];
-					if (previousSegment.pokemonId === segment.pokemonId) {
+					const previousLane = previousLanes[teamSlotIndex];
+					const previousSegment = previousLane[previousLane.length - 1];
+					if (previousSegment?.pokemonId === segment.pokemonId) {
 						return;
 					}
 					swaps.push({

@@ -4,8 +4,9 @@ import PokemonIv from "../../../../util/PokemonIv";
 import {
 	MINUTES_PER_DAY,
 	QUICK_SIM_SWAP_INITIAL_ENERGY,
-	type QuickSimDaySchedule,
 	type QuickSimLaneSegment,
+	type QuickSimMember,
+	type QuickSimSchedule,
 } from "../types/QuickSimTypes";
 import {
 	DEFAULT_TIME_SLOTS,
@@ -13,7 +14,7 @@ import {
 	type TimeSlot,
 } from "../types/TimeSlotTypes";
 import { collectTimelineDurationSummaryByPokemon } from "./AdditionalAnalysisUtils";
-import { buildQuickSimDaySchedule } from "./QuickSimScheduler";
+import { buildQuickSimSchedule } from "./QuickSimScheduler";
 import {
 	buildQuickSimTimeline,
 	QUICK_SIM_SLOT_ID_PREFIX,
@@ -33,14 +34,15 @@ function fullLane(pokemonId: number | null): QuickSimLaneSegment[] {
 
 function createSchedule(
 	lanes: QuickSimLaneSegment[][],
-	overrides: Partial<QuickSimDaySchedule> = {},
-): QuickSimDaySchedule {
+	overrides: Partial<QuickSimSchedule> = {},
+): QuickSimSchedule {
 	return {
-		lanes,
+		dayLanes: [lanes],
 		sleepSlotId: "slot-5",
 		sleepTime: "23:00",
 		sleepMinutes: SLEEP_MINUTES,
 		usesSleepSwaps: false,
+		unmetPokemonIds: [],
 		...overrides,
 	};
 }
@@ -203,16 +205,16 @@ describe("buildQuickSimTimeline", () => {
 	});
 
 	it("reproduces the requested usage per day in the expanded timeline", () => {
-		const members = [
-			{ pokemonId: pikachu.id, usagePercent: 100 },
-			{ pokemonId: eevee.id, usagePercent: 70 },
-			{ pokemonId: bulbasaur.id, usagePercent: 30 },
+		const members: QuickSimMember[] = [
+			{ pokemonId: pikachu.id, usagePercent: 100, usageMode: "even" },
+			{ pokemonId: eevee.id, usagePercent: 70, usageMode: "even" },
+			{ pokemonId: bulbasaur.id, usagePercent: 30, usageMode: "even" },
 		];
-		const result = buildQuickSimDaySchedule(members, DEFAULT_TIME_SLOTS);
+		const days = 3;
+		const result = buildQuickSimSchedule(members, DEFAULT_TIME_SLOTS, days);
 		if (!result.ok) {
 			throw new Error(result.error);
 		}
-		const days = 3;
 		const timeline = buildQuickSimTimeline(
 			result.schedule,
 			DEFAULT_TIME_SLOTS,
@@ -233,6 +235,77 @@ describe("buildQuickSimTimeline", () => {
 		);
 		expect(summary.activeMinutesByPokemonId.get(eevee.id)).toBe(days * 1008);
 		expect(summary.activeMinutesByPokemonId.get(bulbasaur.id)).toBe(days * 432);
+	});
+
+	it("swaps at the previous bedtime when the next day starts with another member", () => {
+		// Day 0: Pikachu all day. Day 1: Eevee all day. Day 2: Eevee until 600, then empty.
+		const schedule = createSchedule([], {
+			dayLanes: [
+				[
+					fullLane(pikachu.id),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+				[
+					fullLane(eevee.id),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+				[
+					[
+						{ pokemonId: eevee.id, startMinute: 0, endMinute: 600 },
+						{ pokemonId: null, startMinute: 600, endMinute: MINUTES_PER_DAY },
+					],
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+			],
+		});
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			3,
+			box,
+		);
+
+		expect(timeline.team).toEqual([pikachu, null, null, null, null]);
+		expect(timeline.swaps).toEqual([
+			{
+				dayIndex: 0,
+				slotId: "slot-5-end",
+				teamSlotIndex: 0,
+				newPokemonId: eevee.id,
+				initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+			},
+			{
+				dayIndex: 2,
+				slotId: `${QUICK_SIM_SLOT_ID_PREFIX}0900`,
+				teamSlotIndex: 0,
+				newPokemonId: SWAP_NONE_POKEMON_ID,
+				initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+			},
+		]);
+
+		const summary = collectTimelineDurationSummaryByPokemon(
+			timeline.team,
+			timeline.timeSlots,
+			3,
+			timeline.swaps,
+			box,
+		);
+		expect(summary.activeMinutesByPokemonId.get(pikachu.id)).toBe(
+			MINUTES_PER_DAY,
+		);
+		expect(summary.activeMinutesByPokemonId.get(eevee.id)).toBe(
+			MINUTES_PER_DAY + 600,
+		);
 	});
 
 	it("keeps inserted slots in chronological order within the expanded day", () => {

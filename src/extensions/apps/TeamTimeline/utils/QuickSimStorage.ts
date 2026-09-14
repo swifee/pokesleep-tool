@@ -1,8 +1,11 @@
 import type PokemonBox from "../../../../util/PokemonBox";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import {
+	DEFAULT_QUICK_SIM_USAGE_MODE,
+	isQuickSimUsageMode,
 	type QuickSimMember,
 	type QuickSimSettings,
+	type QuickSimUsageMode,
 	STORAGE_KEY_QUICK_SIM,
 } from "../types/QuickSimTypes";
 import type { PokemonSwap, TimeSlot } from "../types/TimeSlotTypes";
@@ -19,6 +22,8 @@ import { clampQuickSimUsagePercent } from "./QuickSimScheduler";
 interface SerializedQuickSimMember {
 	serialized: string;
 	usagePercent: number;
+	/** 起用方法。省略時は均等（旧形式との互換） */
+	usageMode?: QuickSimUsageMode;
 }
 
 interface SerializedQuickSimSettings {
@@ -55,6 +60,7 @@ export function saveQuickSimSettingsToStorage(
 		members.push({
 			serialized: item.serialize(),
 			usagePercent: clampQuickSimUsagePercent(member.usagePercent),
+			usageMode: member.usageMode,
 		});
 	}
 	const payload: SerializedQuickSimSettings = { members };
@@ -98,6 +104,9 @@ export function loadQuickSimSettingsFromStorage(
 			members.push({
 				pokemonId: item.id,
 				usagePercent: clampQuickSimUsagePercent(rawMember.usagePercent),
+				usageMode: isQuickSimUsageMode(rawMember.usageMode)
+					? rawMember.usageMode
+					: DEFAULT_QUICK_SIM_USAGE_MODE,
 			});
 		}
 		return { members };
@@ -142,6 +151,7 @@ export function deriveQuickSimMembersFromTimeline(
 		return {
 			pokemonId: member.id,
 			usagePercent: clampQuickSimUsagePercent(usagePercent),
+			usageMode: DEFAULT_QUICK_SIM_USAGE_MODE,
 		};
 	});
 }

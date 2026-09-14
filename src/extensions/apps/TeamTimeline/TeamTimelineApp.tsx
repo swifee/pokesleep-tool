@@ -1577,6 +1577,10 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 		dispatch({ type: "selectTab", tab: "settings" });
 	}, []);
 
+	const handleOpenCookingTab = useCallback(() => {
+		dispatch({ type: "selectTab", tab: "cooking" });
+	}, []);
+
 	const handleSyncWithIvParameterChange = useCallback((enabled: boolean) => {
 		dispatch({ type: "setSyncWithIvParameter", enabled });
 		if (enabled) {
@@ -3116,6 +3120,7 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 							seedMode={state.seedMode}
 							multiTrialCount={state.multiTrialCount}
 							onCookingSettingsChange={handleCookingSettingsChange}
+							onOpenCookingSettings={handleOpenCookingTab}
 							onSeedChange={handleSeedChange}
 							renderSimulationControls={(quickSim) => (
 								<SimulationControls

@@ -1,5 +1,5 @@
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import { Box, Button, TextField, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import React, { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../../../../data/pokemons";
 import IngredientIcon from "../../../../ui/IvCalc/IngredientIcon";
 import type { CookingSimulationSettings } from "../types/CookingTypes";
+import { getInitialIngredientTotal } from "../utils/InitialIngredientsUtils";
 import {
 	LOCK_ICON_OFF_COLOR,
 	LOCK_ICON_ON_COLOR,
@@ -16,10 +17,13 @@ import {
 	STEP_BUTTON_SX,
 	STEP_BUTTON_SYMBOL_SX,
 } from "./CookingSettingsStyles";
+import DraftNumberField from "./DraftNumberField";
 
 interface InitialIngredientsEditorProps {
 	settings: CookingSimulationSettings;
 	onChange: (settings: CookingSimulationSettings) => void;
+	/** 見出し「初期食材」を表示するか（呼び出し側が見出しを持つときは false） */
+	showTitle?: boolean;
 }
 
 const INGREDIENT_INPUT_STEP = 5;
@@ -30,7 +34,7 @@ const INGREDIENT_INPUT_STEP = 5;
  * 料理設定タブと簡易シミュタブの両方で使う。
  */
 const InitialIngredientsEditor = React.memo(
-	({ settings, onChange }: InitialIngredientsEditorProps) => {
+	({ settings, onChange, showTitle = true }: InitialIngredientsEditorProps) => {
 		const { t } = useTranslation();
 
 		const handleIngredientChange = useCallback(
@@ -71,18 +75,15 @@ const InitialIngredientsEditor = React.memo(
 			[settings, onChange],
 		);
 
-		const initialIngredientTotal = IngredientNames.reduce(
-			(sum, ingredientName) => {
-				return sum + (settings.initialIngredients[ingredientName] ?? 0);
-			},
-			0,
-		);
+		const initialIngredientTotal = getInitialIngredientTotal(settings);
 
 		return (
 			<>
-				<Typography variant="subtitle2" sx={{ mb: 1 }}>
-					{t("TeamTimeline.cooking initial ingredients", "初期食材")}
-				</Typography>
+				{showTitle && (
+					<Typography variant="subtitle2" sx={{ mb: 1 }}>
+						{t("TeamTimeline.cooking initial ingredients", "初期食材")}
+					</Typography>
+				)}
 
 				<Box
 					sx={{
@@ -153,18 +154,12 @@ const InitialIngredientsEditor = React.memo(
 										</Box>
 									</Box>
 								</Button>
-								<TextField
-									type="number"
-									size="small"
-									variant="standard"
+								<DraftNumberField
 									value={settings.initialIngredients[ingredientName] ?? 0}
-									onChange={(e) => {
-										const v = parseInt(e.target.value, 10);
-										if (!Number.isNaN(v)) {
-											handleIngredientChange(ingredientName, v);
-										}
-									}}
-									inputProps={{ min: 0 }}
+									onCommit={(value) =>
+										handleIngredientChange(ingredientName, value)
+									}
+									aria-label={ingredientName}
 									sx={NUMERIC_TEXT_FIELD_SX}
 									data-testid={`ingredient-input-${ingredientName}`}
 								/>

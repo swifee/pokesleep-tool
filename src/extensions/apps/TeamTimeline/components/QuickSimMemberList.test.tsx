@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
@@ -41,6 +41,7 @@ const box = new PokemonBox([pikachu, eevee]);
 function renderList(members: QuickSimMember[], onChange = vi.fn()) {
 	const onAddClick = vi.fn();
 	const onImportClick = vi.fn();
+	const onSwapClick = vi.fn();
 	render(
 		<QuickSimMemberList
 			members={members}
@@ -48,9 +49,18 @@ function renderList(members: QuickSimMember[], onChange = vi.fn()) {
 			onChange={onChange}
 			onAddClick={onAddClick}
 			onImportClick={onImportClick}
+			onSwapClick={onSwapClick}
 		/>,
 	);
-	return { onChange, onAddClick, onImportClick };
+	return { onChange, onAddClick, onImportClick, onSwapClick };
+}
+
+function member(
+	pokemonId: number,
+	usagePercent: number,
+	usageMode: QuickSimMember["usageMode"] = "even",
+): QuickSimMember {
+	return { pokemonId, usagePercent, usageMode };
 }
 
 describe("formatUsageHoursPerDay", () => {
@@ -65,10 +75,7 @@ describe("formatUsageHoursPerDay", () => {
 
 describe("QuickSimMemberList", () => {
 	it("renders members with usage, hours per day and the total", () => {
-		renderList([
-			{ pokemonId: pikachu.id, usagePercent: 100 },
-			{ pokemonId: eevee.id, usagePercent: 25 },
-		]);
+		renderList([member(pikachu.id, 100), member(eevee.id, 25)]);
 
 		expect(screen.getByTestId("quick-sim-member-name-1").textContent).toContain(
 			"Pikachu",
@@ -96,14 +103,12 @@ describe("QuickSimMemberList", () => {
 		);
 		render(
 			<QuickSimMemberList
-				members={items.map((item) => ({
-					pokemonId: item.id,
-					usagePercent: 100,
-				}))}
+				members={items.map((item) => member(item.id, 100))}
 				box={new PokemonBox(items)}
 				onChange={vi.fn()}
 				onAddClick={vi.fn()}
 				onImportClick={vi.fn()}
+				onSwapClick={vi.fn()}
 			/>,
 		);
 		expect(screen.getByTestId("quick-sim-usage-total").textContent).toContain(
@@ -113,27 +118,25 @@ describe("QuickSimMemberList", () => {
 
 	it("steps usage with the buttons and clamps to 0-100", () => {
 		const { onChange } = renderList([
-			{ pokemonId: pikachu.id, usagePercent: 98 },
-			{ pokemonId: eevee.id, usagePercent: 3 },
+			member(pikachu.id, 98),
+			member(eevee.id, 3),
 		]);
 
 		fireEvent.click(screen.getByTestId("quick-sim-member-increment-1"));
 		expect(onChange).toHaveBeenLastCalledWith([
-			{ pokemonId: pikachu.id, usagePercent: 100 },
-			{ pokemonId: eevee.id, usagePercent: 3 },
+			member(pikachu.id, 100),
+			member(eevee.id, 3),
 		]);
 
 		fireEvent.click(screen.getByTestId("quick-sim-member-decrement-2"));
 		expect(onChange).toHaveBeenLastCalledWith([
-			{ pokemonId: pikachu.id, usagePercent: 98 },
-			{ pokemonId: eevee.id, usagePercent: 0 },
+			member(pikachu.id, 98),
+			member(eevee.id, 0),
 		]);
 	});
 
-	it("accepts typed usage values and ignores invalid input", () => {
-		const { onChange } = renderList([
-			{ pokemonId: pikachu.id, usagePercent: 50 },
-		]);
+	it("accepts typed usage values, treats an empty field as 0 and ignores non-digits", () => {
+		const { onChange } = renderList([member(pikachu.id, 50)]);
 		const input = screen
 			.getByTestId("quick-sim-member-input-1")
 			.querySelector("input");
@@ -142,25 +145,56 @@ describe("QuickSimMemberList", () => {
 		}
 
 		fireEvent.change(input, { target: { value: "150" } });
-		expect(onChange).toHaveBeenLastCalledWith([
-			{ pokemonId: pikachu.id, usagePercent: 100 },
-		]);
+		expect(onChange).toHaveBeenLastCalledWith([member(pikachu.id, 100)]);
 
+		// Deleting every digit is allowed while typing; the value becomes 0.
 		onChange.mockClear();
 		fireEvent.change(input, { target: { value: "" } });
+		expect(onChange).toHaveBeenLastCalledWith([member(pikachu.id, 0)]);
+		expect(input.value).toBe("");
+
+		onChange.mockClear();
+		fireEvent.change(input, { target: { value: "abc" } });
 		expect(onChange).not.toHaveBeenCalled();
+
+		// Leaving the field shows the committed value again.
+		fireEvent.blur(input);
+		expect(input.value).toBe("50");
+	});
+
+	it("shows the usage mode dropdown only below 100% and changes the mode", () => {
+		const { onChange } = renderList([
+			member(pikachu.id, 100),
+			member(eevee.id, 40),
+		]);
+
+		expect(screen.queryByTestId("quick-sim-member-mode-1")).toBeNull();
+		const select = screen.getByTestId("quick-sim-member-mode-2");
+		expect(select.textContent).toContain("均等");
+
+		fireEvent.mouseDown(within(select).getByRole("combobox"));
+		fireEvent.click(screen.getByRole("option", { name: "睡眠" }));
+
+		expect(onChange).toHaveBeenLastCalledWith([
+			member(pikachu.id, 100),
+			member(eevee.id, 40, "sleep"),
+		]);
+	});
+
+	it("requests a swap when the icon is tapped", () => {
+		const { onSwapClick } = renderList([member(pikachu.id, 100)]);
+		fireEvent.click(screen.getByTestId("quick-sim-member-swap-1"));
+		expect(onSwapClick).toHaveBeenCalledWith(pikachu.id);
 	});
 
 	it("removes a member and forwards the add/import clicks", () => {
 		const { onChange, onAddClick, onImportClick } = renderList([
-			{ pokemonId: pikachu.id, usagePercent: 100 },
-			{ pokemonId: eevee.id, usagePercent: 25 },
+			member(pikachu.id, 100),
+			member(eevee.id, 25),
 		]);
 
 		fireEvent.click(screen.getByTestId("quick-sim-member-remove-1"));
-		expect(onChange).toHaveBeenLastCalledWith([
-			{ pokemonId: eevee.id, usagePercent: 25 },
-		]);
+		expect(onChange).toHaveBeenLastCalledWith([member(eevee.id, 25)]);
 
 		fireEvent.click(screen.getByTestId("quick-sim-add-member-button"));
 		expect(onAddClick).toHaveBeenCalledTimes(1);
@@ -169,7 +203,7 @@ describe("QuickSimMemberList", () => {
 	});
 
 	it("skips members that are missing from the box", () => {
-		renderList([{ pokemonId: 999, usagePercent: 40 }]);
+		renderList([member(999, 40)]);
 		expect(screen.queryByTestId("quick-sim-member-row-999")).toBeNull();
 		expect(screen.getByTestId("quick-sim-usage-total").textContent).toBe(
 			"起用率合計: 40% / 500%",

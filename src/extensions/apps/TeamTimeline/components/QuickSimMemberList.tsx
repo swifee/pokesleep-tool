@@ -3,9 +3,12 @@ import CloseIcon from "@mui/icons-material/Close";
 import {
 	Box,
 	Button,
+	ButtonBase,
 	IconButton,
+	MenuItem,
+	Select,
+	type SelectChangeEvent,
 	Slider,
-	TextField,
 	Typography,
 } from "@mui/material";
 import React, { useCallback } from "react";
@@ -13,12 +16,15 @@ import { useTranslation } from "react-i18next";
 import PokemonIcon from "../../../../ui/IvCalc/PokemonIcon";
 import type PokemonBox from "../../../../util/PokemonBox";
 import {
+	isQuickSimUsageMode,
 	MINUTES_PER_DAY,
 	QUICK_SIM_MAX_USAGE_PERCENT,
 	QUICK_SIM_MIN_USAGE_PERCENT,
 	QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
+	QUICK_SIM_USAGE_MODES,
 	QUICK_SIM_USAGE_STEP_PERCENT,
 	type QuickSimMember,
+	type QuickSimUsageMode,
 } from "../types/QuickSimTypes";
 import {
 	clampQuickSimUsagePercent,
@@ -30,6 +36,7 @@ import {
 	STEP_BUTTON_SX,
 	STEP_BUTTON_SYMBOL_SX,
 } from "./CookingSettingsStyles";
+import DraftNumberField from "./DraftNumberField";
 
 interface QuickSimMemberListProps {
 	members: QuickSimMember[];
@@ -37,10 +44,68 @@ interface QuickSimMemberListProps {
 	onChange: (members: QuickSimMember[]) => void;
 	onAddClick: () => void;
 	onImportClick: () => void;
+	/** アイコンをタップしたとき（別のポケモンへ入れ替える） */
+	onSwapClick: (pokemonId: number) => void;
 }
 
 const MEMBER_ICON_SIZE_PX = 30;
 const MINUTES_PER_HOUR = 60;
+
+/** 起用率の入力欄の幅。"100" が収まる最小の幅で、狭い画面でも縮めない */
+const USAGE_INPUT_SX = {
+	...NUMERIC_TEXT_FIELD_SX,
+	width: "4ch",
+	flexShrink: 0,
+};
+const USAGE_SLIDER_SX = {
+	flexGrow: 1,
+	minWidth: "36px",
+	maxWidth: "110px",
+	mx: "6px",
+};
+const USAGE_MODE_FONT_SIZE = "11px";
+/** ▼を出さないコンパクトなプルダウン */
+const USAGE_MODE_SELECT_SX = {
+	flexShrink: 0,
+	fontSize: USAGE_MODE_FONT_SIZE,
+	lineHeight: "14px",
+	border: "1px solid #c8c8c8",
+	borderRadius: "4px",
+	backgroundColor: "#fafafa",
+	"& .MuiSelect-select": {
+		p: "2px 4px",
+		pr: "4px !important",
+		minHeight: 0,
+	},
+};
+const USAGE_MODE_MENU_ITEM_SX = {
+	fontSize: USAGE_MODE_FONT_SIZE,
+	minHeight: 0,
+	py: "4px",
+};
+const REMOVE_BUTTON_SX = { p: "2px", mr: "-6px" };
+
+const HiddenSelectIcon = (): null => null;
+
+/** 起用方法の表示名（翻訳キーと既定の日本語） */
+const USAGE_MODE_LABELS: Readonly<
+	Record<QuickSimUsageMode, { key: string; defaultValue: string }>
+> = {
+	even: { key: "TeamTimeline.quick usage mode even", defaultValue: "均等" },
+	firstHalf: {
+		key: "TeamTimeline.quick usage mode first half",
+		defaultValue: "前半",
+	},
+	secondHalf: {
+		key: "TeamTimeline.quick usage mode second half",
+		defaultValue: "後半",
+	},
+	sleep: { key: "TeamTimeline.quick usage mode sleep", defaultValue: "睡眠" },
+	daytime: {
+		key: "TeamTimeline.quick usage mode daytime",
+		defaultValue: "日中",
+	},
+};
 
 /**
  * 1日あたりの起用時間を "6.5h" のように表示する
@@ -62,10 +127,16 @@ const QuickSimMemberList = React.memo(
 		onChange,
 		onAddClick,
 		onImportClick,
+		onSwapClick,
 	}: QuickSimMemberListProps) => {
 		const { t } = useTranslation();
 		const totalPercent = getQuickSimTotalUsagePercent(members);
 		const isExceeded = totalPercent > QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT;
+		const usageModeLabel = useCallback(
+			(mode: QuickSimUsageMode): string =>
+				t(USAGE_MODE_LABELS[mode].key, USAGE_MODE_LABELS[mode].defaultValue),
+			[t],
+		);
 
 		const handleUsageChange = useCallback(
 			(pokemonId: number, usagePercent: number) => {
@@ -89,6 +160,23 @@ const QuickSimMemberList = React.memo(
 				handleUsageChange(pokemonId, current + delta);
 			},
 			[handleUsageChange, members],
+		);
+
+		const handleUsageModeChange = useCallback(
+			(pokemonId: number, event: SelectChangeEvent<string>) => {
+				const mode = event.target.value;
+				if (!isQuickSimUsageMode(mode)) {
+					return;
+				}
+				onChange(
+					members.map((member) =>
+						member.pokemonId === pokemonId
+							? { ...member, usageMode: mode }
+							: member,
+					),
+				);
+			},
+			[members, onChange],
 		);
 
 		const handleRemove = useCallback(
@@ -181,11 +269,25 @@ const QuickSimMemberList = React.memo(
 											minWidth: 0,
 										}}
 									>
-										<PokemonIcon
-											idForm={item.iv.idForm}
-											shiny={item.iv.shiny}
-											size={MEMBER_ICON_SIZE_PX}
-										/>
+										<ButtonBase
+											onClick={() => onSwapClick(member.pokemonId)}
+											title={t(
+												"TeamTimeline.quick swap member",
+												"ポケモンを入れ替える",
+											)}
+											aria-label={t(
+												"TeamTimeline.quick swap member",
+												"ポケモンを入れ替える",
+											)}
+											data-testid={`quick-sim-member-swap-${member.pokemonId}`}
+											sx={{ borderRadius: "50%", flexShrink: 0 }}
+										>
+											<PokemonIcon
+												idForm={item.iv.idForm}
+												shiny={item.iv.shiny}
+												size={MEMBER_ICON_SIZE_PX}
+											/>
+										</ButtonBase>
 										<Box sx={{ minWidth: 0 }}>
 											<Typography
 												sx={{
@@ -231,10 +333,40 @@ const QuickSimMemberList = React.memo(
 										sx={{
 											display: "flex",
 											alignItems: "center",
+											justifyContent: "flex-end",
 											gap: "4px",
 											minWidth: 0,
 										}}
 									>
+										{member.usagePercent < QUICK_SIM_MAX_USAGE_PERCENT && (
+											<Select
+												value={member.usageMode}
+												onChange={(event) =>
+													handleUsageModeChange(member.pokemonId, event)
+												}
+												variant="standard"
+												disableUnderline
+												IconComponent={HiddenSelectIcon}
+												inputProps={{
+													"aria-label": t(
+														"TeamTimeline.quick usage mode",
+														"起用方法",
+													),
+												}}
+												sx={USAGE_MODE_SELECT_SX}
+												data-testid={`quick-sim-member-mode-${member.pokemonId}`}
+											>
+												{QUICK_SIM_USAGE_MODES.map((mode) => (
+													<MenuItem
+														key={mode}
+														value={mode}
+														sx={USAGE_MODE_MENU_ITEM_SX}
+													>
+														{usageModeLabel(mode)}
+													</MenuItem>
+												))}
+											</Select>
+										)}
 										<Slider
 											size="small"
 											value={member.usagePercent}
@@ -249,7 +381,7 @@ const QuickSimMemberList = React.memo(
 											}
 											aria-label={t("TeamTimeline.quick usage", "起用率")}
 											data-testid={`quick-sim-member-slider-${member.pokemonId}`}
-											sx={{ flexGrow: 1, minWidth: "60px", mx: "6px" }}
+											sx={USAGE_SLIDER_SX}
 										/>
 										<Button
 											variant="contained"
@@ -270,26 +402,18 @@ const QuickSimMemberList = React.memo(
 												</Box>
 											</Box>
 										</Button>
-										<TextField
-											type="number"
-											size="small"
-											variant="standard"
+										<DraftNumberField
 											value={member.usagePercent}
-											onChange={(event) => {
-												const parsed = Number.parseInt(event.target.value, 10);
-												if (!Number.isNaN(parsed)) {
-													handleUsageChange(member.pokemonId, parsed);
-												}
-											}}
-											inputProps={{
-												min: QUICK_SIM_MIN_USAGE_PERCENT,
-												max: QUICK_SIM_MAX_USAGE_PERCENT,
-												"aria-label": t("TeamTimeline.quick usage", "起用率"),
-											}}
-											sx={NUMERIC_TEXT_FIELD_SX}
+											onCommit={(value) =>
+												handleUsageChange(member.pokemonId, value)
+											}
+											aria-label={t("TeamTimeline.quick usage", "起用率")}
+											sx={USAGE_INPUT_SX}
 											data-testid={`quick-sim-member-input-${member.pokemonId}`}
 										/>
-										<Typography sx={{ fontSize: "12px" }}>%</Typography>
+										<Typography sx={{ fontSize: "12px", flexShrink: 0 }}>
+											%
+										</Typography>
 										<Button
 											variant="contained"
 											size="small"
@@ -316,6 +440,7 @@ const QuickSimMemberList = React.memo(
 										title={t("TeamTimeline.delete", "削除")}
 										aria-label={t("TeamTimeline.delete", "削除")}
 										data-testid={`quick-sim-member-remove-${member.pokemonId}`}
+										sx={REMOVE_BUTTON_SX}
 									>
 										<CloseIcon sx={{ fontSize: 14 }} />
 									</IconButton>
@@ -362,6 +487,16 @@ const QuickSimMemberList = React.memo(
 							hours: MINUTES_PER_DAY / MINUTES_PER_HOUR,
 							limit: QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
 						},
+					)}
+				</Typography>
+				<Typography
+					variant="caption"
+					sx={{ display: "block", color: "#666" }}
+					data-testid="quick-sim-usage-mode-note"
+				>
+					{t(
+						"TeamTimeline.quick usage mode note",
+						"起用方法（100%未満のとき）: 均等=毎日同じ時間を空き枠に配置 / 前半=期間の先頭から連続 / 後半=期間の末尾まで連続 / 睡眠=就寝中を優先 / 日中=起床後を優先。睡眠・日中・前半・後半を先に配置し、均等は残りに入れます。",
 					)}
 				</Typography>
 			</Box>

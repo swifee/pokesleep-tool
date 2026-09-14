@@ -193,6 +193,7 @@ function renderTab(
 ) {
 	const onSeedChange = vi.fn();
 	const onCookingSettingsChange = vi.fn();
+	const onOpenCookingSettings = vi.fn();
 	const renderSimulationControls = ({
 		simulationLoading,
 		simulationProgress,
@@ -224,12 +225,13 @@ function renderTab(
 			seedMode="random"
 			multiTrialCount={3}
 			onCookingSettingsChange={onCookingSettingsChange}
+			onOpenCookingSettings={onOpenCookingSettings}
 			onSeedChange={onSeedChange}
 			renderSimulationControls={renderSimulationControls}
 			{...overrides}
 		/>,
 	);
-	return { onSeedChange, onCookingSettingsChange };
+	return { onSeedChange, onCookingSettingsChange, onOpenCookingSettings };
 }
 
 describe("QuickSimTab", () => {
@@ -269,13 +271,123 @@ describe("QuickSimTab", () => {
 		expect(screen.getByTestId("quick-sim-usage-total").textContent).toBe(
 			"起用率合計: 100% / 500%",
 		);
-		expect(screen.getByTestId("initial-ingredients-editor")).toBeDefined();
 		expect(
 			screen.getByTestId("run-button").getAttribute("data-team-empty"),
 		).toBe("false");
 		expect(localStorage.getItem(STORAGE_KEY_QUICK_SIM)).toContain(
 			pikachu.serialize(),
 		);
+	});
+
+	it("collapses the initial ingredients by default and opens the cooking settings", () => {
+		const { onOpenCookingSettings } = renderTab();
+
+		expect(screen.queryByTestId("initial-ingredients-editor")).toBeNull();
+		expect(
+			screen.getByTestId("quick-sim-initial-ingredients-summary").textContent,
+		).toBe("（合計 0）");
+
+		fireEvent.click(screen.getByTestId("quick-sim-initial-ingredients-toggle"));
+		expect(screen.getByTestId("initial-ingredients-editor")).toBeDefined();
+
+		fireEvent.click(screen.getByTestId("quick-sim-open-cooking-settings"));
+		expect(onOpenCookingSettings).toHaveBeenCalledTimes(1);
+	});
+
+	it("restores the stored usage mode", () => {
+		localStorage.setItem(
+			STORAGE_KEY_QUICK_SIM,
+			JSON.stringify({
+				members: [
+					{
+						serialized: eevee.serialize(),
+						usagePercent: 40,
+						usageMode: "sleep",
+					},
+				],
+			}),
+		);
+
+		renderTab();
+
+		expect(screen.getByTestId("quick-sim-member-mode-2").textContent).toContain(
+			"睡眠",
+		);
+		expect(localStorage.getItem(STORAGE_KEY_QUICK_SIM)).toContain(
+			'"usageMode":"sleep"',
+		);
+	});
+
+	it("swaps a member from the icon while keeping its usage and mode", () => {
+		localStorage.setItem(
+			STORAGE_KEY_QUICK_SIM,
+			JSON.stringify({
+				members: [
+					{
+						serialized: pikachu.serialize(),
+						usagePercent: 40,
+						usageMode: "daytime",
+					},
+					{ serialized: eevee.serialize(), usagePercent: 30 },
+				],
+			}),
+		);
+		renderTab();
+
+		fireEvent.click(screen.getByTestId("quick-sim-member-swap-1"));
+		expect(
+			screen.getByTestId("box-select-dialog").getAttribute("data-open"),
+		).toBe("true");
+
+		// Picking a Pokémon that is already a member changes nothing.
+		fireEvent.click(screen.getByTestId("box-select-item-2"));
+		expect(screen.getByTestId("quick-sim-member-row-1")).toBeDefined();
+
+		fireEvent.click(screen.getByTestId("quick-sim-member-swap-1"));
+		fireEvent.click(screen.getByTestId("box-select-item-3"));
+
+		expect(screen.queryByTestId("quick-sim-member-row-1")).toBeNull();
+		const rows = screen.getAllByTestId(/^quick-sim-member-row-/);
+		expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
+			"quick-sim-member-row-3",
+			"quick-sim-member-row-2",
+		]);
+		expect(screen.getByTestId("quick-sim-member-mode-3").textContent).toContain(
+			"日中",
+		);
+		expect(screen.getByTestId("quick-sim-usage-total").textContent).toBe(
+			"起用率合計: 70% / 500%",
+		);
+	});
+
+	it("warns about members whose usage the fixed modes cannot satisfy", () => {
+		const items = Array.from({ length: 6 }, (_, index) =>
+			createItem("Pikachu", 100 + index),
+		);
+		const box = new PokemonBox(items);
+		localStorage.setItem(
+			STORAGE_KEY_QUICK_SIM,
+			JSON.stringify({
+				members: items.map((item, index) => ({
+					serialized: item.serialize(),
+					usagePercent: index < 5 ? 50 : 60,
+					usageMode: index < 5 ? "firstHalf" : "even",
+				})),
+			}),
+		);
+
+		renderTab({
+			userBox: box,
+			runtimeBox: box,
+			simulationConfig: { ...DEFAULT_SIMULATION_CONFIG, simulationDays: 2 },
+		});
+
+		expect(screen.getByTestId("quick-sim-unmet-notice").textContent).toContain(
+			"起用率を満たせません",
+		);
+		expect(
+			screen.getByTestId("run-button").getAttribute("data-team-empty"),
+		).toBe("false");
 	});
 
 	it("restores stored members instead of the detailed team", () => {

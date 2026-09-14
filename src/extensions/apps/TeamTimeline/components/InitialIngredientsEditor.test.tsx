@@ -82,4 +82,42 @@ describe("InitialIngredientsEditor", () => {
 			disabledExtraIngredients: { honey: true },
 		});
 	});
+
+	it("allows clearing a count while typing and treats it as 0", () => {
+		const onChange = vi.fn();
+		const settings = {
+			...createDefaultCookingSettings(),
+			initialIngredients: { honey: 66 },
+		};
+		render(
+			<InitialIngredientsEditor settings={settings} onChange={onChange} />,
+		);
+
+		const input = screen
+			.getByTestId("ingredient-input-honey")
+			.querySelector("input");
+		if (!input) {
+			throw new Error("input not found");
+		}
+		fireEvent.change(input, { target: { value: "" } });
+		expect(input.value).toBe("");
+		expect(onChange).toHaveBeenLastCalledWith({
+			...settings,
+			initialIngredients: { honey: 0 },
+		});
+
+		fireEvent.blur(input);
+		expect(input.value).toBe("66");
+	});
+
+	it("hides the title when asked", () => {
+		render(
+			<InitialIngredientsEditor
+				settings={createDefaultCookingSettings()}
+				onChange={vi.fn()}
+				showTitle={false}
+			/>,
+		);
+		expect(screen.queryByText("初期食材")).toBeNull();
+	});
 });
