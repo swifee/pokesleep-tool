@@ -412,6 +412,44 @@ function fullLane(pokemonId: number | null): QuickSimLaneSegment[] {
 	return [{ pokemonId, startMinute: 0, endMinute: MINUTES_PER_DAY }];
 }
 
+/**
+ * 続投中（区間の終わりと同じ時刻に次の区間が始まる）メンバーの枠が変わった回数。
+ * 日をまたぐ続投も含めて数える。
+ */
+function countLaneChanges(schedule: QuickSimSchedule): number {
+	const startsByDay = schedule.dayLanes.map((lanes) => {
+		const starts = new Map<string, number>();
+		lanes.forEach((lane, laneIndex) => {
+			for (const segment of lane) {
+				if (segment.pokemonId !== null) {
+					starts.set(`${segment.pokemonId}@${segment.startMinute}`, laneIndex);
+				}
+			}
+		});
+		return starts;
+	});
+	let changes = 0;
+	schedule.dayLanes.forEach((lanes, dayIndex) => {
+		lanes.forEach((lane, laneIndex) => {
+			for (const segment of lane) {
+				if (segment.pokemonId === null) {
+					continue;
+				}
+				const next =
+					segment.endMinute < MINUTES_PER_DAY
+						? startsByDay[dayIndex].get(
+								`${segment.pokemonId}@${segment.endMinute}`,
+							)
+						: startsByDay[dayIndex + 1]?.get(`${segment.pokemonId}@0`);
+				if (next !== undefined && next !== laneIndex) {
+					changes++;
+				}
+			}
+		});
+	});
+	return changes;
+}
+
 describe("buildQuickSimSchedule with usage modes", () => {
 	it("repeats the single-day schedule when every member is even", () => {
 		const list = members(100, 70, 30);
@@ -456,12 +494,13 @@ describe("buildQuickSimSchedule with usage modes", () => {
 		const list = modeMembers([50, "daytime"], [100, "even"]);
 		const schedule = buildMultiOrThrow(list, 1);
 		expectMultiValid(schedule, list, 1);
-		expect(schedule.dayLanes[0][0]).toEqual([
+		// Lanes are threaded in order of appearance: the all-day member takes lane 0.
+		expect(schedule.dayLanes[0][0]).toEqual(fullLane(201));
+		expect(schedule.dayLanes[0][1]).toEqual([
 			{ pokemonId: null, startMinute: 0, endMinute: SLEEP_MINUTES },
 			{ pokemonId: 200, startMinute: SLEEP_MINUTES, endMinute: 1200 },
 			{ pokemonId: null, startMinute: 1200, endMinute: MINUTES_PER_DAY },
 		]);
-		expect(schedule.dayLanes[0][1]).toEqual(fullLane(201));
 		expect(schedule.usesSleepSwaps).toBe(false);
 	});
 
@@ -548,19 +587,59 @@ describe("buildQuickSimSchedule with usage modes", () => {
 
 	it("runs a second-half member continuously up to the end of the period", () => {
 		// 50% over 3 days = 2160min: nothing on day 0, from 720 on day 1, day 2 in full.
-		// It fills from the last lane so the even member can stay in lane 0.
+		// The even member keeps lane 0 throughout; the newcomer takes the next free lane.
 		const list = modeMembers([50, "secondHalf"], [100, "even"]);
 		const days = 3;
 		const schedule = buildMultiOrThrow(list, days);
 		expectMultiValid(schedule, list, days);
 		expect(segmentsOf(schedule, 0, 200)).toEqual([]);
 		expect(segmentsOf(schedule, 1, 200)).toEqual([
-			{ laneIndex: 4, startMinute: 720, endMinute: MINUTES_PER_DAY },
+			{ laneIndex: 1, startMinute: 720, endMinute: MINUTES_PER_DAY },
 		]);
-		expect(schedule.dayLanes[2][4]).toEqual(fullLane(200));
+		expect(schedule.dayLanes[2][1]).toEqual(fullLane(200));
 		for (let dayIndex = 0; dayIndex < days; dayIndex++) {
 			expect(schedule.dayLanes[dayIndex][0]).toEqual(fullLane(201));
 		}
+	});
+
+	it("keeps continuing members in their lanes when a first-half member hands over to a second-half member", () => {
+		// Four 100% members plus 30% first half and 70% second half over 4 days:
+		// the two partial members share one lane (first half 1728min, then second half
+		// 4032min from 23:00 + 288min on day 1), and nobody else ever changes lanes.
+		const list = modeMembers(
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[70, "secondHalf"],
+			[30, "firstHalf"],
+			[100, "even"],
+		);
+		const days = 4;
+		const schedule = buildMultiOrThrow(list, days);
+		expectMultiValid(schedule, list, days);
+		expect(schedule.usesSleepSwaps).toBe(true);
+
+		const laneOfFullMember = new Map<number, number>();
+		for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+			for (const pokemonId of [200, 201, 202, 205]) {
+				const segments = segmentsOf(schedule, dayIndex, pokemonId);
+				expect(segments).toHaveLength(1);
+				expect(segments[0].startMinute).toBe(0);
+				expect(segments[0].endMinute).toBe(MINUTES_PER_DAY);
+				const lane = laneOfFullMember.get(pokemonId) ?? segments[0].laneIndex;
+				expect(segments[0].laneIndex).toBe(lane);
+				laneOfFullMember.set(pokemonId, lane);
+			}
+		}
+		const sharedLane = segmentsOf(schedule, 0, 204)[0].laneIndex;
+		expect(schedule.dayLanes[0][sharedLane]).toEqual(fullLane(204));
+		expect(schedule.dayLanes[1][sharedLane]).toEqual([
+			{ pokemonId: 204, startMinute: 0, endMinute: 288 },
+			{ pokemonId: 203, startMinute: 288, endMinute: MINUTES_PER_DAY },
+		]);
+		expect(schedule.dayLanes[2][sharedLane]).toEqual(fullLane(203));
+		expect(schedule.dayLanes[3][sharedLane]).toEqual(fullLane(203));
+		expect(countLaneChanges(schedule)).toBe(0);
 	});
 
 	it("moves even usage to the days left free by first-half members", () => {
@@ -632,7 +711,9 @@ describe("buildQuickSimSchedule with usage modes", () => {
 		expect(errors).toEqual(["pokemon 205: 1440 minutes, expected 1728"]);
 	});
 
-	it("keeps every member within a single lane at any time across random mode mixes", () => {
+	it("keeps every member within a single lane at any time across random mode mixes", {
+		timeout: 20_000,
+	}, () => {
 		let seed = 2468;
 		const random = (): number => {
 			seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -672,6 +753,7 @@ describe("buildQuickSimSchedule with usage modes", () => {
 			);
 			expect(errors).toEqual([]);
 			expect(result.schedule.dayLanes).toHaveLength(days);
+			expect(countLaneChanges(result.schedule)).toBe(0);
 		}
 	});
 });
