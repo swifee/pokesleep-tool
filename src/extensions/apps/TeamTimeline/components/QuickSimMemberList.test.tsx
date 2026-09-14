@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
@@ -38,14 +44,18 @@ const pikachu = createItem("Pikachu", 1);
 const eevee = createItem("Eevee", 2);
 const box = new PokemonBox([pikachu, eevee]);
 
-function renderList(members: QuickSimMember[], onChange = vi.fn()) {
+function renderList(
+	members: QuickSimMember[],
+	onChange = vi.fn(),
+	memberBox: PokemonBox = box,
+) {
 	const onAddClick = vi.fn();
 	const onImportClick = vi.fn();
 	const onSwapClick = vi.fn();
 	render(
 		<QuickSimMemberList
 			members={members}
-			box={box}
+			box={memberBox}
 			onChange={onChange}
 			onAddClick={onAddClick}
 			onImportClick={onImportClick}
@@ -162,13 +172,16 @@ describe("QuickSimMemberList", () => {
 		expect(input.value).toBe("50");
 	});
 
-	it("shows the usage mode dropdown only below 100% and changes the mode", () => {
-		const { onChange } = renderList([
-			member(pikachu.id, 100),
-			member(eevee.id, 40),
-		]);
+	it("shows the usage mode dropdown only between 1% and 99% and changes the mode", () => {
+		const items = [pikachu, eevee, createItem("Bulbasaur", 3)];
+		const { onChange } = renderList(
+			[member(pikachu.id, 100), member(eevee.id, 40), member(3, 0)],
+			vi.fn(),
+			new PokemonBox(items),
+		);
 
 		expect(screen.queryByTestId("quick-sim-member-mode-1")).toBeNull();
+		expect(screen.queryByTestId("quick-sim-member-mode-3")).toBeNull();
 		const select = screen.getByTestId("quick-sim-member-mode-2");
 		expect(select.textContent).toContain("均等");
 
@@ -178,7 +191,60 @@ describe("QuickSimMemberList", () => {
 		expect(onChange).toHaveBeenLastCalledWith([
 			member(pikachu.id, 100),
 			member(eevee.id, 40, "sleep"),
+			member(3, 0),
 		]);
+	});
+
+	it("shows the usage help only while hovering with a mouse or after a tap", async () => {
+		renderList([member(pikachu.id, 40)]);
+		const button = screen.getByTestId("quick-sim-usage-help-button");
+		const helpText = /100% = 1枠を1日中占有/;
+
+		expect(screen.queryByText(helpText)).toBeNull();
+		expect(button.getAttribute("aria-pressed")).toBe("false");
+
+		fireEvent.pointerEnter(button, { pointerType: "mouse" });
+		expect(screen.getByText(helpText)).toBeDefined();
+		expect(button.getAttribute("aria-pressed")).toBe("true");
+		// Clicking right after hovering keeps the help open; the next click closes it.
+		fireEvent.click(button);
+		expect(button.getAttribute("aria-pressed")).toBe("true");
+		fireEvent.click(button);
+		expect(button.getAttribute("aria-pressed")).toBe("false");
+		fireEvent.pointerLeave(button, { pointerType: "mouse" });
+		expect(button.getAttribute("aria-pressed")).toBe("false");
+		await waitFor(() => {
+			expect(screen.queryByText(helpText)).toBeNull();
+		});
+
+		// A touch tap fires no mouse hover; the click toggles the help.
+		fireEvent.pointerEnter(button, { pointerType: "touch" });
+		expect(button.getAttribute("aria-pressed")).toBe("false");
+		fireEvent.click(button);
+		expect(screen.getByText(helpText)).toBeDefined();
+		expect(button.getAttribute("aria-pressed")).toBe("true");
+		fireEvent.click(button);
+		expect(button.getAttribute("aria-pressed")).toBe("false");
+		await waitFor(() => {
+			expect(screen.queryByText(helpText)).toBeNull();
+		});
+	});
+
+	it("moves the slider in 5% steps and shows a short level label", () => {
+		renderList([member(pikachu.id, 40)]);
+		const slider = screen
+			.getByTestId("quick-sim-member-slider-1")
+			.querySelector("input");
+		if (!slider) {
+			throw new Error("slider not found");
+		}
+		expect(slider.getAttribute("step")).toBe("5");
+		expect(screen.getByTestId("quick-sim-member-row-1").textContent).toContain(
+			"L",
+		);
+		expect(
+			screen.getByTestId("quick-sim-member-row-1").textContent,
+		).not.toContain("Lv.");
 	});
 
 	it("requests a swap when the icon is tapped", () => {

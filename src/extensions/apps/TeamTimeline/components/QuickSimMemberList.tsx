@@ -1,17 +1,20 @@
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
 	Box,
 	Button,
 	ButtonBase,
+	ClickAwayListener,
 	IconButton,
 	MenuItem,
 	Select,
 	type SelectChangeEvent,
 	Slider,
+	Tooltip,
 	Typography,
 } from "@mui/material";
-import React, { useCallback } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import PokemonIcon from "../../../../ui/IvCalc/PokemonIcon";
 import type PokemonBox from "../../../../util/PokemonBox";
@@ -54,9 +57,16 @@ const MINUTES_PER_HOUR = 60;
 /** 起用率の入力欄の幅。"100" が収まる最小の幅で、狭い画面でも縮めない */
 const USAGE_INPUT_SX = {
 	...NUMERIC_TEXT_FIELD_SX,
-	width: "4ch",
+	width: "3.6ch",
 	flexShrink: 0,
 };
+/** 入力欄と % の間隔を詰めた +/- ボタン */
+const USAGE_STEP_BUTTON_SX = {
+	...STEP_BUTTON_SX,
+	minWidth: "1.2rem",
+	width: "1.2rem",
+};
+const USAGE_UNIT_SX = { fontSize: "12px", flexShrink: 0, ml: "-2px" };
 const USAGE_SLIDER_SX = {
 	flexGrow: 1,
 	minWidth: "36px",
@@ -86,6 +96,78 @@ const USAGE_MODE_MENU_ITEM_SX = {
 const REMOVE_BUTTON_SX = { p: "2px", mr: "-6px" };
 
 const HiddenSelectIcon = (): null => null;
+
+interface UsageHelpIconProps {
+	text: string;
+	ariaLabel: string;
+}
+
+/**
+ * 起用率と起用方法の説明を出す ? アイコン。
+ * マウスを乗せている間、またはタップで表示し、外側のタップで閉じる。
+ * タッチ端末ではタップ時に疑似的な mouseenter も発生するため、ホバーの判定は
+ * pointerType が mouse のときに限る。ホバーで開いた直後のクリックは閉じない。
+ */
+function UsageHelpIcon({ text, ariaLabel }: UsageHelpIconProps) {
+	const [open, setOpen] = useState(false);
+	const openedByHoverRef = useRef(false);
+	const close = useCallback(() => setOpen(false), []);
+	const handlePointerEnter = useCallback(
+		(event: React.PointerEvent<HTMLButtonElement>) => {
+			if (event.pointerType === "mouse") {
+				openedByHoverRef.current = true;
+				setOpen(true);
+			}
+		},
+		[],
+	);
+	const handlePointerLeave = useCallback(
+		(event: React.PointerEvent<HTMLButtonElement>) => {
+			if (event.pointerType === "mouse") {
+				openedByHoverRef.current = false;
+				setOpen(false);
+			}
+		},
+		[],
+	);
+	const handleClick = useCallback(() => {
+		if (openedByHoverRef.current) {
+			openedByHoverRef.current = false;
+			setOpen(true);
+			return;
+		}
+		setOpen((previous) => !previous);
+	}, []);
+
+	return (
+		<ClickAwayListener onClickAway={close}>
+			<Box component="span" sx={{ display: "inline-flex" }}>
+				<Tooltip
+					title={text}
+					arrow
+					open={open}
+					disableFocusListener
+					disableHoverListener
+					disableTouchListener
+					slotProps={{ tooltip: { sx: { whiteSpace: "pre-line" } } }}
+				>
+					<IconButton
+						size="small"
+						aria-label={ariaLabel}
+						aria-pressed={open}
+						onPointerEnter={handlePointerEnter}
+						onPointerLeave={handlePointerLeave}
+						onClick={handleClick}
+						data-testid="quick-sim-usage-help-button"
+						sx={{ p: "2px", color: "text.secondary" }}
+					>
+						<HelpOutlineIcon sx={{ fontSize: "16px" }} />
+					</IconButton>
+				</Tooltip>
+			</Box>
+		</ClickAwayListener>
+	);
+}
 
 /** 起用方法の表示名（翻訳キーと既定の日本語） */
 const USAGE_MODE_LABELS: Readonly<
@@ -310,7 +392,7 @@ const QuickSimMemberList = React.memo(
 													color: "#666",
 												}}
 											>
-												<span style={{ color: "#62d540" }}>Lv.</span>
+												<span style={{ color: "#62d540" }}>L</span>
 												{item.iv.level}
 												{" / "}
 												<span
@@ -334,45 +416,46 @@ const QuickSimMemberList = React.memo(
 											display: "flex",
 											alignItems: "center",
 											justifyContent: "flex-end",
-											gap: "4px",
+											gap: "2px",
 											minWidth: 0,
 										}}
 									>
-										{member.usagePercent < QUICK_SIM_MAX_USAGE_PERCENT && (
-											<Select
-												value={member.usageMode}
-												onChange={(event) =>
-													handleUsageModeChange(member.pokemonId, event)
-												}
-												variant="standard"
-												disableUnderline
-												IconComponent={HiddenSelectIcon}
-												inputProps={{
-													"aria-label": t(
-														"TeamTimeline.quick usage mode",
-														"起用方法",
-													),
-												}}
-												sx={USAGE_MODE_SELECT_SX}
-												data-testid={`quick-sim-member-mode-${member.pokemonId}`}
-											>
-												{QUICK_SIM_USAGE_MODES.map((mode) => (
-													<MenuItem
-														key={mode}
-														value={mode}
-														sx={USAGE_MODE_MENU_ITEM_SX}
-													>
-														{usageModeLabel(mode)}
-													</MenuItem>
-												))}
-											</Select>
-										)}
+										{member.usagePercent > QUICK_SIM_MIN_USAGE_PERCENT &&
+											member.usagePercent < QUICK_SIM_MAX_USAGE_PERCENT && (
+												<Select
+													value={member.usageMode}
+													onChange={(event) =>
+														handleUsageModeChange(member.pokemonId, event)
+													}
+													variant="standard"
+													disableUnderline
+													IconComponent={HiddenSelectIcon}
+													inputProps={{
+														"aria-label": t(
+															"TeamTimeline.quick usage mode",
+															"起用方法",
+														),
+													}}
+													sx={USAGE_MODE_SELECT_SX}
+													data-testid={`quick-sim-member-mode-${member.pokemonId}`}
+												>
+													{QUICK_SIM_USAGE_MODES.map((mode) => (
+														<MenuItem
+															key={mode}
+															value={mode}
+															sx={USAGE_MODE_MENU_ITEM_SX}
+														>
+															{usageModeLabel(mode)}
+														</MenuItem>
+													))}
+												</Select>
+											)}
 										<Slider
 											size="small"
 											value={member.usagePercent}
 											min={QUICK_SIM_MIN_USAGE_PERCENT}
 											max={QUICK_SIM_MAX_USAGE_PERCENT}
-											step={1}
+											step={QUICK_SIM_USAGE_STEP_PERCENT}
 											onChange={(_, value) =>
 												handleUsageChange(
 													member.pokemonId,
@@ -387,7 +470,7 @@ const QuickSimMemberList = React.memo(
 											variant="contained"
 											size="small"
 											disableElevation
-											sx={STEP_BUTTON_SX}
+											sx={USAGE_STEP_BUTTON_SX}
 											onClick={() =>
 												handleUsageStep(
 													member.pokemonId,
@@ -411,14 +494,12 @@ const QuickSimMemberList = React.memo(
 											sx={USAGE_INPUT_SX}
 											data-testid={`quick-sim-member-input-${member.pokemonId}`}
 										/>
-										<Typography sx={{ fontSize: "12px", flexShrink: 0 }}>
-											%
-										</Typography>
+										<Typography sx={USAGE_UNIT_SX}>%</Typography>
 										<Button
 											variant="contained"
 											size="small"
 											disableElevation
-											sx={STEP_BUTTON_SX}
+											sx={USAGE_STEP_BUTTON_SX}
 											onClick={() =>
 												handleUsageStep(
 													member.pokemonId,
@@ -450,55 +531,59 @@ const QuickSimMemberList = React.memo(
 					</Box>
 				)}
 
-				<Typography
-					variant="caption"
+				<Box
 					sx={{
 						mt: 1,
-						display: "block",
-						color: isExceeded ? "error.main" : "#666",
-						fontWeight: isExceeded ? 700 : 400,
+						display: "flex",
+						alignItems: "center",
+						flexWrap: "wrap",
+						gap: "2px",
 					}}
-					data-testid="quick-sim-usage-total"
 				>
-					{t(
-						"TeamTimeline.quick usage total",
-						"起用率合計: {{total}}% / {{limit}}%",
-						{
-							total: totalPercent,
-							limit: QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
-						},
-					)}
-					{isExceeded &&
-						` ${t(
-							"TeamTimeline.quick usage exceeded",
-							"合計が{{limit}}%を超えています。",
-							{ limit: QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT },
-						)}`}
-				</Typography>
-				<Typography
-					variant="caption"
-					sx={{ display: "block", color: "#666" }}
-					data-testid="quick-sim-usage-note"
-				>
-					{t(
-						"TeamTimeline.quick usage note",
-						"100% = 1枠を1日中占有（{{hours}}h）。合計は最大{{limit}}%（5枠分）です。",
-						{
-							hours: MINUTES_PER_DAY / MINUTES_PER_HOUR,
-							limit: QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
-						},
-					)}
-				</Typography>
-				<Typography
-					variant="caption"
-					sx={{ display: "block", color: "#666" }}
-					data-testid="quick-sim-usage-mode-note"
-				>
-					{t(
-						"TeamTimeline.quick usage mode note",
-						"起用方法（100%未満のとき）: 均等=毎日同じ時間を空き枠に配置 / 前半=期間の先頭から連続 / 後半=期間の末尾まで連続 / 睡眠=就寝中を優先 / 日中=起床後を優先。睡眠・日中・前半・後半を先に配置し、均等は残りに入れます。",
-					)}
-				</Typography>
+					<Typography
+						variant="caption"
+						sx={{
+							color: isExceeded ? "error.main" : "#666",
+							fontWeight: isExceeded ? 700 : 400,
+						}}
+						data-testid="quick-sim-usage-total"
+					>
+						{t(
+							"TeamTimeline.quick usage total",
+							"起用率合計: {{total}}% / {{limit}}%",
+							{
+								total: totalPercent,
+								limit: QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
+							},
+						)}
+						{isExceeded &&
+							` ${t(
+								"TeamTimeline.quick usage exceeded",
+								"合計が{{limit}}%を超えています。",
+								{ limit: QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT },
+							)}`}
+					</Typography>
+					<UsageHelpIcon
+						text={[
+							t(
+								"TeamTimeline.quick usage note",
+								"100% = 1枠を1日中占有（{{hours}}h）。合計は最大{{limit}}%（5枠分）です。",
+								{
+									hours: MINUTES_PER_DAY / MINUTES_PER_HOUR,
+									limit: QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
+								},
+							),
+							t(
+								"TeamTimeline.quick usage mode note",
+								"起用方法（1〜99%のとき）: 均等=毎日同じ時間を空き枠に配置 / 前半=期間の先頭から連続 / 後半=期間の末尾まで連続 / 睡眠=就寝中を優先 / 日中=起床後を優先。前半・後半・睡眠・日中の順に先に配置し、均等は残りに入れます。",
+							),
+						].join("\n")}
+						ariaLabel={t(
+							"TeamTimeline.quick usage help label",
+							"起用率の説明を表示",
+						)}
+					/>
+				</Box>
 			</Box>
 		);
 	},

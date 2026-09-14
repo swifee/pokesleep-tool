@@ -58,6 +58,7 @@ import type { SummaryValueMode } from "../utils/SummaryValueModeUtils";
 import BoxSelectDialog from "./BoxSelectDialog";
 import DailySummaryRow from "./DailySummaryRow";
 import InitialIngredientsEditor from "./InitialIngredientsEditor";
+import QuickSimImportConfirmDialog from "./QuickSimImportConfirmDialog";
 import QuickSimMemberList from "./QuickSimMemberList";
 import SummaryValueModeToggle from "./SummaryValueModeToggle";
 import TeamSummaryRow from "./TeamSummaryRow";
@@ -231,6 +232,7 @@ export default function QuickSimTab({
 	/** 入れ替え対象のメンバー（null なら追加） */
 	const [swapTargetId, setSwapTargetId] = useState<number | null>(null);
 	const [ingredientsExpanded, setIngredientsExpanded] = useState(false);
+	const [importConfirmOpen, setImportConfirmOpen] = useState(false);
 	const [simulationLoading, setSimulationLoading] = useState(false);
 	const [simulationProgress, setSimulationProgress] = useState(0);
 	const [simulationError, setSimulationError] = useState<string | null>(null);
@@ -355,7 +357,15 @@ export default function QuickSimTab({
 		setIngredientsExpanded((previous) => !previous);
 	}, []);
 
-	const handleImportTeam = useCallback(() => {
+	const handleImportClick = useCallback(() => {
+		setImportConfirmOpen(true);
+	}, []);
+
+	const handleImportCancel = useCallback(() => {
+		setImportConfirmOpen(false);
+	}, []);
+
+	const handleImportConfirm = useCallback(() => {
 		setMembers(
 			deriveQuickSimMembersFromTimeline({
 				team,
@@ -365,6 +375,7 @@ export default function QuickSimTab({
 				box: runtimeBox,
 			}),
 		);
+		setImportConfirmOpen(false);
 	}, [team, swaps, timeSlots, simulationConfig.simulationDays, runtimeBox]);
 
 	const runSelectedTrial = useCallback(
@@ -650,7 +661,7 @@ export default function QuickSimTab({
 				box={runtimeBox}
 				onChange={setMembers}
 				onAddClick={handleAddClick}
-				onImportClick={handleImportTeam}
+				onImportClick={handleImportClick}
 				onSwapClick={handleSwapClick}
 			/>
 
@@ -981,6 +992,11 @@ export default function QuickSimTab({
 				box={userBox}
 				onSelect={handleMemberSelect}
 				onClose={handleBoxDialogClose}
+			/>
+			<QuickSimImportConfirmDialog
+				open={importConfirmOpen}
+				onCancel={handleImportCancel}
+				onConfirm={handleImportConfirm}
 			/>
 		</Box>
 	);

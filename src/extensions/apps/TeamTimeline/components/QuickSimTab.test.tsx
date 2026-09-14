@@ -619,7 +619,7 @@ describe("QuickSimTab", () => {
 		expect(screen.getAllByTestId("quick-sim-member-row-2")).toHaveLength(1);
 	});
 
-	it("imports the detailed team again on request", () => {
+	it("imports the detailed team again only after confirming", async () => {
 		localStorage.setItem(
 			STORAGE_KEY_QUICK_SIM,
 			JSON.stringify({
@@ -629,10 +629,22 @@ describe("QuickSimTab", () => {
 		renderTab();
 		expect(screen.queryByTestId("quick-sim-member-row-1")).toBeNull();
 
+		// Cancelling keeps the current members.
 		fireEvent.click(screen.getByTestId("quick-sim-import-team-button"));
+		fireEvent.click(screen.getByTestId("quick-sim-import-cancel-button"));
+		expect(screen.queryByTestId("quick-sim-member-row-1")).toBeNull();
+		expect(screen.getByTestId("quick-sim-member-row-2")).toBeDefined();
+
+		fireEvent.click(screen.getByTestId("quick-sim-import-team-button"));
+		fireEvent.click(screen.getByTestId("quick-sim-import-confirm-button"));
 
 		expect(screen.getByTestId("quick-sim-member-row-1")).toBeDefined();
 		expect(screen.queryByTestId("quick-sim-member-row-2")).toBeNull();
+		await waitFor(() => {
+			expect(
+				screen.queryByTestId("quick-sim-import-confirm-button"),
+			).toBeNull();
+		});
 	});
 
 	it("shows the sleep swap notice when the usage cannot be met while asleep", () => {
