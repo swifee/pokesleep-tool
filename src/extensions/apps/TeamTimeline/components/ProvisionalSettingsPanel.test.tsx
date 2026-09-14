@@ -1,9 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	createDefaultProvisionalSettings,
 	type ProvisionalSettings,
 } from "../types/ProvisionalSettingsTypes";
+import {
+	PLACEHOLDER_POKEMON_NAME,
+	registerPlaceholderPokemon,
+} from "../utils/PlaceholderPokemonTestHelpers";
 import ProvisionalSettingsPanel from "./ProvisionalSettingsPanel";
 
 vi.mock("react-i18next", () => ({
@@ -133,17 +137,29 @@ describe("ProvisionalSettingsPanel", () => {
 		).toBe(2200);
 	});
 
-	it("仮ステータスの適用対象ポケモンを表示する", () => {
-		render(
-			<ProvisionalSettingsPanel
-				settings={createSettings()}
-				onChange={vi.fn()}
-			/>,
-		);
+	describe("仮ステータスの適用対象", () => {
+		// 実在ポケモンは正式データに置き換わり得るため、合成プレースホルダーで検証する。
+		let unregisterPlaceholder: () => void;
+		beforeAll(() => {
+			unregisterPlaceholder = registerPlaceholderPokemon();
+		});
+		afterAll(() => unregisterPlaceholder());
 
-		expect(
-			screen.getByTestId("provisional-placeholder-targets").textContent,
-		).toContain("Mewtwo");
+		it("仮ステータスの適用対象ポケモンを表示する", () => {
+			render(
+				<ProvisionalSettingsPanel
+					settings={createSettings()}
+					onChange={vi.fn()}
+				/>,
+			);
+
+			const targets = screen.getByTestId(
+				"provisional-placeholder-targets",
+			).textContent;
+			expect(targets).toContain(PLACEHOLDER_POKEMON_NAME);
+			// 正式データが入ったミュウツーは対象に含めない
+			expect(targets).not.toContain("Mewtwo");
+		});
 	});
 });
 
