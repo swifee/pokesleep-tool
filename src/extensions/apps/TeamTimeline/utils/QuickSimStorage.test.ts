@@ -41,9 +41,9 @@ describe("QuickSimStorage", () => {
 		saveQuickSimSettingsToStorage(
 			{
 				members: [
-					{ pokemonId: pikachu.id, usagePercent: 100 },
-					{ pokemonId: eevee.id, usagePercent: 35.6 },
-					{ pokemonId: 999, usagePercent: 50 },
+					{ pokemonId: pikachu.id, usagePercent: 100, usageMode: "even" },
+					{ pokemonId: eevee.id, usagePercent: 35.6, usageMode: "sleep" },
+					{ pokemonId: 999, usagePercent: 50, usageMode: "even" },
 				],
 			},
 			box,
@@ -56,8 +56,8 @@ describe("QuickSimStorage", () => {
 		]);
 		expect(loadQuickSimSettingsFromStorage(reloadedBox)).toEqual({
 			members: [
-				{ pokemonId: 10, usagePercent: 100 },
-				{ pokemonId: 20, usagePercent: 36 },
+				{ pokemonId: 10, usagePercent: 100, usageMode: "even" },
+				{ pokemonId: 20, usagePercent: 36, usageMode: "sleep" },
 			],
 		});
 	});
@@ -71,7 +71,11 @@ describe("QuickSimStorage", () => {
 			JSON.stringify({
 				members: [
 					{ serialized: first.serialize(), usagePercent: 40 },
-					{ serialized: second.serialize(), usagePercent: 60 },
+					{
+						serialized: second.serialize(),
+						usagePercent: 60,
+						usageMode: "bogus",
+					},
 					{ serialized: "missing", usagePercent: 10 },
 					{ serialized: 5, usagePercent: 10 },
 				],
@@ -79,9 +83,10 @@ describe("QuickSimStorage", () => {
 		);
 
 		expect(loadQuickSimSettingsFromStorage(box)).toEqual({
+			// A missing or unknown usage mode falls back to "even".
 			members: [
-				{ pokemonId: 1, usagePercent: 40 },
-				{ pokemonId: 2, usagePercent: 60 },
+				{ pokemonId: 1, usagePercent: 40, usageMode: "even" },
+				{ pokemonId: 2, usagePercent: 60, usageMode: "even" },
 			],
 		});
 	});
@@ -111,9 +116,9 @@ describe("QuickSimStorage", () => {
 		});
 
 		expect(members).toEqual([
-			{ pokemonId: pikachu.id, usagePercent: 33 },
-			{ pokemonId: bulbasaur.id, usagePercent: 100 },
-			{ pokemonId: eevee.id, usagePercent: 67 },
+			{ pokemonId: pikachu.id, usagePercent: 33, usageMode: "even" },
+			{ pokemonId: bulbasaur.id, usagePercent: 100, usageMode: "even" },
+			{ pokemonId: eevee.id, usagePercent: 67, usageMode: "even" },
 		]);
 	});
 });

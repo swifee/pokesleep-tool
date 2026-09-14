@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cbexFieldIndex, ggexFieldIndex } from "../../../../data/fields";
 import type { MainSkillName } from "../../../../util/MainSkill";
 import Nature from "../../../../util/Nature";
@@ -6,6 +6,10 @@ import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import SubSkill from "../../../../util/SubSkill";
 import SubSkillList from "../../../../util/SubSkillList";
+import {
+	PLACEHOLDER_POKEMON_NAME,
+	registerPlaceholderPokemon,
+} from "./PlaceholderPokemonTestHelpers";
 import {
 	calculateBaseFrequencyWithBaseSeconds,
 	calculateCarryLimitWithBase,
@@ -96,6 +100,13 @@ describe("TimelinePokemonUtils", () => {
 });
 
 describe("TimelinePokemonUtils データ未公開ポケモンの仮ステータス", () => {
+	// 実在ポケモンは正式データに置き換わり得るため、合成プレースホルダーで検証する。
+	let unregisterPlaceholder: () => void;
+	beforeAll(() => {
+		unregisterPlaceholder = registerPlaceholderPokemon();
+	});
+	afterAll(() => unregisterPlaceholder());
+
 	const placeholderStats = {
 		enabled: true,
 		helpingFrequencySeconds: 2700,
@@ -104,11 +115,24 @@ describe("TimelinePokemonUtils データ未公開ポケモンの仮ステータ�
 	};
 
 	it("上流のプレースホルダーデータを判定する", () => {
-		const mewtwo = new PokemonIv({ pokemonName: "Mewtwo", level: 50 });
+		const placeholder = new PokemonIv({
+			pokemonName: PLACEHOLDER_POKEMON_NAME,
+			level: 50,
+		});
 		const raichu = new PokemonIv({ pokemonName: "Raichu", level: 50 });
 
-		expect(isPlaceholderPokemonData(mewtwo.pokemon)).toBe(true);
+		expect(isPlaceholderPokemonData(placeholder.pokemon)).toBe(true);
 		expect(isPlaceholderPokemonData(raichu.pokemon)).toBe(false);
+	});
+
+	it("正式データが入ったミュウツーはプレースホルダーとして扱わない", () => {
+		// 2026-09-14 の upstream sync で frequency / skillRate / carryLimit が確定した。
+		const mewtwo = new PokemonIv({ pokemonName: "Mewtwo", level: 50 });
+
+		expect(isPlaceholderPokemonData(mewtwo.pokemon)).toBe(false);
+		expect(mewtwo.pokemon.frequency).toBeGreaterThan(0);
+		expect(mewtwo.pokemon.skillRate).toBeGreaterThan(0);
+		expect(mewtwo.pokemon.carryLimit).toBeGreaterThan(0);
 	});
 
 	it("種族値を差し替えた計算は PokemonIv と同じ結果になる", () => {
@@ -170,41 +194,67 @@ describe("TimelinePokemonUtils データ未公開ポケモンの仮ステータ�
 	});
 
 	it("仮ステータスはデータ未公開ポケモンにのみ適用される", () => {
-		const mewtwo = new PokemonIv({ pokemonName: "Mewtwo", level: 50 });
+		const placeholder = new PokemonIv({
+			pokemonName: PLACEHOLDER_POKEMON_NAME,
+			level: 50,
+		});
 		const raichu = new PokemonIv({ pokemonName: "Raichu", level: 50 });
 
-		expect(getProvisionalBaseFrequencySeconds(mewtwo, placeholderStats)).toBe(
-			2700,
-		);
+		expect(
+			getProvisionalBaseFrequencySeconds(placeholder, placeholderStats),
+		).toBe(2700);
 		expect(getProvisionalBaseFrequencySeconds(raichu, placeholderStats)).toBe(
 			0,
 		);
 		expect(
-			getProvisionalBaseFrequencySeconds(mewtwo, {
+			getProvisionalBaseFrequencySeconds(placeholder, {
 				...placeholderStats,
 				enabled: false,
 			}),
 		).toBe(0);
 
-		expect(getTimelineCarryLimit(mewtwo, placeholderStats)).toBe(20);
-		expect(getTimelineCarryLimit(mewtwo, undefined)).toBe(mewtwo.carryLimit);
+		expect(getTimelineCarryLimit(placeholder, placeholderStats)).toBe(20);
+		expect(getTimelineCarryLimit(placeholder, undefined)).toBe(
+			placeholder.carryLimit,
+		);
 		expect(getTimelineCarryLimit(raichu, placeholderStats)).toBe(
 			raichu.carryLimit,
 		);
 	});
 
 	it("仮ステータスのスキル発動率を IV に反映する", () => {
-		const mewtwo = new PokemonIv({ pokemonName: "Mewtwo", level: 50 });
+		const placeholder = new PokemonIv({
+			pokemonName: PLACEHOLDER_POKEMON_NAME,
+			level: 50,
+		});
 
-		const normalized = normalizeTimelinePokemonIv(mewtwo, placeholderStats);
+		const normalized = normalizeTimelinePokemonIv(
+			placeholder,
+			placeholderStats,
+		);
 
 		expect(normalized.baseSkillRate).toBe(2.5);
 		expect(normalized.skillRate).toBeCloseTo(0.025, 10);
-		expect(normalizeTimelinePokemonIv(mewtwo)).toBe(mewtwo);
+		expect(normalizeTimelinePokemonIv(placeholder)).toBe(placeholder);
+	});
+
+	it("正式データのポケモンには仮ステータスのスキル発動率を適用しない", () => {
+		const mewtwo = new PokemonIv({ pokemonName: "Mewtwo", level: 50 });
+
+		expect(normalizeTimelinePokemonIv(mewtwo, placeholderStats)).toBe(mewtwo);
+		expect(getProvisionalBaseFrequencySeconds(mewtwo, placeholderStats)).toBe(
+			0,
+		);
+		expect(getTimelineCarryLimit(mewtwo, placeholderStats)).toBe(
+			mewtwo.carryLimit,
+		);
 	});
 
 	it("おてつだい間隔は仮のおてつだいスピードから計算される", () => {
-		const mewtwo = new PokemonIv({ pokemonName: "Mewtwo", level: 50 });
+		const placeholder = new PokemonIv({
+			pokemonName: PLACEHOLDER_POKEMON_NAME,
+			level: 50,
+		});
 		const options = {
 			helpBonusCount: 0,
 			isGoodCampTicketSet: false,
@@ -213,14 +263,14 @@ describe("TimelinePokemonUtils データ未公開ポケモンの仮ステータ�
 			fieldIndex: 0,
 		};
 
-		expect(resolveBaseFrequency(mewtwo, options)).toBe(0);
+		expect(resolveBaseFrequency(placeholder, options)).toBe(0);
 		expect(
-			resolveBaseFrequency(mewtwo, {
+			resolveBaseFrequency(placeholder, {
 				...options,
 				baseFrequencySecondsOverride: 2700,
 			}),
 		).toBeCloseTo(
-			calculateBaseFrequencyWithBaseSeconds(mewtwo, 2700, options),
+			calculateBaseFrequencyWithBaseSeconds(placeholder, 2700, options),
 			10,
 		);
 	});

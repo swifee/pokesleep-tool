@@ -1,18 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
 	MINUTES_PER_DAY,
+	QUICK_SIM_USAGE_MODES,
 	type QuickSimDaySchedule,
+	type QuickSimLaneSegment,
 	type QuickSimMember,
+	type QuickSimSchedule,
+	type QuickSimUsageMode,
 } from "../types/QuickSimTypes";
 import { DEFAULT_TIME_SLOTS, type TimeSlot } from "../types/TimeSlotTypes";
 import {
 	buildQuickSimDaySchedule,
+	buildQuickSimSchedule,
 	clampQuickSimUsagePercent,
 	getQuickSimTargetMinutesById,
+	getQuickSimTotalTargetMinutesById,
 	getQuickSimTotalUsagePercent,
 	isQuickSimUsageExceeded,
 	resolveQuickSimDayStructure,
 	usagePercentToMinutes,
+	validateQuickSimMultiDaySchedule,
 	validateQuickSimSchedule,
 } from "./QuickSimScheduler";
 
@@ -22,6 +29,7 @@ function members(...usages: number[]): QuickSimMember[] {
 	return usages.map((usagePercent, index) => ({
 		pokemonId: 100 + index,
 		usagePercent,
+		usageMode: "even" as const,
 	}));
 }
 
@@ -297,9 +305,9 @@ describe("buildQuickSimDaySchedule", () => {
 
 	it("merges duplicated members and ignores zero usage", () => {
 		const list: QuickSimMember[] = [
-			{ pokemonId: 1, usagePercent: 40 },
-			{ pokemonId: 1, usagePercent: 20 },
-			{ pokemonId: 2, usagePercent: 0 },
+			{ pokemonId: 1, usagePercent: 40, usageMode: "even" },
+			{ pokemonId: 1, usagePercent: 20, usageMode: "even" },
+			{ pokemonId: 2, usagePercent: 0, usageMode: "even" },
 		];
 		const schedule = buildOrThrow(list);
 		expectValid(schedule, list);
@@ -345,5 +353,306 @@ describe("buildQuickSimDaySchedule", () => {
 		expect(schedule.sleepTime).toBe("01:00");
 		expect(schedule.sleepMinutes).toBe(480);
 		expect(schedule.usesSleepSwaps).toBe(false);
+	});
+});
+
+/** メンバー定義: [起用率, 起用方法] */
+function modeMembers(
+	...entries: [number, QuickSimUsageMode][]
+): QuickSimMember[] {
+	return entries.map(([usagePercent, usageMode], index) => ({
+		pokemonId: 200 + index,
+		usagePercent,
+		usageMode,
+	}));
+}
+
+function buildMultiOrThrow(
+	list: QuickSimMember[],
+	days: number,
+	timeSlots: TimeSlot[] = DEFAULT_TIME_SLOTS,
+): QuickSimSchedule {
+	const result = buildQuickSimSchedule(list, timeSlots, days);
+	if (!result.ok) {
+		throw new Error(`schedule failed: ${result.error}`);
+	}
+	return result.schedule;
+}
+
+function expectMultiValid(
+	schedule: QuickSimSchedule,
+	list: QuickSimMember[],
+	days: number,
+) {
+	expect(schedule.unmetPokemonIds).toEqual([]);
+	const errors = validateQuickSimMultiDaySchedule(
+		schedule,
+		getQuickSimTotalTargetMinutesById(list, days),
+	);
+	expect(errors).toEqual([]);
+}
+
+function segmentsOf(
+	schedule: QuickSimSchedule,
+	dayIndex: number,
+	pokemonId: number,
+): { laneIndex: number; startMinute: number; endMinute: number }[] {
+	return schedule.dayLanes[dayIndex].flatMap((lane, laneIndex) =>
+		lane
+			.filter((segment) => segment.pokemonId === pokemonId)
+			.map((segment) => ({
+				laneIndex,
+				startMinute: segment.startMinute,
+				endMinute: segment.endMinute,
+			})),
+	);
+}
+
+function fullLane(pokemonId: number | null): QuickSimLaneSegment[] {
+	return [{ pokemonId, startMinute: 0, endMinute: MINUTES_PER_DAY }];
+}
+
+describe("buildQuickSimSchedule with usage modes", () => {
+	it("repeats the single-day schedule when every member is even", () => {
+		const list = members(100, 70, 30);
+		const days = 3;
+		const schedule = buildMultiOrThrow(list, days);
+		expectMultiValid(schedule, list, days);
+		expect(schedule.dayLanes).toHaveLength(days);
+		const single = buildOrThrow(list);
+		for (const lanes of schedule.dayLanes) {
+			expect(lanes).toEqual(single.lanes);
+		}
+	});
+
+	it("puts a sleep member at bedtime and lets even members use the rest", () => {
+		// Sleep 40% (576min) covers the night in lane 0; the even members take other lanes.
+		const list = modeMembers([40, "sleep"], [100, "even"], [60, "even"]);
+		const schedule = buildMultiOrThrow(list, 1);
+		expectMultiValid(schedule, list, 1);
+		expect(schedule.dayLanes[0][0]).toEqual([
+			{ pokemonId: 200, startMinute: 0, endMinute: 576 },
+			{ pokemonId: null, startMinute: 576, endMinute: MINUTES_PER_DAY },
+		]);
+		expect(schedule.dayLanes[0][1]).toEqual(fullLane(201));
+		expect(schedule.dayLanes[0][2]).toEqual([
+			{ pokemonId: 202, startMinute: 0, endMinute: 864 },
+			{ pokemonId: null, startMinute: 864, endMinute: MINUTES_PER_DAY },
+		]);
+		expect(schedule.usesSleepSwaps).toBe(false);
+	});
+
+	it("reports a sleep swap when a sleep member is shorter than the night", () => {
+		const list = modeMembers([30, "sleep"], [100, "even"]);
+		const schedule = buildMultiOrThrow(list, 1);
+		expectMultiValid(schedule, list, 1);
+		expect(segmentsOf(schedule, 0, 200)).toEqual([
+			{ laneIndex: 0, startMinute: 0, endMinute: 432 },
+		]);
+		expect(schedule.usesSleepSwaps).toBe(true);
+	});
+
+	it("starts a daytime member at the wake slot", () => {
+		const list = modeMembers([50, "daytime"], [100, "even"]);
+		const schedule = buildMultiOrThrow(list, 1);
+		expectMultiValid(schedule, list, 1);
+		expect(schedule.dayLanes[0][0]).toEqual([
+			{ pokemonId: null, startMinute: 0, endMinute: SLEEP_MINUTES },
+			{ pokemonId: 200, startMinute: SLEEP_MINUTES, endMinute: 1200 },
+			{ pokemonId: null, startMinute: 1200, endMinute: MINUTES_PER_DAY },
+		]);
+		expect(schedule.dayLanes[0][1]).toEqual(fullLane(201));
+		expect(schedule.usesSleepSwaps).toBe(false);
+	});
+
+	it("wraps a daytime member into the night only when the awake time is too short", () => {
+		// 80% (1152min) > 960min awake: stays from waking to bedtime and 192min into the night.
+		const list = modeMembers([80, "daytime"]);
+		const schedule = buildMultiOrThrow(list, 1);
+		expectMultiValid(schedule, list, 1);
+		expect(schedule.dayLanes[0][0]).toEqual([
+			{ pokemonId: 200, startMinute: 0, endMinute: 192 },
+			{ pokemonId: null, startMinute: 192, endMinute: SLEEP_MINUTES },
+			{
+				pokemonId: 200,
+				startMinute: SLEEP_MINUTES,
+				endMinute: MINUTES_PER_DAY,
+			},
+		]);
+		expect(schedule.usesSleepSwaps).toBe(true);
+	});
+
+	it("places sleep before daytime and shifts the overflowing daytime member", () => {
+		// The sleep member takes lane 0 until 576; four daytime members take lanes 1-4
+		// from waking, and the fifth daytime member starts when lane 0 frees up.
+		const list = modeMembers(
+			[60, "daytime"],
+			[60, "daytime"],
+			[60, "daytime"],
+			[60, "daytime"],
+			[60, "daytime"],
+			[40, "sleep"],
+		);
+		const schedule = buildMultiOrThrow(list, 1);
+		expectMultiValid(schedule, list, 1);
+		expect(segmentsOf(schedule, 0, 205)).toEqual([
+			{ laneIndex: 0, startMinute: 0, endMinute: 576 },
+		]);
+		const starts = [200, 201, 202, 203, 204].map(
+			(pokemonId) => segmentsOf(schedule, 0, pokemonId)[0].startMinute,
+		);
+		expect(starts.filter((start) => start === SLEEP_MINUTES)).toHaveLength(4);
+		expect(starts).toContain(576);
+		expect(segmentsOf(schedule, 0, 204)).toEqual([
+			{ laneIndex: 0, startMinute: 576, endMinute: MINUTES_PER_DAY },
+		]);
+	});
+
+	it("runs a first-half member continuously from the start of the period", () => {
+		// 50% over 3 days = 2160min: day 0 in full, day 1 until 720, then nothing.
+		const list = modeMembers([50, "firstHalf"], [100, "even"]);
+		const days = 3;
+		const schedule = buildMultiOrThrow(list, days);
+		expectMultiValid(schedule, list, days);
+		expect(schedule.dayLanes[0][0]).toEqual(fullLane(200));
+		expect(schedule.dayLanes[1][0]).toEqual([
+			{ pokemonId: 200, startMinute: 0, endMinute: 720 },
+			{ pokemonId: null, startMinute: 720, endMinute: MINUTES_PER_DAY },
+		]);
+		expect(schedule.dayLanes[2][0]).toEqual(fullLane(null));
+		// The even member keeps lane 1 on every day, so no swap is needed at bedtime.
+		for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+			expect(schedule.dayLanes[dayIndex][1]).toEqual(fullLane(201));
+		}
+		expect(schedule.usesSleepSwaps).toBe(false);
+	});
+
+	it("runs a second-half member continuously up to the end of the period", () => {
+		// 50% over 3 days = 2160min: nothing on day 0, from 720 on day 1, day 2 in full.
+		// It fills from the last lane so the even member can stay in lane 0.
+		const list = modeMembers([50, "secondHalf"], [100, "even"]);
+		const days = 3;
+		const schedule = buildMultiOrThrow(list, days);
+		expectMultiValid(schedule, list, days);
+		expect(segmentsOf(schedule, 0, 200)).toEqual([]);
+		expect(segmentsOf(schedule, 1, 200)).toEqual([
+			{ laneIndex: 4, startMinute: 720, endMinute: MINUTES_PER_DAY },
+		]);
+		expect(schedule.dayLanes[2][4]).toEqual(fullLane(200));
+		for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+			expect(schedule.dayLanes[dayIndex][0]).toEqual(fullLane(201));
+		}
+	});
+
+	it("moves even usage to the days left free by first-half members", () => {
+		// Five first-half members at 50% fill every lane for the first 3.5 days;
+		// the even member (30% = 432min/day, 3024min total) gets its time afterwards.
+		const list = modeMembers(
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[30, "even"],
+		);
+		const days = 7;
+		const schedule = buildMultiOrThrow(list, days);
+		expectMultiValid(schedule, list, days);
+		for (let dayIndex = 0; dayIndex < 3; dayIndex++) {
+			expect(segmentsOf(schedule, dayIndex, 205)).toEqual([]);
+		}
+		const day3 = segmentsOf(schedule, 3, 205);
+		expect(day3.length).toBeGreaterThan(0);
+		expect(day3.every((segment) => segment.startMinute >= 720)).toBe(true);
+	});
+
+	it("keeps large even members whole and squeezes the small one on crowded days", () => {
+		// Day 2 is full with the second-half member and four 100% members; the 50%
+		// member gets nothing that day and catches up on the other days instead.
+		const list = modeMembers(
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[50, "secondHalf"],
+			[50, "even"],
+		);
+		const days = 3;
+		const schedule = buildMultiOrThrow(list, days);
+		expectMultiValid(schedule, list, days);
+		for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+			for (const pokemonId of [200, 201, 202, 203]) {
+				expect(segmentsOf(schedule, dayIndex, pokemonId)).toEqual([
+					expect.objectContaining({
+						startMinute: 0,
+						endMinute: MINUTES_PER_DAY,
+					}),
+				]);
+			}
+		}
+		expect(segmentsOf(schedule, 2, 205)).toEqual([]);
+	});
+
+	it("reports members whose usage cannot be met because of the fixed modes", () => {
+		// Five first-half members (50% over 2 days = 1440min each) fill day 0 entirely;
+		// the even member (60% = 1728min) can only get one lane on day 1 (1440min).
+		const list = modeMembers(
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[60, "even"],
+		);
+		const schedule = buildMultiOrThrow(list, 2);
+		expect(schedule.unmetPokemonIds).toEqual([205]);
+		const errors = validateQuickSimMultiDaySchedule(
+			schedule,
+			getQuickSimTotalTargetMinutesById(list, 2),
+		);
+		expect(errors).toEqual(["pokemon 205: 1440 minutes, expected 1728"]);
+	});
+
+	it("keeps every member within a single lane at any time across random mode mixes", () => {
+		let seed = 2468;
+		const random = (): number => {
+			seed = (seed * 1103515245 + 12345) % 2147483648;
+			return seed / 2147483648;
+		};
+		for (let trial = 0; trial < 150; trial++) {
+			const count = 1 + Math.floor(random() * 10);
+			const entries: [number, QuickSimUsageMode][] = [];
+			let remaining = 500;
+			for (let index = 0; index < count; index++) {
+				const usage = Math.min(remaining, Math.floor(random() * 101));
+				const mode =
+					QUICK_SIM_USAGE_MODES[
+						Math.floor(random() * QUICK_SIM_USAGE_MODES.length)
+					];
+				entries.push([usage, mode]);
+				remaining -= usage;
+			}
+			const days = 1 + Math.floor(random() * 7);
+			const list = modeMembers(...entries);
+			const result = buildQuickSimSchedule(list, DEFAULT_TIME_SLOTS, days);
+			if (!result.ok) {
+				expect(result.error).toBe("noMembers");
+				expect(entries.every(([usage]) => usage === 0)).toBe(true);
+				continue;
+			}
+			const targets = getQuickSimTotalTargetMinutesById(list, days);
+			const unmet = new Set(result.schedule.unmetPokemonIds);
+			const errors = validateQuickSimMultiDaySchedule(
+				result.schedule,
+				targets,
+			).filter(
+				(error) =>
+					![...unmet].some((pokemonId) =>
+						error.startsWith(`pokemon ${pokemonId}: `),
+					),
+			);
+			expect(errors).toEqual([]);
+			expect(result.schedule.dayLanes).toHaveLength(days);
+		}
 	});
 });

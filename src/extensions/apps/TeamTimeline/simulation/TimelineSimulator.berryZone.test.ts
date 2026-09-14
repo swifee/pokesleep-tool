@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import {
@@ -11,18 +11,37 @@ import {
 	type PokemonSwap,
 	type TimeSlotResult,
 } from "../types/TimeSlotTypes";
+import {
+	PLACEHOLDER_POKEMON_NAME,
+	registerPlaceholderPokemon,
+} from "../utils/PlaceholderPokemonTestHelpers";
 import { createDefaultTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import { runSimulation } from "./TimelineSimulator";
 
 const MEWTWO_ID = 1;
 const NATU_ID = 2;
 const PIKACHU_ID = 3;
+const PLACEHOLDER_ID = 4;
 
+/** 正式データを持つミュウツー（きのみゾーン（サイコブレイク）） */
 function createMewtwo(): PokemonBoxItem {
 	return new PokemonBoxItem(
 		new PokemonIv({ pokemonName: "Mewtwo", level: 50, skillLevel: 6 }),
 		undefined,
 		MEWTWO_ID,
+	);
+}
+
+/** データ未公開（frequency / skillRate / carryLimit が 0）のきのみゾーン持ち */
+function createPlaceholderPokemon(): PokemonBoxItem {
+	return new PokemonBoxItem(
+		new PokemonIv({
+			pokemonName: PLACEHOLDER_POKEMON_NAME,
+			level: 50,
+			skillLevel: 6,
+		}),
+		undefined,
+		PLACEHOLDER_ID,
 	);
 }
 
@@ -104,23 +123,66 @@ function collectResults(
 }
 
 describe("TimelineSimulator きのみゾーン（サイコブレイク）", () => {
-	it("仮ステータスがないミュウツーはおてつだいもスキル発動もしない", () => {
+	// 仮ステータスの検証には、実在ポケモンではなく合成プレースホルダーを使う。
+	// （ミュウツーは 2026-09-14 の upstream sync で正式データになった）
+	let unregisterPlaceholder: () => void;
+	beforeAll(() => {
+		unregisterPlaceholder = registerPlaceholderPokemon();
+	});
+	afterAll(() => unregisterPlaceholder());
+
+	it("仮ステータスがないデータ未公開ポケモンはおてつだいもスキル発動もしない", () => {
 		const result = simulate(
-			[createMewtwo(), createNatu(), null, null, null],
+			[createPlaceholderPokemon(), createNatu(), null, null, null],
 			createProvisionalSettings({ placeholderEnabled: false }),
 		);
 
-		const mewtwoResults = collectResults(result.slotResults, MEWTWO_ID);
-		expect(mewtwoResults.length).toBeGreaterThan(0);
+		const placeholderResults = collectResults(
+			result.slotResults,
+			PLACEHOLDER_ID,
+		);
+		expect(placeholderResults.length).toBeGreaterThan(0);
 		expect(
-			mewtwoResults.reduce((total, slot) => total + slot.helpCount, 0),
+			placeholderResults.reduce((total, slot) => total + slot.helpCount, 0),
 		).toBe(0);
 	});
 
-	it("仮ステータスを有効にするとミュウツーがおてつだいしてゾーンを展開する", () => {
+	it("仮ステータスを有効にするとデータ未公開ポケモンがおてつだいしてゾーンを展開する", () => {
+		const result = simulate(
+			[createPlaceholderPokemon(), createNatu(), null, null, null],
+			createProvisionalSettings(),
+		);
+
+		const placeholderResults = collectResults(
+			result.slotResults,
+			PLACEHOLDER_ID,
+		);
+		const totalHelpCount = placeholderResults.reduce(
+			(total, slot) => total + slot.helpCount,
+			0,
+		);
+		const totalSkillTriggerCount = placeholderResults.reduce(
+			(total, slot) => total + slot.skillTriggerCount,
+			0,
+		);
+		const totalSkillEP = placeholderResults.reduce(
+			(total, slot) => total + slot.directSkillEP,
+			0,
+		);
+		const lastStackCount =
+			placeholderResults[placeholderResults.length - 1]?.berryZoneStackCount ??
+			0;
+
+		expect(totalHelpCount).toBeGreaterThan(0);
+		expect(totalSkillTriggerCount).toBeGreaterThan(0);
+		expect(totalSkillEP).toBe(3000 * totalSkillTriggerCount);
+		expect(lastStackCount).toBeGreaterThan(0);
+	});
+
+	it("正式データのミュウツーは仮ステータスなしでもおてつだいしてゾーンを展開する", () => {
 		const result = simulate(
 			[createMewtwo(), createNatu(), null, null, null],
-			createProvisionalSettings(),
+			createProvisionalSettings({ placeholderEnabled: false }),
 		);
 
 		const mewtwoResults = collectResults(result.slotResults, MEWTWO_ID);
@@ -132,16 +194,11 @@ describe("TimelineSimulator きのみゾーン（サイコブレイク）", () =
 			(total, slot) => total + slot.skillTriggerCount,
 			0,
 		);
-		const totalSkillEP = mewtwoResults.reduce(
-			(total, slot) => total + slot.directSkillEP,
-			0,
-		);
 		const lastStackCount =
 			mewtwoResults[mewtwoResults.length - 1]?.berryZoneStackCount ?? 0;
 
 		expect(totalHelpCount).toBeGreaterThan(0);
 		expect(totalSkillTriggerCount).toBeGreaterThan(0);
-		expect(totalSkillEP).toBe(3000 * totalSkillTriggerCount);
 		expect(lastStackCount).toBeGreaterThan(0);
 	});
 

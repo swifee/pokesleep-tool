@@ -1,6 +1,56 @@
 import { MAX_TEAM_SIZE } from "./TeamTimelineTypes";
 
 /**
+ * 起用方法。起用率をどの時間帯に割り当てるかを決める。
+ * - even: 毎日同じ時間だけ起用し、空いている枠に詰める（既定）
+ * - firstHalf: 集計期間の先頭から、起用時間の合計に達するまで連続して起用する
+ * - secondHalf: 集計期間の末尾に向けて、起用時間の合計に達するまで連続して起用する
+ * - sleep: 毎日、就寝中を優先して起用する
+ * - daytime: 毎日、起床後を優先して起用する
+ */
+export type QuickSimUsageMode =
+	| "even"
+	| "firstHalf"
+	| "secondHalf"
+	| "sleep"
+	| "daytime";
+
+/** 起用方法の一覧（プルダウンの表示順） */
+export const QUICK_SIM_USAGE_MODES: readonly QuickSimUsageMode[] = [
+	"even",
+	"firstHalf",
+	"secondHalf",
+	"sleep",
+	"daytime",
+];
+
+/** 既定の起用方法 */
+export const DEFAULT_QUICK_SIM_USAGE_MODE: QuickSimUsageMode = "even";
+
+/**
+ * 起用方法ごとの配置の優先順位（小さいほど先に配置する）。
+ * 就寝 → 日中 → 前半 → 後半 の順に固定配置し、均等は残った空きに詰める。
+ */
+export const QUICK_SIM_USAGE_MODE_PRIORITY: Readonly<
+	Record<QuickSimUsageMode, number>
+> = {
+	sleep: 0,
+	daytime: 1,
+	firstHalf: 2,
+	secondHalf: 3,
+	even: 4,
+};
+
+export function isQuickSimUsageMode(
+	value: unknown,
+): value is QuickSimUsageMode {
+	return (
+		typeof value === "string" &&
+		(QUICK_SIM_USAGE_MODES as readonly string[]).includes(value)
+	);
+}
+
+/**
  * 簡易シミュのメンバー設定
  */
 export interface QuickSimMember {
@@ -8,6 +58,8 @@ export interface QuickSimMember {
 	pokemonId: number;
 	/** 1日のうち編成に入れる割合（%）。0〜100 */
 	usagePercent: number;
+	/** 起用方法 */
+	usageMode: QuickSimUsageMode;
 }
 
 /**
@@ -62,14 +114,37 @@ export interface QuickSimDaySchedule {
 	usesSleepSwaps: boolean;
 }
 
+/**
+ * 集計期間全体の自動入れ替えスケジュール。
+ * 前半・後半の起用方法があると日ごとに配置が変わるため、日ごとに区間列を持つ。
+ */
+export interface QuickSimSchedule {
+	/** 日ごと・枠ごとの区間列。dayLanes[dayIndex][laneIndex] */
+	dayLanes: QuickSimLaneSegment[][][];
+	/** 日の起点となる就寝スロットID */
+	sleepSlotId: string;
+	/** 日の起点となる就寝時刻 "HH:MM" */
+	sleepTime: string;
+	/** 就寝から起床までの分数 */
+	sleepMinutes: number;
+	/** 就寝中の入れ替えを含むかどうか */
+	usesSleepSwaps: boolean;
+	/** 起用方法の指定により、設定した起用時間を満たせなかったメンバーのID */
+	unmetPokemonIds: number[];
+}
+
 /** スケジュール生成に失敗した理由 */
 export type QuickSimScheduleErrorType =
 	| "noSleepSlot"
 	| "noMembers"
 	| "usageExceeded";
 
-export type QuickSimScheduleResult =
+export type QuickSimDayScheduleResult =
 	| { ok: true; schedule: QuickSimDaySchedule }
+	| { ok: false; error: QuickSimScheduleErrorType };
+
+export type QuickSimScheduleResult =
+	| { ok: true; schedule: QuickSimSchedule }
 	| { ok: false; error: QuickSimScheduleErrorType };
 
 /**
