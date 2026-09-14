@@ -14,10 +14,6 @@ import {
 } from "@mui/material";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-	type IngredientName,
-	IngredientNames,
-} from "../../../../data/pokemons";
 import IngredientIcon from "../../../../ui/IvCalc/IngredientIcon";
 import { ingredientStrength } from "../../../../util/PokemonRp";
 import { getRecipesByCategory } from "../data/RecipeData";
@@ -28,6 +24,15 @@ import {
 	MAX_RECIPE_LEVEL,
 	MIN_RECIPE_LEVEL,
 } from "../types/CookingTypes";
+import {
+	LOCK_ICON_OFF_COLOR,
+	LOCK_ICON_ON_COLOR,
+	LOCK_TOGGLE_BUTTON_SX,
+	NUMERIC_TEXT_FIELD_SX,
+	STEP_BUTTON_SX,
+	STEP_BUTTON_SYMBOL_SX,
+} from "./CookingSettingsStyles";
+import InitialIngredientsEditor from "./InitialIngredientsEditor";
 import TeamTimelineIcon from "./TimelineIcons";
 
 interface CookingSettingsPanelProps {
@@ -39,79 +44,6 @@ const MIN_POT_CAPACITY = 12;
 const MAX_POT_CAPACITY = 99;
 const POT_CAPACITY_STEP = 3;
 const LEVEL_INPUT_STEP = 1;
-const INGREDIENT_INPUT_STEP = 5;
-const NUMERIC_INPUT_WIDTH = "5ch";
-const NUMERIC_TEXT_FIELD_SX = {
-	width: NUMERIC_INPUT_WIDTH,
-	"& .MuiInputBase-input": {
-		textAlign: "center",
-	},
-	"& input[type=number]": {
-		MozAppearance: "textfield",
-	},
-	"& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button":
-		{
-			WebkitAppearance: "none",
-			margin: 0,
-		},
-};
-const STEP_BUTTON_SX = {
-	minWidth: "1.5rem",
-	width: "1.5rem",
-	height: "1.5rem",
-	px: 0,
-	lineHeight: 1,
-	display: "inline-flex",
-	alignItems: "center",
-	justifyContent: "center",
-	textAlign: "center",
-	border: "none",
-	boxShadow: "none",
-	backgroundColor: "transparent",
-	color: "inherit",
-	"& .step-button-circle": {
-		width: "1.2rem",
-		height: "1.2rem",
-		borderRadius: "50%",
-		backgroundColor: "#b3b3b3",
-		color: "#fff",
-		fontWeight: 700,
-		fontSize: "0.95rem",
-		display: "inline-flex",
-		alignItems: "center",
-		justifyContent: "center",
-	},
-	"&:hover": {
-		border: "none",
-		boxShadow: "none",
-		backgroundColor: "transparent",
-	},
-	"&:hover .step-button-circle": {
-		backgroundColor: "#999999",
-	},
-};
-const STEP_BUTTON_SYMBOL_SX = {
-	display: "block",
-	lineHeight: 1,
-	transform: "translate(0.4px, -0.6px)",
-};
-const LOCK_ICON_ON_COLOR = "#e89a00";
-const LOCK_ICON_OFF_COLOR = "#c8c8c8";
-const LOCK_TOGGLE_BUTTON_SX = {
-	minWidth: "1.5rem",
-	width: "1.5rem",
-	height: "1.5rem",
-	p: 0,
-	border: "none",
-	boxShadow: "none",
-	backgroundColor: "transparent",
-	lineHeight: 1,
-	"&:hover": {
-		border: "none",
-		boxShadow: "none",
-		backgroundColor: "transparent",
-	},
-};
 
 const POT_CAPACITY_OPTIONS = Array.from(
 	{ length: (MAX_POT_CAPACITY - MIN_POT_CAPACITY) / POT_CAPACITY_STEP + 1 },
@@ -272,28 +204,6 @@ const CookingSettingsPanel = React.memo(
 			onChange({ ...settings, recipeLevels: newLevels });
 		}, [activeCategory, settings, onChange, batchLevel]);
 
-		const handleIngredientChange = useCallback(
-			(ingredientName: IngredientName, count: number) => {
-				const clamped = Math.max(0, Math.floor(count));
-				onChange({
-					...settings,
-					initialIngredients: {
-						...settings.initialIngredients,
-						[ingredientName]: clamped,
-					},
-				});
-			},
-			[settings, onChange],
-		);
-
-		const handleIngredientStep = useCallback(
-			(ingredientName: IngredientName, delta: number) => {
-				const current = settings.initialIngredients[ingredientName] ?? 0;
-				handleIngredientChange(ingredientName, current + delta);
-			},
-			[handleIngredientChange, settings.initialIngredients],
-		);
-
 		const handleRecipeDisabledToggle = useCallback(
 			(recipeName: string) => {
 				const nextDisabledRecipes = {
@@ -303,22 +213,6 @@ const CookingSettingsPanel = React.memo(
 				onChange({
 					...settings,
 					disabledRecipes: nextDisabledRecipes,
-				});
-			},
-			[settings, onChange],
-		);
-
-		const handleExtraIngredientDisabledToggle = useCallback(
-			(ingredientName: IngredientName) => {
-				const nextDisabledExtraIngredients = {
-					...settings.disabledExtraIngredients,
-					[ingredientName]: !(
-						settings.disabledExtraIngredients[ingredientName] === true
-					),
-				};
-				onChange({
-					...settings,
-					disabledExtraIngredients: nextDisabledExtraIngredients,
 				});
 			},
 			[settings, onChange],
@@ -334,13 +228,6 @@ const CookingSettingsPanel = React.memo(
 				return a.name.localeCompare(b.name);
 			});
 		}, [activeCategory]);
-		const initialIngredientTotal = IngredientNames.reduce(
-			(sum, ingredientName) => {
-				return sum + (settings.initialIngredients[ingredientName] ?? 0);
-			},
-			0,
-		);
-
 		return (
 			<Box
 				data-testid="cooking-settings-panel"
@@ -692,143 +579,7 @@ const CookingSettingsPanel = React.memo(
 						<Divider sx={{ my: 1.5 }} />
 
 						{/* 5. Initial ingredients section */}
-						<Typography variant="subtitle2" sx={{ mb: 1 }}>
-							{t("TeamTimeline.cooking initial ingredients", "初期食材")}
-						</Typography>
-
-						<Box
-							sx={{
-								display: "grid",
-								gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-								gap: 0.5,
-							}}
-							data-testid="cooking-initial-ingredients"
-						>
-							{IngredientNames.map((ingredientName) => {
-								const isExtraIngredientDisabled =
-									settings.disabledExtraIngredients[ingredientName] === true;
-								return (
-									<Box
-										key={ingredientName}
-										sx={{
-											display: "flex",
-											alignItems: "center",
-											fontSize: "0.85rem",
-										}}
-									>
-										<Button
-											variant="text"
-											size="small"
-											disableElevation
-											sx={{
-												...LOCK_TOGGLE_BUTTON_SX,
-												color: isExtraIngredientDisabled
-													? LOCK_ICON_ON_COLOR
-													: LOCK_ICON_OFF_COLOR,
-												mr: 0.3,
-											}}
-											onClick={() =>
-												handleExtraIngredientDisabledToggle(ingredientName)
-											}
-											data-testid={`ingredient-extra-lock-toggle-${ingredientName}`}
-											title={t(
-												"TeamTimeline.cooking ingredient extra lock",
-												"追加食材として使わない",
-											)}
-											aria-label={t(
-												"TeamTimeline.cooking ingredient extra lock",
-												"追加食材として使わない",
-											)}
-										>
-											<LockOutlinedIcon sx={{ fontSize: "1.1rem" }} />
-										</Button>
-										<Box
-											sx={{ display: "inline-flex", alignItems: "center" }}
-											data-testid={`ingredient-icon-${ingredientName}`}
-											title={ingredientName}
-										>
-											<IngredientIcon name={ingredientName} />
-										</Box>
-										<Button
-											variant="contained"
-											size="small"
-											disableElevation
-											sx={{ ...STEP_BUTTON_SX, ml: 0.5 }}
-											onClick={() =>
-												handleIngredientStep(
-													ingredientName,
-													-INGREDIENT_INPUT_STEP,
-												)
-											}
-											data-testid={`ingredient-decrement-${ingredientName}`}
-										>
-											<Box component="span" className="step-button-circle">
-												<Box component="span" sx={STEP_BUTTON_SYMBOL_SX}>
-													-
-												</Box>
-											</Box>
-										</Button>
-										<TextField
-											type="number"
-											size="small"
-											variant="standard"
-											value={settings.initialIngredients[ingredientName] ?? 0}
-											onChange={(e) => {
-												const v = parseInt(e.target.value, 10);
-												if (!Number.isNaN(v)) {
-													handleIngredientChange(ingredientName, v);
-												}
-											}}
-											inputProps={{ min: 0 }}
-											sx={NUMERIC_TEXT_FIELD_SX}
-											data-testid={`ingredient-input-${ingredientName}`}
-										/>
-										<Button
-											variant="contained"
-											size="small"
-											disableElevation
-											sx={STEP_BUTTON_SX}
-											onClick={() =>
-												handleIngredientStep(
-													ingredientName,
-													INGREDIENT_INPUT_STEP,
-												)
-											}
-											data-testid={`ingredient-increment-${ingredientName}`}
-										>
-											<Box component="span" className="step-button-circle">
-												<Box component="span" sx={STEP_BUTTON_SYMBOL_SX}>
-													+
-												</Box>
-											</Box>
-										</Button>
-									</Box>
-								);
-							})}
-						</Box>
-						<Typography
-							variant="caption"
-							sx={{ mt: 1, display: "block", color: "#666" }}
-							data-testid="cooking-initial-ingredients-total"
-						>
-							入力値合計: {initialIngredientTotal.toLocaleString()}
-						</Typography>
-						<Typography
-							variant="caption"
-							sx={{
-								display: "inline-flex",
-								alignItems: "center",
-								gap: 0.2,
-								color: "#666",
-							}}
-							data-testid="cooking-extra-ingredient-lock-note"
-						>
-							<LockOutlinedIcon
-								sx={{ fontSize: "1.1rem", color: LOCK_ICON_ON_COLOR }}
-								data-testid="cooking-extra-ingredient-lock-note-icon"
-							/>
-							：追加食材として使用しないようにする
-						</Typography>
+						<InitialIngredientsEditor settings={settings} onChange={onChange} />
 					</Box>
 				)}
 			</Box>

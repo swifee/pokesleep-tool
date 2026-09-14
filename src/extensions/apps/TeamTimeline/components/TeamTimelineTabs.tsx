@@ -36,7 +36,11 @@ const TeamTimelineTabs = React.memo(
 			<Box sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}>
 				<Tabs value={activeTab} onChange={handleChange}>
 					<Tab
-						label={t("TeamTimeline.tab simulation", "シミュレーション")}
+						label={t("TeamTimeline.tab quick simulation", "簡易シミュ")}
+						value="quick"
+					/>
+					<Tab
+						label={t("TeamTimeline.tab detailed simulation", "詳細シミュ")}
 						value="team"
 					/>
 					<Tab

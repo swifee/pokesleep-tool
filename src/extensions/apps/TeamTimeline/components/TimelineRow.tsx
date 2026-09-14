@@ -45,6 +45,8 @@ interface TimelineRowProps {
 	isFirstSlot?: boolean;
 	compactEmptyCells?: boolean;
 	alwaysShowSwapButton?: boolean;
+	/** 入れ替え・回収しないの操作 UI を出さず、表示専用にする */
+	readOnly?: boolean;
 	isFirstTimelineSlot?: boolean;
 	fitToViewport?: boolean;
 	onSwapLongPressStart?: (detail: SwapLongPressStartDetail) => void;
@@ -92,6 +94,7 @@ const TimelineRow = React.memo(
 		isFirstSlot,
 		compactEmptyCells = false,
 		alwaysShowSwapButton = false,
+		readOnly = false,
 		isFirstTimelineSlot = false,
 		fitToViewport = false,
 		onSwapLongPressStart,
@@ -269,7 +272,10 @@ const TimelineRow = React.memo(
 							? "target"
 							: "idle";
 					const canDragSwap =
-						removable && swappedPokemonId !== undefined && !isFirstTimelineSlot;
+						!readOnly &&
+						removable &&
+						swappedPokemonId !== undefined &&
+						!isFirstTimelineSlot;
 
 					return (
 						<TimelineCell
@@ -280,13 +286,19 @@ const TimelineRow = React.memo(
 							teamIndex={index}
 							hasSwap={hasSwap}
 							swappedPokemonName={swappedPokemonName}
-							onSwapClick={() => onSwapClick?.(originalSlotId, index, dayIndex)}
+							onSwapClick={
+								readOnly
+									? undefined
+									: () => onSwapClick?.(originalSlotId, index, dayIndex)
+							}
 							noCollectEnabled={noCollectEnabled}
-							onNoCollectToggle={() =>
-								onNoCollectToggle?.(originalSlotId, index, dayIndex)
+							onNoCollectToggle={
+								readOnly
+									? undefined
+									: () => onNoCollectToggle?.(originalSlotId, index, dayIndex)
 							}
 							onRemoveSwapClick={
-								removable && swappedPokemonId !== undefined
+								!readOnly && removable && swappedPokemonId !== undefined
 									? () =>
 											onSwapRemoveClick?.(
 												originalSlotId,
