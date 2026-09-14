@@ -29,15 +29,15 @@ export const DEFAULT_QUICK_SIM_USAGE_MODE: QuickSimUsageMode = "even";
 
 /**
  * 起用方法ごとの配置の優先順位（小さいほど先に配置する）。
- * 就寝 → 日中 → 前半 → 後半 の順に固定配置し、均等は残った空きに詰める。
+ * 前半 → 後半 → 就寝 → 日中 の順に固定配置し、均等は残った空きに詰める。
  */
 export const QUICK_SIM_USAGE_MODE_PRIORITY: Readonly<
 	Record<QuickSimUsageMode, number>
 > = {
-	sleep: 0,
-	daytime: 1,
-	firstHalf: 2,
-	secondHalf: 3,
+	firstHalf: 0,
+	secondHalf: 1,
+	sleep: 2,
+	daytime: 3,
 	even: 4,
 };
 

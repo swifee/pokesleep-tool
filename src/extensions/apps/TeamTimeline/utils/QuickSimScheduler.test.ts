@@ -508,6 +508,25 @@ describe("buildQuickSimSchedule with usage modes", () => {
 		]);
 	});
 
+	it("places first-half members before sleep members", () => {
+		// Five first-half members at 50% over 2 days (1440min each) fill day 0 entirely,
+		// so the sleep member only gets its night on day 1.
+		const list = modeMembers(
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[30, "sleep"],
+		);
+		const schedule = buildMultiOrThrow(list, 2);
+		expect(segmentsOf(schedule, 0, 205)).toEqual([]);
+		expect(segmentsOf(schedule, 1, 205)).toEqual([
+			{ laneIndex: 0, startMinute: 0, endMinute: 432 },
+		]);
+		expect(schedule.unmetPokemonIds).toEqual([205]);
+	});
+
 	it("runs a first-half member continuously from the start of the period", () => {
 		// 50% over 3 days = 2160min: day 0 in full, day 1 until 720, then nothing.
 		const list = modeMembers([50, "firstHalf"], [100, "even"]);
