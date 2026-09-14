@@ -21,6 +21,10 @@
  *      1つの枠に入る「自然な」配置を試し、収まらなければ枠順に詰める
  *      （McNaughton の巻き付け法）。
  *    それでも満たせないときだけ、就寝中の入れ替えを許す（Phase 2）。
+ * 3. 最後に枠の割り当てを引き直す（rethreadLanes）。上の手順は「誰がいつ編成に
+ *    入っているか」だけを決めるものとみなし、続投するメンバーは同じ枠に居続け、
+ *    入れ替わるメンバーは抜けたメンバーの枠に入るように枠を付け替える。
+ *    これで続投中のポケモンの列が変わることはなくなる。
  */
 
 import {
@@ -405,8 +409,8 @@ class DayGrid {
  */
 class PeriodGrid {
 	readonly days: DayGrid[];
-	/** メンバーが最後に使った枠（日をまたいでも同じ枠を使い続けるため） */
-	private readonly lastLaneById = new Map<number, number>();
+	/** 枠ごとの使用済み分数。固定配置のメンバーを少ない枠に寄せるために使う */
+	private readonly usedMinutesByLane: number[] = allLaneIndexes().map(() => 0);
 
 	constructor(dayCount: number) {
 		this.days = Array.from({ length: dayCount }, () => new DayGrid());
@@ -434,31 +438,30 @@ class PeriodGrid {
 
 	/**
 	 * 1分だけ配置する。空き枠がなければ false。
-	 * 直前（または直後）の分で使っていた枠 → 最後に使った枠 → 端の枠 の順に選ぶ。
-	 * 端は通常は若い番号だが、後半（期間の末尾から詰める）は大きい番号から使い、
-	 * 均等メンバーが若い番号の枠に居続けられるようにする。
+	 * 直前（または直後）の分で使っていた枠 → 使用済みの分数が多い枠 → 若い番号の枠
+	 * の順に選ぶ。固定配置のメンバー同士を同じ枠に寄せ（前半が抜けた枠に後半が入るなど）、
+	 * まるごと空いた枠を均等メンバーのために残す。
 	 */
 	occupyMinute(
 		pokemonId: number,
 		minute: number,
 		adjacentMinute: number,
-		preferHighLane: boolean,
 	): boolean {
 		const { day, minuteInDay } = this.split(minute);
 		if (day.isBusy(pokemonId, minuteInDay)) {
 			return true;
 		}
-		const laneOrder = preferHighLane
-			? allLaneIndexes().reverse()
-			: allLaneIndexes();
-		const candidates = laneOrder.filter(
-			(laneIndex) => this.occupantAt(laneIndex, adjacentMinute) === pokemonId,
+		const byUsage = allLaneIndexes().sort(
+			(left, right) =>
+				this.usedMinutesByLane[right] - this.usedMinutesByLane[left] ||
+				left - right,
 		);
-		const lastLane = this.lastLaneById.get(pokemonId);
-		if (lastLane !== undefined) {
-			candidates.push(lastLane);
-		}
-		candidates.push(...laneOrder);
+		const candidates = [
+			...byUsage.filter(
+				(laneIndex) => this.occupantAt(laneIndex, adjacentMinute) === pokemonId,
+			),
+			...byUsage,
+		];
 		const laneIndex = candidates.find((candidate) =>
 			day.isFree(candidate, minuteInDay),
 		);
@@ -466,7 +469,7 @@ class PeriodGrid {
 			return false;
 		}
 		day.lanes[laneIndex][minuteInDay] = pokemonId;
-		this.lastLaneById.set(pokemonId, laneIndex);
+		this.usedMinutesByLane[laneIndex] += 1;
 		return true;
 	}
 
@@ -477,7 +480,6 @@ class PeriodGrid {
 		pokemonId: number,
 		minutes: number,
 		timeline: Iterable<number>,
-		preferHighLane = false,
 	): number {
 		let remaining = minutes;
 		let previous = -1;
@@ -485,12 +487,63 @@ class PeriodGrid {
 			if (remaining <= 0) {
 				break;
 			}
-			if (this.occupyMinute(pokemonId, minute, previous, preferHighLane)) {
+			if (this.occupyMinute(pokemonId, minute, previous)) {
 				remaining--;
 			}
 			previous = minute;
 		}
 		return remaining;
+	}
+
+	/**
+	 * 枠の割り当てを引き直す。各時刻に「誰が編成に入っているか」は変えずに、
+	 * 続投するメンバーは同じ枠に残し、新しく入るメンバーは同じ時刻に抜けた
+	 * メンバーの枠（なければ若い番号の空き枠）へ入れる。
+	 */
+	rethreadLanes(): void {
+		const laneById = new Map<number, number>();
+		for (const day of this.days) {
+			const source = day.lanes.map((lane) => Int32Array.from(lane));
+			for (const lane of day.lanes) {
+				lane.fill(FREE);
+			}
+			for (let minute = 0; minute < MINUTES_PER_DAY; minute++) {
+				const present = new Set<number>();
+				for (const lane of source) {
+					if (lane[minute] !== FREE) {
+						present.add(lane[minute]);
+					}
+				}
+				const vacated: number[] = [];
+				for (const [pokemonId, laneIndex] of laneById) {
+					if (!present.has(pokemonId)) {
+						laneById.delete(pokemonId);
+						vacated.push(laneIndex);
+					}
+				}
+				const usedLanes = new Set(laneById.values());
+				const freeLanes = [
+					...vacated.sort((left, right) => left - right),
+					...allLaneIndexes().filter(
+						(laneIndex) =>
+							!usedLanes.has(laneIndex) && !vacated.includes(laneIndex),
+					),
+				];
+				for (const pokemonId of present) {
+					if (laneById.has(pokemonId)) {
+						continue;
+					}
+					const laneIndex = freeLanes.shift();
+					if (laneIndex === undefined) {
+						throw new Error("Quick sim rethread ran out of lanes");
+					}
+					laneById.set(pokemonId, laneIndex);
+				}
+				for (const [pokemonId, laneIndex] of laneById) {
+					day.lanes[laneIndex][minute] = pokemonId;
+				}
+			}
+		}
 	}
 
 	countMinutesById(): Map<number, number> {
@@ -587,7 +640,6 @@ function placeFixedJobs(
 					job.pokemonId,
 					job.minutes * dayCount,
 					descendingMinutes(0, grid.totalMinutes),
-					true,
 				);
 				break;
 			default:
@@ -702,23 +754,18 @@ function isBetterCandidate(
  */
 /**
  * 夜担当の枠を選ぶ。
- * 起床後の残りがそのまま収まる枠 → 前日の最後にいた枠（就寝時の入れ替えが不要）
- * → 起床後の空きが長い枠 → 若い番号の枠 の順に優先する。
+ * 起床後の残りがそのまま収まる枠 → 起床後の空きが長い枠 → 若い番号の枠 の順に優先する。
  */
 function chooseNightLane(
 	grid: DayGrid,
 	candidates: readonly number[],
 	job: DayJob,
 	sleepMinutes: number,
-	previousDay: DayGrid | null,
 ): number {
 	const remainder = job.minutes - sleepMinutes;
-	const rank = (laneIndex: number): [number, number, number] => {
+	const rank = (laneIndex: number): [number, number] => {
 		const run = grid.freeRunFrom(laneIndex, sleepMinutes);
-		const continues =
-			previousDay !== null &&
-			previousDay.lanes[laneIndex][MINUTES_PER_DAY - 1] === job.pokemonId;
-		return [run >= remainder ? 1 : 0, continues ? 1 : 0, run];
+		return [run >= remainder ? 1 : 0, run];
 	};
 	return candidates.reduce((best, candidate) => {
 		const bestRank = rank(best);
@@ -738,7 +785,6 @@ function packDayJobsNaturally(
 	nightJobs: readonly DayJob[],
 	dayOnlyJobs: readonly DayJob[],
 	sleepMinutes: number,
-	previousDay: DayGrid | null,
 ): DayGrid | null {
 	const grid = base.clone();
 	const boundaries = grid.collectBoundaries();
@@ -750,13 +796,7 @@ function packDayJobsNaturally(
 		if (remainingLanes.length === 0) {
 			return null;
 		}
-		const laneIndex = chooseNightLane(
-			grid,
-			remainingLanes,
-			job,
-			sleepMinutes,
-			previousDay,
-		);
+		const laneIndex = chooseNightLane(grid, remainingLanes, job, sleepMinutes);
 		remainingLanes.splice(remainingLanes.indexOf(laneIndex), 1);
 		const remainder = job.minutes - sleepMinutes;
 		const run = Math.min(remainder, grid.freeRunFrom(laneIndex, sleepMinutes));
@@ -874,7 +914,6 @@ function scheduleDayWithProtectedSleep(
 	base: DayGrid,
 	jobs: readonly DayJob[],
 	sleepMinutes: number,
-	previousDay: DayGrid | null,
 ): DayGrid | null {
 	const awakeMinutes = MINUTES_PER_DAY - sleepMinutes;
 	const nightCapableLanes = allLaneIndexes().filter((laneIndex) =>
@@ -920,7 +959,6 @@ function scheduleDayWithProtectedSleep(
 			nightJobs,
 			dayOnlyJobs,
 			sleepMinutes,
-			previousDay,
 		) ??
 		packDayJobsWrapAround(
 			base,
@@ -971,9 +1009,8 @@ function placeEvenJobs(
 		if (dayJobs.length === 0) {
 			return;
 		}
-		const previousDay = dayIndex > 0 ? grid.days[dayIndex - 1] : null;
 		const placed =
-			scheduleDayWithProtectedSleep(day, dayJobs, sleepMinutes, previousDay) ??
+			scheduleDayWithProtectedSleep(day, dayJobs, sleepMinutes) ??
 			scheduleDayWithSleepSwaps(day, dayJobs);
 		placed.lanes.forEach((lane, laneIndex) => {
 			day.lanes[laneIndex].set(lane);
@@ -1162,6 +1199,7 @@ export function buildQuickSimSchedule(
 	const grid = new PeriodGrid(dayCount);
 	placeFixedJobs(grid, jobs, structure.sleepMinutes);
 	placeEvenJobs(grid, jobs, structure.sleepMinutes);
+	grid.rethreadLanes();
 
 	const actualById = grid.countMinutesById();
 	const unmetPokemonIds = jobs
