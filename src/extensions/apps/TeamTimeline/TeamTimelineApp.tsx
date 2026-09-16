@@ -46,8 +46,12 @@ import TimelineTable from "./components/TimelineTable";
 import TimeSlotEditor from "./components/TimeSlotEditor";
 import TrialResultSelector from "./components/TrialResultSelector";
 import WipeReveal from "./components/WipeReveal";
-import { runMultiTrialSimulationWithProgress } from "./simulation/MultiTrialSimulator";
+import { summarizeAggregationForAnalysis } from "./simulation/MultiTrialSimulator";
 import { runSimulation } from "./simulation/TimelineSimulator";
+import {
+	runMultiTrialSimulationParallel,
+	runTrialBatchParallel,
+} from "./simulation/TrialBatchRunner";
 import {
 	createInitialState,
 	loadBonusSettingsFromStorage,
@@ -195,7 +199,6 @@ interface SimulationExecutionResult {
 	undoSnapshot: ResimulationUndoSnapshot;
 }
 
-const ANALYSIS_PROGRESS_UPDATE_INTERVAL_MS = 200;
 const ABORT_ERROR_NAME = "AbortError";
 const TIMELINE_WIPE_REVEAL_DURATION_MS = 800;
 const TIMELINE_WIPE_REVEAL_EASING_IN_QUAD =
@@ -397,6 +400,11 @@ interface TeamTimelineAppProps {
  */
 export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 	const { t } = useTranslation();
+	// 結果に埋め込む表示名（スキル対象名など）。シミュレータは i18n を持たないため呼び出し側で解決する。
+	const resolvePokemonName = useCallback(
+		(pokemon: PokemonBoxItem): string => pokemon.filledNickname(t),
+		[t],
+	);
 	const theme = useTheme();
 	const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
 	const teamScale = isDesktop ? 1.5 : 1;
@@ -834,6 +842,7 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				box: timelineRuntimeBoxRef.current || undefined,
 				cookingSettings: state.cookingSettings,
 				provisionalSettings: state.provisionalSettings,
+				resolvePokemonName,
 			});
 			dispatch({ type: "setSimulationResult", result });
 			dispatch({
@@ -875,6 +884,7 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			state.cookingSettings,
 			state.provisionalSettings,
 			currentSimulationContextHash,
+			resolvePokemonName,
 		],
 	);
 
@@ -884,8 +894,9 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			preferredSeed?: number,
 			abortSignal?: AbortSignal,
 		): Promise<SimulationExecutionResult> => {
-			let hasShownFirstTrialPreview = false;
-			const multiResult = await runMultiTrialSimulationWithProgress({
+			const trialCount = state.multiTrialCount;
+			// 試行は Web Worker で並列実行する。最初の試行だけ全結果を受け取り、完了前のプレビューに使う。
+			const multiResult = await runMultiTrialSimulationParallel({
 				team: state.team,
 				timeSlots: state.timeSlots,
 				// seed は試行ごとに付与されるため、設定はそのまま渡す
@@ -896,23 +907,23 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				swaps: state.swaps,
 				noCollectCells: state.noCollectCells,
 				box: timelineRuntimeBoxRef.current || undefined,
-				trialCount: state.multiTrialCount,
+				resolvePokemonName,
+				trialCount,
 				initialSeed,
 				onProgress: (progress) => {
 					setSimulationProgress(progress);
 				},
-				onTrialComplete: ({ index, trialCount, seed, result }) => {
-					if (abortSignal?.aborted) {
-						return;
-					}
-					if (trialCount < 2 || index !== 0 || hasShownFirstTrialPreview) {
-						return;
-					}
-					hasShownFirstTrialPreview = true;
-					dispatch({ type: "setSimulationPreviewResult", result });
-					dispatch({ type: "updateSimulationConfig", config: { seed } });
-				},
-				shouldAbort: () => abortSignal?.aborted === true,
+				onPreview:
+					trialCount < 2
+						? undefined
+						: ({ seed, result }) => {
+								if (abortSignal?.aborted) {
+									return;
+								}
+								dispatch({ type: "setSimulationPreviewResult", result });
+								dispatch({ type: "updateSimulationConfig", config: { seed } });
+							},
+				signal: abortSignal,
 			});
 
 			if (multiResult.trials.length === 0) {
@@ -949,6 +960,7 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				box: timelineRuntimeBoxRef.current || undefined,
 				cookingSettings: state.cookingSettings,
 				provisionalSettings: state.provisionalSettings,
+				resolvePokemonName,
 			});
 			dispatch({ type: "setSimulationResult", result: fullResult });
 			dispatch({
@@ -994,6 +1006,7 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			state.cookingSettings,
 			state.provisionalSettings,
 			currentSimulationContextHash,
+			resolvePokemonName,
 		],
 	);
 
@@ -1271,6 +1284,7 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 					box: timelineRuntimeBoxRef.current || undefined,
 					cookingSettings: state.cookingSettings,
 					provisionalSettings: state.provisionalSettings,
+					resolvePokemonName,
 				});
 				dispatch({ type: "setSimulationResult", result });
 			} catch (e) {
@@ -1287,6 +1301,7 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			state.noCollectCells,
 			state.cookingSettings,
 			state.provisionalSettings,
+			resolvePokemonName,
 		],
 	);
 
@@ -1993,54 +2008,20 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			onProgress?: (progress: number) => void,
 			shouldAbort?: () => boolean,
 		): Promise<AnalysisAverageMetrics> => {
-			const totalEPByPokemonId = new Map<number, number>();
-			const totalHelpByPokemonId = new Map<number, number>();
-			let totalTeamEP = 0;
-			let totalTeamHelpCount = 0;
-			let lastProgressUpdateAt = 0;
-			let lastEmittedProgress = 0;
 			const throwIfAborted = (): void => {
 				if (shouldAbort?.()) {
 					throw createAbortError();
 				}
 			};
 
-			const emitProgress = async (
-				progress: number,
-				force = false,
-			): Promise<void> => {
-				throwIfAborted();
-				if (!onProgress) {
-					return;
-				}
-				const normalizedProgress = Math.max(
-					lastEmittedProgress,
-					Math.max(0, Math.min(100, progress)),
-				);
-				const now = Date.now();
-				if (
-					!force &&
-					now - lastProgressUpdateAt < ANALYSIS_PROGRESS_UPDATE_INTERVAL_MS
-				) {
-					return;
-				}
-				onProgress(normalizedProgress);
-				lastEmittedProgress = normalizedProgress;
-				lastProgressUpdateAt = now;
-				// Yield only when we actually update progress UI.
-				await new Promise<void>((resolve) => setTimeout(resolve, 0));
-				throwIfAborted();
-			};
-
 			throwIfAborted();
+			// 試行は Web Worker で並列実行し、合計値だけを受け取って平均にする。
 			const trialCount = Math.max(analysisSeeds.length, 1);
-			for (let index = 0; index < analysisSeeds.length; index += 1) {
-				throwIfAborted();
-				const seed = analysisSeeds[index];
-				const result = runSimulation({
+			const batch = await runTrialBatchParallel(
+				{
 					team: state.team,
 					timeSlots: state.timeSlots,
-					config: { ...state.simulationConfig, seed },
+					config: state.simulationConfig,
 					bonusSettings: state.bonusSettings,
 					swaps: state.swaps,
 					noCollectCells: state.noCollectCells,
@@ -2055,52 +2036,24 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 						disableEnergyRecoveryBonus: options.disableEnergyRecoveryBonus,
 						disableHelpingBonus: options.disableHelpingBonus,
 					},
-				});
-
-				totalTeamEP += result.teamSummary.grandTotalEP;
-				let trialTeamHelpCount = 0;
-				result.dailySummaries.forEach((summary) => {
-					totalEPByPokemonId.set(
-						summary.pokemonId,
-						(totalEPByPokemonId.get(summary.pokemonId) ?? 0) + summary.totalEP,
-					);
-					trialTeamHelpCount += summary.totalHelpCount;
-					totalHelpByPokemonId.set(
-						summary.pokemonId,
-						(totalHelpByPokemonId.get(summary.pokemonId) ?? 0) +
-							summary.totalHelpCount,
-					);
-				});
-				totalTeamHelpCount += trialTeamHelpCount;
-				await emitProgress(
-					((index + 1) / trialCount) * 100,
-					index + 1 === analysisSeeds.length,
-				);
+				},
+				analysisSeeds,
+				{
+					onProgress: (completed, total) => {
+						if (!shouldAbort?.()) {
+							onProgress?.((completed / total) * 100);
+						}
+					},
+					shouldAbort,
+				},
+			);
+			if (batch.aborted) {
+				throw createAbortError();
 			}
-
 			throwIfAborted();
-			if (analysisSeeds.length === 0) {
-				await emitProgress(100, true);
-			}
+			onProgress?.(100);
 
-			const divisor = trialCount;
-			const averageEPByPokemonId = new Map<number, number>();
-			totalEPByPokemonId.forEach((total, pokemonId) => {
-				averageEPByPokemonId.set(pokemonId, total / divisor);
-			});
-			const averageHelpByPokemonId = new Map<number, number>();
-			totalHelpByPokemonId.forEach((total, pokemonId) => {
-				averageHelpByPokemonId.set(pokemonId, total / divisor);
-			});
-			throwIfAborted();
-
-			return {
-				averageTeamEP: totalTeamEP / divisor,
-				averageTeamHelpCount: totalTeamHelpCount / divisor,
-				averageEPByPokemonId,
-				averageHelpByPokemonId,
-				trialCount: divisor,
-			};
+			return summarizeAggregationForAnalysis(batch.state, trialCount);
 		},
 		[
 			analysisSeeds,

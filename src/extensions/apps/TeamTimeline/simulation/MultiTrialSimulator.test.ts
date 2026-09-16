@@ -8,8 +8,15 @@ import {
 } from "../types/TimeSlotTypes";
 import { createDefaultTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import {
+	createAggregationState,
+	createTrialSeeds,
+	finalizeMultiTrialResult,
+	mergeAggregationStates,
 	runMultiTrialSimulation,
 	runMultiTrialSimulationWithProgress,
+	runTrialBatch,
+	runTrialBatchAsync,
+	summarizeAggregationForAnalysis,
 } from "./MultiTrialSimulator";
 
 const runSimulationMock = vi.fn();
@@ -627,5 +634,123 @@ describe("runMultiTrialSimulation", () => {
 				{ name: "milk", count: 1 },
 			],
 		);
+	});
+});
+
+describe("aggregation helpers", () => {
+	beforeEach(() => {
+		runSimulationMock.mockReset();
+	});
+
+	const baseInput = {
+		team: [],
+		timeSlots: [],
+		config: {
+			...DEFAULT_SIMULATION_CONFIG,
+			initialEnergy: 50,
+			simulationDays: 1,
+		},
+		bonusSettings: defaultBonusSettings,
+	};
+
+	function mockSeedDrivenResults(): void {
+		runSimulationMock.mockImplementation(
+			({ config }: { config: { seed: number } }) => {
+				const summaries = [
+					createDailySummary(1, config.seed, config.seed * 10),
+				];
+				// Pokemon 2 only appears from seed 12 on, like a swapped-in member.
+				if (config.seed >= 12) {
+					summaries.push(createDailySummary(2, 1, config.seed));
+				}
+				return {
+					...createSimulationResult(summaries, createTeamSummary(config.seed)),
+					cookingResult: createCookingResult(
+						[createCookingEventWithExtraUsages("m", "curry", config.seed, [])],
+						{ apple: 0.5 },
+						config.seed,
+					),
+				};
+			},
+		);
+	}
+
+	it("mergeAggregationStates reproduces a single batch from ordered chunks", () => {
+		mockSeedDrivenResults();
+		const seeds = createTrialSeeds(10, 6);
+		const whole = runTrialBatch(baseInput, seeds);
+		const merged = createAggregationState();
+		for (const chunk of [
+			seeds.slice(0, 2),
+			seeds.slice(2, 5),
+			seeds.slice(5),
+		]) {
+			mergeAggregationStates(merged, runTrialBatch(baseInput, chunk).state);
+		}
+
+		expect(merged.dailyOrder).toEqual(whole.state.dailyOrder);
+		expect(merged.teamAcc).toEqual(whole.state.teamAcc);
+		expect([...merged.dailyAccsByPokemonId.entries()]).toEqual([
+			...whole.state.dailyAccsByPokemonId.entries(),
+		]);
+		expect(merged.cookingAcc.hasCookingResult).toBe(true);
+		expect(merged.cookingAcc.totalInitialIngredientEPSum).toBe(
+			whole.state.cookingAcc.totalInitialIngredientEPSum,
+		);
+		expect([...merged.cookingAcc.recipeAccs.entries()]).toEqual([
+			...whole.state.cookingAcc.recipeAccs.entries(),
+		]);
+		expect(merged.cookingAcc.leftoverIngredientSums.get("apple")).toBeCloseTo(
+			whole.state.cookingAcc.leftoverIngredientSums.get("apple") ?? Number.NaN,
+		);
+		expect(finalizeMultiTrialResult([...whole.trials], merged, 6)).toEqual(
+			finalizeMultiTrialResult([...whole.trials], whole.state, 6),
+		);
+	});
+
+	it("summarizeAggregationForAnalysis divides sums by the trial count", () => {
+		mockSeedDrivenResults();
+		const { state } = runTrialBatch(baseInput, createTrialSeeds(10, 4));
+
+		const metrics = summarizeAggregationForAnalysis(state, 4);
+
+		expect(metrics.trialCount).toBe(4);
+		expect(metrics.averageTeamEP).toBe((10 + 11 + 12 + 13) / 4);
+		expect(metrics.averageEPByPokemonId.get(1)).toBe(
+			(100 + 110 + 120 + 130) / 4,
+		);
+		expect(metrics.averageEPByPokemonId.get(2)).toBe((12 + 13) / 4);
+		expect(metrics.averageHelpByPokemonId.get(1)).toBe((10 + 11 + 12 + 13) / 4);
+		expect(metrics.averageTeamHelpCount).toBe((10 + 11 + 12 + 13 + 2) / 4);
+	});
+
+	it("summarizeAggregationForAnalysis yields zeros for an empty run", () => {
+		const metrics = summarizeAggregationForAnalysis(
+			createAggregationState(),
+			0,
+		);
+		expect(metrics.trialCount).toBe(1);
+		expect(metrics.averageTeamEP).toBe(0);
+		expect(metrics.averageEPByPokemonId.size).toBe(0);
+	});
+
+	it("runTrialBatchAsync stops between trials and reports progress before yielding", async () => {
+		mockSeedDrivenResults();
+		const progress: number[] = [];
+		let stop = false;
+		const { trials } = await runTrialBatchAsync(
+			baseInput,
+			createTrialSeeds(10, 5),
+			{
+				yieldIntervalMs: 0,
+				onProgress: (completed) => {
+					progress.push(completed);
+					stop = completed >= 2;
+				},
+				shouldStop: () => stop,
+			},
+		);
+		expect(trials.map((trial) => trial.seed)).toEqual([10, 11]);
+		expect(progress).toEqual([1, 2]);
 	});
 });

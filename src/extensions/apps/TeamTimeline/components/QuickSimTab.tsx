@@ -14,8 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type PokemonBox from "../../../../util/PokemonBox";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
-import { runMultiTrialSimulationWithProgress } from "../simulation/MultiTrialSimulator";
 import { runSimulation } from "../simulation/TimelineSimulator";
+import { runMultiTrialSimulationParallel } from "../simulation/TrialBatchRunner";
 import type {
 	AverageCookingSummary,
 	CookingSimulationSettings,
@@ -60,6 +60,7 @@ import DailySummaryRow from "./DailySummaryRow";
 import InitialIngredientsEditor from "./InitialIngredientsEditor";
 import QuickSimImportConfirmDialog from "./QuickSimImportConfirmDialog";
 import QuickSimMemberList from "./QuickSimMemberList";
+import QuickSimOptimizerPanel from "./QuickSimOptimizerPanel";
 import SummaryValueModeToggle from "./SummaryValueModeToggle";
 import TeamSummaryRow from "./TeamSummaryRow";
 import type { TimelineDisplayMode } from "./TimelineCell";
@@ -357,6 +358,20 @@ export default function QuickSimTab({
 		setIngredientsExpanded((previous) => !previous);
 	}, []);
 
+	const handleOptimizerApply = useCallback(
+		(percentByPokemonId: ReadonlyMap<number, number>) => {
+			setMembers((previous) =>
+				previous.map((member) => {
+					const usagePercent = percentByPokemonId.get(member.pokemonId);
+					return usagePercent === undefined
+						? member
+						: { ...member, usagePercent };
+				}),
+			);
+		},
+		[],
+	);
+
 	const handleImportClick = useCallback(() => {
 		setImportConfirmOpen(true);
 	}, []);
@@ -378,6 +393,12 @@ export default function QuickSimTab({
 		setImportConfirmOpen(false);
 	}, [team, swaps, timeSlots, simulationConfig.simulationDays, runtimeBox]);
 
+	// 結果に埋め込む表示名（スキル対象名など）。シミュレータは i18n を持たないため呼び出し側で解決する。
+	const resolvePokemonName = useCallback(
+		(pokemon: PokemonBoxItem): string => pokemon.filledNickname(t),
+		[t],
+	);
+
 	const runSelectedTrial = useCallback(
 		(timeline: QuickSimTimeline, seed: number): SimulationResult =>
 			runSimulation({
@@ -390,6 +411,7 @@ export default function QuickSimTab({
 				box: runtimeBox,
 				cookingSettings,
 				provisionalSettings,
+				resolvePokemonName,
 			}),
 		[
 			simulationConfig,
@@ -397,6 +419,7 @@ export default function QuickSimTab({
 			runtimeBox,
 			cookingSettings,
 			provisionalSettings,
+			resolvePokemonName,
 		],
 	);
 
@@ -436,9 +459,9 @@ export default function QuickSimTab({
 				};
 			}
 
-			// 最初の試行のシードが基準シード。結果は EP 順に並び替えられるため別に控える。
-			let baseSeed: number | null = null;
-			const multiResult = await runMultiTrialSimulationWithProgress({
+			// 試行は Web Worker で並列実行する。最初の試行のシードが基準シード
+			// （結果は EP 順に並び替えられるため baseSeed で受け取る）。
+			const multiResult = await runMultiTrialSimulationParallel({
 				team: timeline.team,
 				timeSlots: timeline.timeSlots,
 				config: simulationConfig,
@@ -448,17 +471,13 @@ export default function QuickSimTab({
 				swaps: timeline.swaps,
 				noCollectCells: timeline.noCollectCells,
 				box: runtimeBox,
+				resolvePokemonName,
 				trialCount: multiTrialCount,
 				initialSeed: seedMode === "fixed" ? simulationConfig.seed : undefined,
 				onProgress: (progress) => {
 					setSimulationProgress(progress);
 				},
-				onTrialComplete: ({ index, seed }) => {
-					if (index === 0) {
-						baseSeed = seed;
-					}
-				},
-				shouldAbort: () => abortSignal.aborted,
+				signal: abortSignal,
 			});
 			throwIfAborted();
 			if (multiResult.trials.length === 0) {
@@ -469,9 +488,7 @@ export default function QuickSimTab({
 			const selectedTrialIndex = multiResult.medianIndex;
 			const selectedSeed = multiResult.trials[selectedTrialIndex].seed;
 			const simulationResult = runSelectedTrial(timeline, selectedSeed);
-			if (baseSeed !== null) {
-				onSeedChange(baseSeed);
-			}
+			onSeedChange(multiResult.baseSeed);
 			setSimulationProgress(PROGRESS_COMPLETE);
 			return {
 				timeline,
@@ -492,6 +509,7 @@ export default function QuickSimTab({
 			seedMode,
 			multiTrialCount,
 			runSelectedTrial,
+			resolvePokemonName,
 			bonusSettings,
 			cookingSettings,
 			provisionalSettings,
@@ -663,6 +681,21 @@ export default function QuickSimTab({
 				onAddClick={handleAddClick}
 				onImportClick={handleImportClick}
 				onSwapClick={handleSwapClick}
+			/>
+
+			<QuickSimOptimizerPanel
+				members={members}
+				box={runtimeBox}
+				timeSlots={timeSlots}
+				simulationConfig={simulationConfig}
+				bonusSettings={bonusSettings}
+				cookingSettings={cookingSettings}
+				provisionalSettings={provisionalSettings}
+				seedMode={seedMode}
+				hasSleepSlot={
+					scheduleResult.ok || scheduleResult.error !== "noSleepSlot"
+				}
+				onApply={handleOptimizerApply}
 			/>
 
 			<Box sx={PANEL_SX} data-testid="quick-sim-initial-ingredients">

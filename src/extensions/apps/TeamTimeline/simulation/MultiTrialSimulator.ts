@@ -6,6 +6,7 @@
 import type { IngredientName } from "../../../../data/pokemons";
 import type PokemonBox from "../../../../util/PokemonBox";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
+import type { StrengthParameter } from "../../../../util/PokemonStrength";
 import type {
 	AverageCookingSummary,
 	CookingSimulationResult,
@@ -23,10 +24,15 @@ import type {
 	TeamSummary,
 	TimeSlot,
 } from "../types/TimeSlotTypes";
-import { runSimulation } from "./TimelineSimulator";
+import {
+	type PokemonNameResolver,
+	runSimulation,
+	type SimulationAnalysisOptions,
+	type SimulationInput,
+} from "./TimelineSimulator";
 
-/** Multi-trial simulation input */
-export interface MultiTrialInput {
+/** Inputs shared by every trial (everything in SimulationInput except the seed). */
+export interface TrialSimulationInput {
 	readonly team: (PokemonBoxItem | null)[];
 	readonly timeSlots: TimeSlot[];
 	readonly config: Omit<SimulationConfig, "seed">;
@@ -37,8 +43,39 @@ export interface MultiTrialInput {
 	readonly cookingSettings?: CookingSimulationSettings;
 	/** 仮設定（公式未公開パラメータ） */
 	readonly provisionalSettings?: ProvisionalSettings;
+	/** 追加分析用オプション */
+	readonly analysisOptions?: SimulationAnalysisOptions;
+	/** 構築済み StrengthParameter（省略時は runSimulation が構築する） */
+	readonly strengthParameter?: StrengthParameter;
+	/** 結果へ埋め込む表示名の解決関数 */
+	readonly resolvePokemonName?: PokemonNameResolver;
+}
+
+/** Multi-trial simulation input */
+export interface MultiTrialInput extends TrialSimulationInput {
 	readonly trialCount: number;
 	readonly initialSeed?: number;
+}
+
+/** Build the runSimulation input for one trial. */
+export function buildTrialSimulationInput(
+	input: TrialSimulationInput,
+	seed: number,
+): SimulationInput {
+	return {
+		team: input.team,
+		timeSlots: input.timeSlots,
+		config: { ...input.config, seed },
+		bonusSettings: input.bonusSettings,
+		swaps: input.swaps,
+		noCollectCells: input.noCollectCells,
+		box: input.box,
+		cookingSettings: input.cookingSettings,
+		provisionalSettings: input.provisionalSettings,
+		analysisOptions: input.analysisOptions,
+		strengthParameter: input.strengthParameter,
+		resolvePokemonName: input.resolvePokemonName,
+	};
 }
 
 export interface MultiTrialProgressInput extends MultiTrialInput {
@@ -98,7 +135,12 @@ type CookingRecipeAccumulator = {
 	totalCookingEP: number;
 };
 
-type AggregationState = {
+/**
+ * Running sums over completed trials. Every field is a plain sum / max /
+ * set union, so partial states computed independently (e.g. by parallel
+ * workers) can be combined with {@link mergeAggregationStates}.
+ */
+export type AggregationState = {
 	dailyAccsByPokemonId: Map<number, DailyAccumulator>;
 	dailyOrder: number[];
 	teamAcc: {
@@ -126,7 +168,7 @@ type AggregationState = {
 	};
 };
 
-function createAggregationState(): AggregationState {
+export function createAggregationState(): AggregationState {
 	return {
 		dailyAccsByPokemonId: new Map<number, DailyAccumulator>(),
 		dailyOrder: [],
@@ -156,15 +198,25 @@ function createAggregationState(): AggregationState {
 	};
 }
 
-function resolveBaseSeed(initialSeed: number | undefined): number {
+export function resolveBaseSeed(initialSeed: number | undefined): number {
 	if (initialSeed !== undefined) {
 		return initialSeed;
 	}
 	return Math.floor(Math.random() * 1_000_000);
 }
 
-function createSeed(baseSeed: number, index: number): number {
+export function createSeed(baseSeed: number, index: number): number {
 	return baseSeed + index;
+}
+
+/** Seeds for `trialCount` trials starting from `baseSeed`. */
+export function createTrialSeeds(
+	baseSeed: number,
+	trialCount: number,
+): number[] {
+	return Array.from({ length: trialCount }, (_, index) =>
+		createSeed(baseSeed, index),
+	);
 }
 
 function accumulateDailySummary(
@@ -316,6 +368,169 @@ function accumulateCookingResult(
 				0) + postLeftoverCount,
 		);
 	}
+}
+
+/** Fold one completed trial into the running sums. */
+export function accumulateTrialResult(
+	state: AggregationState,
+	result: SimulationResult,
+): void {
+	for (const dailySummary of result.dailySummaries) {
+		accumulateDailySummary(state, dailySummary);
+	}
+	accumulateTeamSummary(state, result.teamSummary);
+	accumulateCookingResult(state, result.cookingResult);
+}
+
+function mergeCountMaps<K>(
+	target: Map<K, number>,
+	source: ReadonlyMap<K, number>,
+): void {
+	for (const [key, count] of source) {
+		target.set(key, (target.get(key) ?? 0) + count);
+	}
+}
+
+function mergeDailyAccumulator(
+	target: DailyAccumulator,
+	source: DailyAccumulator,
+): void {
+	target.totalHelpCount += source.totalHelpCount;
+	target.totalSkillCount += source.totalSkillCount;
+	target.totalBerryCount += source.totalBerryCount;
+	target.totalHugeMagoBerryCount += source.totalHugeMagoBerryCount;
+	target.hugeMagoBerryEP += source.hugeMagoBerryEP;
+	target.totalSkillOverflowCount += source.totalSkillOverflowCount;
+	target.berryEP += source.berryEP;
+	target.ingredientEP += source.ingredientEP;
+	target.skillEP += source.skillEP;
+	target.totalEP += source.totalEP;
+	target.totalDirectSkillEP += source.totalDirectSkillEP;
+	target.totalPresentCandyCount += source.totalPresentCandyCount;
+	target.totalCookingPotCapacityIncrease +=
+		source.totalCookingPotCapacityIncrease;
+	target.totalTastyChanceIncreasePercent +=
+		source.totalTastyChanceIncreasePercent;
+	target.totalDreamShardCount += source.totalDreamShardCount;
+	target.cookingEP += source.cookingEP;
+	mergeCountMaps(target.ingredientSums, source.ingredientSums);
+	mergeCountMaps(target.skillIngredientSums, source.skillIngredientSums);
+	mergeCountMaps(target.overflowIngredientSums, source.overflowIngredientSums);
+}
+
+/**
+ * Add the sums of `source` into `target`. `dailyOrder` keeps target's order
+ * and appends ids first seen in source, so merging chunks in seed order
+ * reproduces the order of a serial run.
+ */
+export function mergeAggregationStates(
+	target: AggregationState,
+	source: AggregationState,
+): void {
+	for (const pokemonId of source.dailyOrder) {
+		const sourceAcc = source.dailyAccsByPokemonId.get(pokemonId);
+		if (!sourceAcc) {
+			continue;
+		}
+		const targetAcc = target.dailyAccsByPokemonId.get(pokemonId);
+		if (!targetAcc) {
+			target.dailyAccsByPokemonId.set(pokemonId, {
+				...sourceAcc,
+				ingredientSums: new Map(sourceAcc.ingredientSums),
+				skillIngredientSums: new Map(sourceAcc.skillIngredientSums),
+				overflowIngredientSums: new Map(sourceAcc.overflowIngredientSums),
+			});
+			target.dailyOrder.push(pokemonId);
+			continue;
+		}
+		mergeDailyAccumulator(targetAcc, sourceAcc);
+	}
+
+	const teamTarget = target.teamAcc;
+	const teamSource = source.teamAcc;
+	teamTarget.totalBerryEP += teamSource.totalBerryEP;
+	teamTarget.totalHugeMagoBerryCount += teamSource.totalHugeMagoBerryCount;
+	teamTarget.totalHugeMagoBerryEP += teamSource.totalHugeMagoBerryEP;
+	teamTarget.totalIngredientEP += teamSource.totalIngredientEP;
+	teamTarget.totalSkillEP += teamSource.totalSkillEP;
+	teamTarget.grandTotalEP += teamSource.grandTotalEP;
+	teamTarget.totalPresentCandyCount += teamSource.totalPresentCandyCount;
+	teamTarget.totalCookingPotCapacityIncrease +=
+		teamSource.totalCookingPotCapacityIncrease;
+	teamTarget.totalTastyChanceIncreasePercent +=
+		teamSource.totalTastyChanceIncreasePercent;
+	teamTarget.totalDreamShardCount += teamSource.totalDreamShardCount;
+	teamTarget.totalCookingEP += teamSource.totalCookingEP;
+	mergeCountMaps(teamTarget.ingredientSums, teamSource.ingredientSums);
+
+	const cookingTarget = target.cookingAcc;
+	const cookingSource = source.cookingAcc;
+	cookingTarget.hasCookingResult ||= cookingSource.hasCookingResult;
+	cookingTarget.totalInitialIngredientEPSum +=
+		cookingSource.totalInitialIngredientEPSum;
+	for (const [recipeName, sourceAcc] of cookingSource.recipeAccs) {
+		const targetAcc = cookingTarget.recipeAccs.get(recipeName);
+		if (!targetAcc) {
+			cookingTarget.recipeAccs.set(recipeName, { ...sourceAcc });
+			continue;
+		}
+		targetAcc.count += sourceAcc.count;
+		targetAcc.totalCookingEP += sourceAcc.totalCookingEP;
+		targetAcc.eBase = Math.max(targetAcc.eBase, sourceAcc.eBase);
+	}
+	for (const name of cookingSource.leftoverIngredientSeen) {
+		cookingTarget.leftoverIngredientSeen.add(name);
+	}
+	mergeCountMaps(
+		cookingTarget.leftoverIngredientSums,
+		cookingSource.leftoverIngredientSums,
+	);
+	for (const name of cookingSource.leftoverIngredientAfterExtraSeen) {
+		cookingTarget.leftoverIngredientAfterExtraSeen.add(name);
+	}
+	mergeCountMaps(
+		cookingTarget.leftoverIngredientAfterExtraSums,
+		cookingSource.leftoverIngredientAfterExtraSums,
+	);
+}
+
+/** Per-trial averages used by the additional analysis (no rounding). */
+export interface AggregatedAnalysisMetrics {
+	averageTeamEP: number;
+	averageTeamHelpCount: number;
+	averageEPByPokemonId: Map<number, number>;
+	averageHelpByPokemonId: Map<number, number>;
+	trialCount: number;
+}
+
+/**
+ * Derive analysis averages from the running sums. The divisor is
+ * max(trialCount, 1) so an empty run yields zeros instead of NaN.
+ */
+export function summarizeAggregationForAnalysis(
+	state: AggregationState,
+	trialCount: number,
+): AggregatedAnalysisMetrics {
+	const divisor = Math.max(trialCount, 1);
+	const averageEPByPokemonId = new Map<number, number>();
+	const averageHelpByPokemonId = new Map<number, number>();
+	let totalHelpCount = 0;
+	for (const pokemonId of state.dailyOrder) {
+		const acc = state.dailyAccsByPokemonId.get(pokemonId);
+		if (!acc) {
+			continue;
+		}
+		averageEPByPokemonId.set(pokemonId, acc.totalEP / divisor);
+		averageHelpByPokemonId.set(pokemonId, acc.totalHelpCount / divisor);
+		totalHelpCount += acc.totalHelpCount;
+	}
+	return {
+		averageTeamEP: state.teamAcc.grandTotalEP / divisor,
+		averageTeamHelpCount: totalHelpCount / divisor,
+		averageEPByPokemonId,
+		averageHelpByPokemonId,
+		trialCount: divisor,
+	};
 }
 
 function finalizeAverageCookingSummary(
@@ -478,7 +693,7 @@ function finalizeAverages(
 	return { averageDailySummaries, averageTeamSummary, averageCookingSummary };
 }
 
-function finalizeMultiTrialResult(
+export function finalizeMultiTrialResult(
 	trials: TrialSummary[],
 	state: AggregationState,
 	completedTrialCount: number,
@@ -496,6 +711,97 @@ function finalizeMultiTrialResult(
 	};
 }
 
+/** Result of running a batch of seeds: per-trial summaries plus running sums. */
+export interface TrialBatchResult {
+	trials: TrialSummary[];
+	state: AggregationState;
+}
+
+export interface TrialBatchHooks {
+	/** Called after each trial with its full result. */
+	onTrialComplete?: (trial: {
+		index: number;
+		seed: number;
+		result: SimulationResult;
+	}) => void;
+	/** Checked before every trial after the first; returning true stops the batch. */
+	shouldStop?: () => boolean;
+}
+
+/**
+ * Run the given seeds in order on the current thread and fold every trial
+ * into one {@link AggregationState}. Shared by the synchronous runner and
+ * the Web Worker so both accumulate identically.
+ */
+export function runTrialBatch(
+	input: TrialSimulationInput,
+	seeds: readonly number[],
+	hooks?: TrialBatchHooks,
+): TrialBatchResult {
+	const trials: TrialSummary[] = [];
+	const state = createAggregationState();
+	for (let index = 0; index < seeds.length; index++) {
+		if (index > 0 && hooks?.shouldStop?.()) {
+			break;
+		}
+		const seed = seeds[index];
+		const result = runSimulation(buildTrialSimulationInput(input, seed));
+		trials.push({ seed, grandTotalEP: result.teamSummary.grandTotalEP });
+		hooks?.onTrialComplete?.({ index, seed, result });
+		accumulateTrialResult(state, result);
+	}
+	return { trials, state };
+}
+
+export interface TrialBatchAsyncHooks extends TrialBatchHooks {
+	/**
+	 * Called with the number of completed trials right before the batch
+	 * yields to the event loop (at most once per `yieldIntervalMs`).
+	 */
+	onProgress?: (completed: number) => void;
+	/** Minimum time between yields. Default {@link DEFAULT_BATCH_YIELD_INTERVAL_MS}. */
+	yieldIntervalMs?: number;
+}
+
+/** Yield cadence that keeps a worker responsive to "stop" without measurable cost. */
+export const DEFAULT_BATCH_YIELD_INTERVAL_MS = 50;
+
+/**
+ * {@link runTrialBatch} that yields to the event loop every
+ * `yieldIntervalMs` so the caller can report progress and, inside a
+ * worker, receive a stop message between trials.
+ */
+export async function runTrialBatchAsync(
+	input: TrialSimulationInput,
+	seeds: readonly number[],
+	hooks: TrialBatchAsyncHooks = {},
+): Promise<TrialBatchResult> {
+	const yieldIntervalMs =
+		hooks.yieldIntervalMs ?? DEFAULT_BATCH_YIELD_INTERVAL_MS;
+	const trials: TrialSummary[] = [];
+	const state = createAggregationState();
+	let lastYieldAt = Date.now();
+	for (let index = 0; index < seeds.length; index++) {
+		if (index > 0 && hooks.shouldStop?.()) {
+			break;
+		}
+		const seed = seeds[index];
+		const result = runSimulation(buildTrialSimulationInput(input, seed));
+		trials.push({ seed, grandTotalEP: result.teamSummary.grandTotalEP });
+		hooks.onTrialComplete?.({ index, seed, result });
+		accumulateTrialResult(state, result);
+
+		const isLast = index === seeds.length - 1;
+		if (isLast || Date.now() - lastYieldAt < yieldIntervalMs) {
+			continue;
+		}
+		hooks.onProgress?.(trials.length);
+		await waitNextTick();
+		lastYieldAt = Date.now();
+	}
+	return { trials, state };
+}
+
 /**
  * Run multi-trial simulation with different seeds.
  * Returns trials sorted by grandTotalEP (descending, highest first),
@@ -504,49 +810,15 @@ function finalizeMultiTrialResult(
 export function runMultiTrialSimulation(
 	input: MultiTrialInput,
 ): MultiTrialResult {
-	const {
-		team,
-		timeSlots,
-		config,
-		bonusSettings,
-		swaps,
-		noCollectCells,
-		box,
-		trialCount,
-	} = input;
+	const { trialCount } = input;
 	if (trialCount <= 0) {
 		throw new Error("trialCount must be greater than 0");
 	}
-	const trials: TrialSummary[] = [];
-	const state = createAggregationState();
 	const baseSeed = resolveBaseSeed(input.initialSeed);
-
-	for (let i = 0; i < trialCount; i++) {
-		const seed = createSeed(baseSeed, i);
-		const result = runSimulation({
-			team,
-			timeSlots,
-			config: { ...config, seed },
-			bonusSettings,
-			swaps,
-			noCollectCells,
-			box,
-			cookingSettings: input.cookingSettings,
-			provisionalSettings: input.provisionalSettings,
-		});
-
-		trials.push({
-			seed,
-			grandTotalEP: result.teamSummary.grandTotalEP,
-		});
-
-		for (const dailySummary of result.dailySummaries) {
-			accumulateDailySummary(state, dailySummary);
-		}
-		accumulateTeamSummary(state, result.teamSummary);
-		accumulateCookingResult(state, result.cookingResult);
-	}
-
+	const { trials, state } = runTrialBatch(
+		input,
+		createTrialSeeds(baseSeed, trialCount),
+	);
 	return finalizeMultiTrialResult(trials, state, trials.length);
 }
 
@@ -566,13 +838,6 @@ export async function runMultiTrialSimulationWithProgress(
 	input: MultiTrialProgressInput,
 ): Promise<MultiTrialResult> {
 	const {
-		team,
-		timeSlots,
-		config,
-		bonusSettings,
-		swaps,
-		noCollectCells,
-		box,
 		trialCount,
 		onProgress,
 		onTrialComplete,
@@ -621,17 +886,7 @@ export async function runMultiTrialSimulationWithProgress(
 			break;
 		}
 		const seed = createSeed(baseSeed, i);
-		const result = runSimulation({
-			team,
-			timeSlots,
-			config: { ...config, seed },
-			bonusSettings,
-			swaps,
-			noCollectCells,
-			box,
-			cookingSettings: input.cookingSettings,
-			provisionalSettings: input.provisionalSettings,
-		});
+		const result = runSimulation(buildTrialSimulationInput(input, seed));
 
 		trials.push({
 			seed,
@@ -643,12 +898,7 @@ export async function runMultiTrialSimulationWithProgress(
 			seed,
 			result,
 		});
-
-		for (const dailySummary of result.dailySummaries) {
-			accumulateDailySummary(state, dailySummary);
-		}
-		accumulateTeamSummary(state, result.teamSummary);
-		accumulateCookingResult(state, result.cookingResult);
+		accumulateTrialResult(state, result);
 
 		const progress = Math.round(((i + 1) / trialCount) * 100);
 		await emitProgress(progress, i + 1 === trialCount);

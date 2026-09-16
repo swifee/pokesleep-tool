@@ -18,6 +18,11 @@
 		"jsx": "react-jsx"
 	},
 	"include": ["src"],
-	"exclude": ["src/sw.ts", "src/util/Team/teamSimulation.worker.ts"],
+	"exclude": [
+		"src/sw.ts",
+		"src/util/Team/teamSimulation.worker.ts",
+		"src/extensions/apps/TeamTimeline/simulation/quickSimOptimizer.worker.ts",
+		"src/extensions/apps/TeamTimeline/simulation/timelineSimulation.worker.ts"
+	],
 	"references": [{ "path": "./tsconfig.sw.json" }]
 }

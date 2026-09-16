@@ -2,7 +2,8 @@
 
 チームに入れたいポケモンと「起用率」を選ぶだけで、ポケモンの入れ替えを自動設定して
 シミュレーションする機能。詳細シミュ（従来の「シミュレーション」タブ）と同じ
-エンジン（`runSimulation` / `runMultiTrialSimulationWithProgress`）で計算する。
+エンジン（`runSimulation` / `runMultiTrialSimulationParallel`）で計算する。
+複数試行の実行方法は `document/teamtimeline-simulation-workers.md` を参照。
 
 - タブ: 「簡易シミュ」（従来の「シミュレーション」タブは「詳細シミュ」に改名）
 - 保存先: `localStorage["PstTeamTimelineQuickSimV1"]`（メンバー・起用率・起用方法。ポケモンは
