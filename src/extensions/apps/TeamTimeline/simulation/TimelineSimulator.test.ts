@@ -557,6 +557,73 @@ describe("TimelineSimulator", () => {
 		expect(endPokemonId).toBe(pokemonB.id);
 	});
 
+	it("初期チームが空でも入れ替えで投入されたポケモンはおてつだいを行う", () => {
+		processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
+			const energy = typeof args[2] === "number" ? args[2] : 50;
+			return createNeutralSkillEffectResult(energy);
+		});
+
+		const pokemon = createBerryBurstDisguisePokemon(2);
+		const box = new PokemonBox([pokemon]);
+
+		const result = runSimulation({
+			team: [null, null, null, null, null],
+			timeSlots: [
+				{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
+				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
+				{ id: "lunch", time: "12:00", sleepState: "none", hasMeal: false },
+			],
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 24680,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
+			bonusSettings: defaultBonusSettings,
+			swaps: [
+				{
+					dayIndex: 0,
+					slotId: "wake",
+					teamSlotIndex: 0,
+					newPokemonId: pokemon.id,
+					initialEnergy: 100,
+				},
+			],
+			box,
+		});
+
+		// 入れ替えは時間帯の計算後に適用されるため、起床スロットにはまだ結果がない
+		expect(result.slotResults.get("wake__day0")).toEqual([]);
+		expect(
+			result.slotResults.get("lunch__day0")?.map((r) => r.pokemonId),
+		).toEqual([pokemon.id]);
+		expect(sumHelpCount(result, pokemon.id)).toBeGreaterThan(0);
+		expect(result.dailySummaries.map((s) => s.pokemonId)).toEqual([pokemon.id]);
+		expect(result.teamSummary.grandTotalEP).toBeGreaterThan(0);
+	});
+
+	it("初期チームが空で入れ替えもない場合は空の結果を返す", () => {
+		const result = runSimulation({
+			team: [null, null, null, null, null],
+			timeSlots: [
+				{ id: "sleep", time: "22:00", sleepState: "sleep", hasMeal: false },
+				{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
+			],
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				seed: 24680,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
+			bonusSettings: defaultBonusSettings,
+		});
+
+		expect(result.slotResults.size).toBe(0);
+		expect(result.dailySummaries).toEqual([]);
+		expect(result.teamSummary.grandTotalEP).toBe(0);
+		expect(processSkillTriggersMock).not.toHaveBeenCalled();
+	});
+
 	it("再編成時は前回編成時の最終げんきを引き継ぐ", () => {
 		processSkillTriggersMock.mockImplementation((...args: unknown[]) => {
 			const energy = typeof args[2] === "number" ? args[2] : 50;
