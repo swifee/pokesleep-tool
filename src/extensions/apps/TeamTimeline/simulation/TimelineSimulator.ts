@@ -102,6 +102,15 @@ import {
 
 const INACTIVE_WAKE_RECOVERY_DIVISOR = 20;
 const BAG_COUNT_EPSILON = 1e-9;
+/** ポケモン ID から乱数列を決めるときの乗数（32bit の黄金比ハッシュ） */
+const POKEMON_RANDOM_STREAM_MULTIPLIER = 0x9e3779b1;
+
+/** ポケモン ID ごとに固定した乱数列のシード */
+function createPokemonRandomSeed(baseSeed: number, pokemonId: number): number {
+	return (
+		(baseSeed + Math.imul(pokemonId, POKEMON_RANDOM_STREAM_MULTIPLIER)) >>> 0
+	);
+}
 
 const MIXED_RECIPE_NAME_BY_CATEGORY: Record<CookingCategory, string> = {
 	curry: "mixedCurry",
@@ -171,6 +180,12 @@ export interface SimulationAnalysisOptions {
 	suppressEnergyDeltaSkillPokemonIds?: readonly number[];
 	disableEnergyRecoveryBonus?: boolean;
 	disableHelpingBonus?: boolean;
+	/**
+	 * ポケモンごとの乱数列をポケモン ID から決め、入れ替えで再登場しても同じ列を
+	 * 続ける。編成の違う候補を同じシードで比べる（共通乱数）ときに使う。
+	 * 既定ではチーム枠の位置と時間帯番号から乱数列を決める（従来どおり）。
+	 */
+	perPokemonRandomStreams?: boolean;
 }
 
 /** シミュレーション入力 */
@@ -195,6 +210,12 @@ export interface SimulationInput {
 	cookingSettings?: CookingSimulationSettings;
 	/** 仮設定（公式未公開パラメータ、オプショナル） */
 	provisionalSettings?: ProvisionalSettings;
+	/**
+	 * ボーナス設定から構築済みの StrengthParameter（オプショナル）。
+	 * 省略時は個体値計算機の保存設定（localStorage）とボーナス設定から構築する。
+	 * Web Worker など localStorage を持たない環境では必ず指定する。
+	 */
+	strengthParameter?: StrengthParameter;
 }
 
 /** ポケモンの状態（シミュレーション中の内部管理用） */
@@ -701,12 +722,15 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 	const suppressEnergyDeltaSkillPokemonIds = new Set<number>(
 		analysisOptions?.suppressEnergyDeltaSkillPokemonIds ?? [],
 	);
+	const perPokemonRandomStreams =
+		analysisOptions?.perPokemonRandomStreams === true;
 	const energyRecoveryOptions = {
 		disabledPokemonIds,
 		disableEnergyRecoveryBonus:
 			analysisOptions?.disableEnergyRecoveryBonus === true,
 	};
 	const strengthParameter =
+		input.strengthParameter ??
 		buildStrengthParameterFromTimelineBonusSettings(bonusSettings);
 	const normalizedPokemonById = new Map<number, PokemonBoxItem>();
 	const getSimulationPokemon = (pokemon: PokemonBoxItem): PokemonBoxItem => {
@@ -818,7 +842,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			pokemon,
 			slotIndex: normalizedTeam.indexOf(pokemon),
 			currentEnergy: config.initialEnergy,
-			random: new SeededRandom(config.seed + index),
+			random: new SeededRandom(
+				perPokemonRandomStreams
+					? createPokemonRandomSeed(config.seed, pokemon.id)
+					: config.seed + index,
+			),
 			sleepStartTime: null,
 			usedSleepScore: 0,
 			// 新規追加
@@ -1532,14 +1560,21 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				startEnergy = swap.initialEnergy;
 			}
 
-			// 新しいシード値で乱数を初期化
-			const swapSeed = config.seed + swap.teamSlotIndex + i * 100;
+			// 新しいシード値で乱数を初期化。
+			// ポケモンごとの乱数列を使うときは、以前の登場時の続きから使う
+			const previousState = pokemonStates.get(simulationPokemon.id);
+			const swapRandom = perPokemonRandomStreams
+				? (previousState?.random ??
+					new SeededRandom(
+						createPokemonRandomSeed(config.seed, simulationPokemon.id),
+					))
+				: new SeededRandom(config.seed + swap.teamSlotIndex + i * 100);
 
 			const newState: PokemonState = {
 				pokemon: simulationPokemon,
 				slotIndex: swap.teamSlotIndex,
 				currentEnergy: startEnergy,
-				random: new SeededRandom(swapSeed),
+				random: swapRandom,
 				sleepStartTime: null,
 				usedSleepScore: 0,
 				// 新規追加

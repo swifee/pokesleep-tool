@@ -128,6 +128,41 @@ vi.mock("./DailySummaryRow", () => ({
 	),
 }));
 
+vi.mock("./QuickSimOptimizerPanel", () => ({
+	default: ({
+		members,
+		hasSleepSlot,
+		onApply,
+	}: {
+		members: Array<{ pokemonId: number }>;
+		hasSleepSlot: boolean;
+		onApply: (percentByPokemonId: ReadonlyMap<number, number>) => void;
+	}) => (
+		<div
+			data-testid="quick-sim-optimizer-panel"
+			data-member-count={String(members.length)}
+			data-has-sleep-slot={hasSleepSlot ? "true" : "false"}
+		>
+			<button
+				type="button"
+				data-testid="quick-sim-optimizer-apply-stub"
+				onClick={() =>
+					onApply(
+						new Map(
+							members.map((member, index) => [
+								member.pokemonId,
+								index === 0 ? 60 : 40,
+							]),
+						),
+					)
+				}
+			>
+				apply
+			</button>
+		</div>
+	),
+}));
+
 vi.mock("./TrialResultSelector", () => ({
 	default: ({
 		selectedIndex,
@@ -276,6 +311,43 @@ describe("QuickSimTab", () => {
 		).toBe("false");
 		expect(localStorage.getItem(STORAGE_KEY_QUICK_SIM)).toContain(
 			pikachu.serialize(),
+		);
+	});
+
+	it("applies the optimizer result to the member usage rates", () => {
+		localStorage.setItem(
+			STORAGE_KEY_QUICK_SIM,
+			JSON.stringify({
+				members: [
+					{
+						serialized: pikachu.serialize(),
+						usagePercent: 100,
+						usageMode: "even",
+					},
+					{
+						serialized: eevee.serialize(),
+						usagePercent: 100,
+						usageMode: "sleep",
+					},
+				],
+			}),
+		);
+		renderTab();
+
+		const panel = screen.getByTestId("quick-sim-optimizer-panel");
+		expect(panel.getAttribute("data-member-count")).toBe("2");
+		expect(panel.getAttribute("data-has-sleep-slot")).toBe("true");
+
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-apply-stub"));
+
+		expect(screen.getByTestId("quick-sim-usage-total").textContent).toBe(
+			"起用率合計: 100% / 500%",
+		);
+		expect(screen.getByTestId("quick-sim-member-mode-2").textContent).toContain(
+			"睡眠",
+		);
+		expect(localStorage.getItem(STORAGE_KEY_QUICK_SIM)).toContain(
+			'"usagePercent":60',
 		);
 	});
 
