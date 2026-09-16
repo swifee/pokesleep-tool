@@ -60,6 +60,7 @@ import DailySummaryRow from "./DailySummaryRow";
 import InitialIngredientsEditor from "./InitialIngredientsEditor";
 import QuickSimImportConfirmDialog from "./QuickSimImportConfirmDialog";
 import QuickSimMemberList from "./QuickSimMemberList";
+import QuickSimOptimizerPanel from "./QuickSimOptimizerPanel";
 import SummaryValueModeToggle from "./SummaryValueModeToggle";
 import TeamSummaryRow from "./TeamSummaryRow";
 import type { TimelineDisplayMode } from "./TimelineCell";
@@ -356,6 +357,20 @@ export default function QuickSimTab({
 	const handleIngredientsToggle = useCallback(() => {
 		setIngredientsExpanded((previous) => !previous);
 	}, []);
+
+	const handleOptimizerApply = useCallback(
+		(percentByPokemonId: ReadonlyMap<number, number>) => {
+			setMembers((previous) =>
+				previous.map((member) => {
+					const usagePercent = percentByPokemonId.get(member.pokemonId);
+					return usagePercent === undefined
+						? member
+						: { ...member, usagePercent };
+				}),
+			);
+		},
+		[],
+	);
 
 	const handleImportClick = useCallback(() => {
 		setImportConfirmOpen(true);
@@ -666,6 +681,21 @@ export default function QuickSimTab({
 				onAddClick={handleAddClick}
 				onImportClick={handleImportClick}
 				onSwapClick={handleSwapClick}
+			/>
+
+			<QuickSimOptimizerPanel
+				members={members}
+				box={runtimeBox}
+				timeSlots={timeSlots}
+				simulationConfig={simulationConfig}
+				bonusSettings={bonusSettings}
+				cookingSettings={cookingSettings}
+				provisionalSettings={provisionalSettings}
+				seedMode={seedMode}
+				hasSleepSlot={
+					scheduleResult.ok || scheduleResult.error !== "noSleepSlot"
+				}
+				onApply={handleOptimizerApply}
 			/>
 
 			<Box sx={PANEL_SX} data-testid="quick-sim-initial-ingredients">
