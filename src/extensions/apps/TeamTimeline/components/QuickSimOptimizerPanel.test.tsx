@@ -144,6 +144,26 @@ function renderPanel(
 	return { ...view, onApply, props };
 }
 
+async function renderPanelWithResult(memberCount: number) {
+	runOptimizationMock.mockResolvedValue(createResult(memberCount));
+	const rendered = renderPanel(memberCount);
+	fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
+	await waitFor(() => {
+		expect(screen.queryByTestId("quick-sim-optimizer-table")).not.toBeNull();
+	});
+	return rendered;
+}
+
+/** jsdom は 16 進の色を rgb() に直すので、どちらの表記でも受け付ける */
+function hasBackgroundColor(
+	element: Element,
+	hexColor: string,
+	rgbColor: string,
+): boolean {
+	const value = (element as HTMLElement).style.backgroundColor;
+	return value === hexColor || value === rgbColor;
+}
+
 describe("QuickSimOptimizerPanel", () => {
 	beforeEach(() => {
 		runOptimizationMock.mockReset();
@@ -343,5 +363,62 @@ describe("QuickSimOptimizerPanel", () => {
 		expect(
 			screen.queryByTestId("quick-sim-optimizer-stale-notice"),
 		).not.toBeNull();
+	});
+
+	it("gives only the current row a light background", async () => {
+		await renderPanelWithResult(6);
+
+		const currentRow = screen.getByTestId("quick-sim-optimizer-row-current");
+		const rankedRow = screen.getByTestId("quick-sim-optimizer-row-1");
+		expect(
+			hasBackgroundColor(currentRow, "#f5f5f5", "rgb(245, 245, 245)"),
+		).toBe(true);
+		expect(hasBackgroundColor(rankedRow, "#fff", "rgb(255, 255, 255)")).toBe(
+			true,
+		);
+		// 横スクロールしても見える固定の先頭列も行と同じ背景にする
+		const currentLabelCell = currentRow.firstElementChild as Element;
+		const rankedLabelCell = rankedRow.firstElementChild as Element;
+		expect(
+			hasBackgroundColor(currentLabelCell, "#f5f5f5", "rgb(245, 245, 245)"),
+		).toBe(true);
+		expect(
+			hasBackgroundColor(rankedLabelCell, "#fff", "rgb(255, 255, 255)"),
+		).toBe(true);
+	});
+
+	it("draws each usage rate as a bar scaled to the cell height", async () => {
+		await renderPanelWithResult(6);
+
+		const fullCell = screen.getByTestId("quick-sim-optimizer-row-1-percent-1");
+		const partialCell = screen.getByTestId(
+			"quick-sim-optimizer-row-1-percent-5",
+		);
+		const emptyCell = screen.getByTestId(
+			"quick-sim-optimizer-row-current-percent-6",
+		);
+		expect(fullCell.style.backgroundImage).toMatch(
+			/^linear-gradient\(to top, .+ 100%, transparent 100%\)$/,
+		);
+		expect(partialCell.style.backgroundImage).toMatch(
+			/^linear-gradient\(to top, .+ 60%, transparent 60%\)$/,
+		);
+		expect(emptyCell.style.backgroundImage).toBe("");
+		expect(emptyCell.textContent).toBe("-");
+	});
+
+	it("keeps the pokemon columns as narrow as the icons", async () => {
+		await renderPanelWithResult(6);
+
+		const header = screen.getByTestId("quick-sim-optimizer-header-1");
+		const cell = screen.getByTestId("quick-sim-optimizer-row-1-percent-1");
+		const epCell = screen.getByTestId("quick-sim-optimizer-row-1-ep");
+		expect(header.style.width).toBe("22px");
+		expect(header.style.padding).toBe("3px 2px");
+		expect(cell.style.width).toBe("22px");
+		expect(cell.style.padding).toBe("3px 2px");
+		// 数値の列はこれまでどおりの余白のまま
+		expect(epCell.style.width).toBe("");
+		expect(epCell.style.padding).toBe("3px 4px");
 	});
 });
