@@ -67,6 +67,14 @@ export interface QuickSimOptimizerMember {
 /** 候補: メンバー順の起用率（%） */
 export type QuickSimOptimizerPercents = readonly number[];
 
+/**
+ * 同時に編成できないメンバー index の組。
+ * 各組のメンバーは同じ時刻に編成できないので、組の起用率の合計は 100%
+ * （`QUICK_SIM_OPTIMIZER_MAX_UNITS` 単位）を超えられない。
+ * とくべつなポケモンのルール（同時に 1 体まで。ラティアス＋ラティオスは可）から作る。
+ */
+export type QuickSimOptimizerExclusiveGroups = readonly (readonly number[])[];
+
 /** 進捗の段階 */
 export type QuickSimOptimizerPhase =
 	| "solo"

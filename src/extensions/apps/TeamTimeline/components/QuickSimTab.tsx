@@ -54,6 +54,7 @@ import {
 	buildQuickSimTimeline,
 	type QuickSimTimeline,
 } from "../utils/QuickSimTimelineBuilder";
+import { buildSpecialPokemonExclusionMap } from "../utils/SpecialPokemonUtils";
 import type { SummaryValueMode } from "../utils/SummaryValueModeUtils";
 import BoxSelectDialog from "./BoxSelectDialog";
 import DailySummaryRow from "./DailySummaryRow";
@@ -263,14 +264,26 @@ export default function QuickSimTab({
 		}
 	}, [simulationConfig.simulationDays]);
 
+	// とくべつなポケモン（伝説・幻）は同時に 1 体まで（ラティアス＋ラティオスは可）
+	const specialExclusions = useMemo(
+		() =>
+			buildSpecialPokemonExclusionMap(
+				members.flatMap((member) => {
+					const item = runtimeBox.getById(member.pokemonId);
+					return item ? [item] : [];
+				}),
+			),
+		[members, runtimeBox],
+	);
 	const scheduleResult = useMemo(
 		() =>
 			buildQuickSimSchedule(
 				members,
 				timeSlots,
 				simulationConfig.simulationDays,
+				specialExclusions,
 			),
-		[members, timeSlots, simulationConfig.simulationDays],
+		[members, timeSlots, simulationConfig.simulationDays, specialExclusions],
 	);
 	const previewTimeline = useMemo(
 		() =>
@@ -877,6 +890,18 @@ export default function QuickSimTab({
 						"起用率に合わせて入れ替えを自動設定します。就寝中は入れ替えず、設定を満たせないときだけ就寝中にも入れ替えます。時間帯設定にない時刻で入れ替えるときは、その時刻に時間帯を追加し、入れ替え元のポケモンだけを回収（清算）します。",
 					)}
 				</Typography>
+				{specialExclusions.size > 0 && (
+					<Typography
+						variant="caption"
+						sx={{ display: "block", color: "#666", mb: "6px" }}
+						data-testid="quick-sim-special-pokemon-note"
+					>
+						{t(
+							"TeamTimeline.quick special pokemon note",
+							"とくべつなポケモン（伝説・幻）は同時に1体まで（ラティアス＋ラティオスの組み合わせは可）として入れ替えを組みます。",
+						)}
+					</Typography>
+				)}
 				{scheduleResult.ok && scheduleResult.schedule.usesSleepSwaps && (
 					<Typography
 						variant="caption"
@@ -897,7 +922,7 @@ export default function QuickSimTab({
 					>
 						{t(
 							"TeamTimeline.quick unmet notice",
-							"起用方法の指定により、次のメンバーは起用率を満たせません: {{names}}",
+							"起用方法やとくべつなポケモンの制限により、次のメンバーは起用率を満たせません: {{names}}",
 							{ names: unmetMemberNames.join(", ") },
 						)}
 					</Typography>

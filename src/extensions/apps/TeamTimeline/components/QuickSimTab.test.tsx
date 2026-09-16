@@ -458,6 +458,45 @@ describe("QuickSimTab", () => {
 		).toBe("false");
 	});
 
+	it("keeps two special Pokémon apart and explains the rule", () => {
+		const mewtwo = createItem("Mewtwo", 100);
+		const darkrai = createItem("Darkrai", 101);
+		const normals = Array.from({ length: 4 }, (_, index) =>
+			createItem("Pikachu", 200 + index),
+		);
+		const box = new PokemonBox([mewtwo, darkrai, ...normals]);
+		const usageByPokemonId = new Map<number, number>([
+			[mewtwo.id, 100],
+			[darkrai.id, 20],
+		]);
+		localStorage.setItem(
+			STORAGE_KEY_QUICK_SIM,
+			JSON.stringify({
+				members: box.items.map((item) => ({
+					serialized: item.serialize(),
+					usagePercent: usageByPokemonId.get(item.id) ?? 95,
+					usageMode: "even",
+				})),
+			}),
+		);
+
+		renderTab({ userBox: box, runtimeBox: box });
+
+		expect(
+			screen.getByTestId("quick-sim-special-pokemon-note").textContent,
+		).toContain("同時に1体まで");
+		// ミュウツーが 100% なのでダークライは一度も編成に入れない
+		const notice = screen.getByTestId("quick-sim-unmet-notice").textContent;
+		expect(notice).toContain("とくべつなポケモンの制限");
+		expect(notice).toContain("pokemons.Darkrai");
+		expect(notice).not.toContain("pokemons.Mewtwo");
+	});
+
+	it("does not show the special Pokémon note without conflicting members", () => {
+		renderTab();
+		expect(screen.queryByTestId("quick-sim-special-pokemon-note")).toBeNull();
+	});
+
 	it("restores stored members instead of the detailed team", () => {
 		localStorage.setItem(
 			STORAGE_KEY_QUICK_SIM,

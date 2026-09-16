@@ -129,9 +129,22 @@ export interface QuickSimSchedule {
 	sleepMinutes: number;
 	/** 就寝中の入れ替えを含むかどうか */
 	usesSleepSwaps: boolean;
-	/** 起用方法の指定により、設定した起用時間を満たせなかったメンバーのID */
+	/**
+	 * 起用方法の指定や同時に編成できない組（とくべつなポケモン）の制限により、
+	 * 設定した起用時間を満たせなかったメンバーのID
+	 */
 	unmetPokemonIds: number[];
 }
+
+/**
+ * 同時に編成できないメンバーの組。
+ * ポケモン ID → 同時に編成できないポケモン ID の集合（とくべつなポケモンのルール用）。
+ * スケジューラは、ここに挙げた組が同じ時刻に別の枠へ入らないように配置する。
+ */
+export type QuickSimExclusionMap = ReadonlyMap<number, ReadonlySet<number>>;
+
+/** 同時に編成できない組のない空の設定 */
+export const EMPTY_QUICK_SIM_EXCLUSION_MAP: QuickSimExclusionMap = new Map();
 
 /** スケジュール生成に失敗した理由 */
 export type QuickSimScheduleErrorType =

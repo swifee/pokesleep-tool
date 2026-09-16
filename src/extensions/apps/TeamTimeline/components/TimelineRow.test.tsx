@@ -23,14 +23,19 @@ vi.mock("./TimelineCell", () => ({
 		pokemonIdForm,
 		noCollectEnabled,
 		onNoCollectToggle,
+		specialConflict,
 	}: {
 		swappedPokemonName?: string;
 		onRemoveSwapClick?: () => void;
 		pokemonIdForm?: number;
 		noCollectEnabled?: boolean;
 		onNoCollectToggle?: () => void;
+		specialConflict?: boolean;
 	}) => (
-		<div data-testid="timeline-cell">
+		<div
+			data-testid="timeline-cell"
+			data-special-conflict={specialConflict ? "true" : "false"}
+		>
 			<span>{swappedPokemonName ?? ""}</span>
 			<span data-testid="remove-flag">{onRemoveSwapClick ? "1" : "0"}</span>
 			<span data-testid="pokemon-id-form">
@@ -433,5 +438,41 @@ describe("TimelineRow duration rendering", () => {
 		);
 
 		expect(screen.queryByText("3H")).toBeNull();
+	});
+});
+
+describe("TimelineRow special Pokémon conflict", () => {
+	const slot: TimeSlot = {
+		id: "slot-1",
+		time: "12:00",
+		sleepState: "none",
+		hasMeal: false,
+	};
+
+	it("flags only the cells of the conflicting team indexes", () => {
+		render(
+			<TimelineRow
+				slot={slot}
+				originalSlotId={slot.id}
+				dayIndex={0}
+				results={[]}
+				team={[null, null, null, null, null]}
+				swaps={[]}
+				box={new PokemonBox([])}
+				specialConflictTeamIndexes={[0, 3]}
+			/>,
+		);
+		const flags = screen
+			.getAllByTestId("timeline-cell")
+			.map((cell) => cell.getAttribute("data-special-conflict"));
+		expect(flags).toEqual(["true", "false", "false", "true", "false"]);
+	});
+
+	it("flags nothing by default", () => {
+		renderRow(slot);
+		const flags = screen
+			.getAllByTestId("timeline-cell")
+			.map((cell) => cell.getAttribute("data-special-conflict"));
+		expect(flags).toEqual(["false", "false", "false", "false", "false"]);
 	});
 });

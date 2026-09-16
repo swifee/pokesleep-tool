@@ -44,6 +44,7 @@ import {
 	isQuickSimOptimizerAbortError,
 	runQuickSimOptimization,
 } from "../utils/QuickSimOptimizerSearch";
+import { buildSpecialPokemonExclusiveGroups } from "../utils/SpecialPokemonUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 
 interface QuickSimOptimizerPanelProps {
@@ -240,6 +241,14 @@ export default function QuickSimOptimizerPanel({
 		});
 	}, [members, box]);
 	const memberCount = optimizerMembers.length;
+	// とくべつなポケモン（伝説・幻）は同時に 1 体まで（ラティアス＋ラティオスは可）
+	const exclusiveGroups = useMemo(
+		() =>
+			buildSpecialPokemonExclusiveGroups(
+				optimizerMembers.map((member) => box.getById(member.pokemonId)),
+			),
+		[optimizerMembers, box],
+	);
 	const signature = useMemo(
 		() =>
 			buildOptimizerSignature({
@@ -332,6 +341,7 @@ export default function QuickSimOptimizerPanel({
 					currentPercents,
 					evaluator: handle.evaluator,
 					options: { excludeSleepSwaps },
+					exclusiveGroups,
 					baseSeed: resolveBaseSeed(seedMode, simulationConfig.seed),
 					signal: abortController.signal,
 					onProgress: (next) => {
@@ -377,6 +387,7 @@ export default function QuickSimOptimizerPanel({
 		cookingSettings,
 		provisionalSettings,
 		excludeSleepSwaps,
+		exclusiveGroups,
 		seedMode,
 	]);
 
@@ -595,6 +606,18 @@ export default function QuickSimOptimizerPanel({
 					</Typography>
 				}
 			/>
+			{exclusiveGroups.length > 0 && (
+				<Typography
+					variant="caption"
+					sx={NOTE_SX}
+					data-testid="quick-sim-optimizer-special-note"
+				>
+					{t(
+						"TeamTimeline.quick special pokemon note",
+						"とくべつなポケモン（伝説・幻）は同時に1体まで（ラティアス＋ラティオスの組み合わせは可）として入れ替えを組みます。",
+					)}
+				</Typography>
+			)}
 			{disabledReason !== null && (
 				<Typography
 					variant="caption"

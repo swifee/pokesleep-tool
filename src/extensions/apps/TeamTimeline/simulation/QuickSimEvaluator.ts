@@ -9,6 +9,8 @@
  *   usePeriodSchedule で通常の実行と同じスケジュールを使う）。
  * - ポケモンごとに固定した乱数列（perPokemonRandomStreams）を使い、候補どうしを
  *   同じシードで比べられるようにする（共通乱数）。
+ * - とくべつなポケモンのルール（同時に 1 体まで。ラティアス＋ラティオスは可）は
+ *   スケジューラに同時に編成できない組として渡し、どの候補でも守る。
  */
 
 import type PokemonBox from "../../../../util/PokemonBox";
@@ -22,7 +24,10 @@ import type {
 	QuickSimOptimizerMember,
 	QuickSimOptimizerPercents,
 } from "../types/QuickSimOptimizerTypes";
-import type { QuickSimMember } from "../types/QuickSimTypes";
+import type {
+	QuickSimExclusionMap,
+	QuickSimMember,
+} from "../types/QuickSimTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import {
 	clampSimulationDays,
@@ -35,6 +40,7 @@ import {
 	buildQuickSimTimeline,
 	type QuickSimTimeline,
 } from "../utils/QuickSimTimelineBuilder";
+import { buildSpecialPokemonExclusionMap } from "../utils/SpecialPokemonUtils";
 import { runSimulation } from "./TimelineSimulator";
 
 export interface QuickSimEvaluatorContext {
@@ -85,10 +91,18 @@ export class QuickSimEvaluator implements QuickSimOptimizerEvaluator {
 	/** 1 日分のスケジュールを繰り返せるか（前半・後半のメンバーがいない） */
 	private readonly canRepeatDaySchedule: boolean;
 	private readonly cookingDisabledSettings: CookingSimulationSettings;
+	/** 同時に編成できないメンバーの組（とくべつなポケモンのルール） */
+	private readonly exclusions: QuickSimExclusionMap;
 
 	constructor(private readonly context: QuickSimEvaluatorContext) {
 		this.simulationDays = clampSimulationDays(
 			context.simulationConfig.simulationDays,
+		);
+		this.exclusions = buildSpecialPokemonExclusionMap(
+			context.members.flatMap((member) => {
+				const item = context.box.getById(member.pokemonId);
+				return item ? [item] : [];
+			}),
 		);
 		this.canRepeatDaySchedule = !context.members.some((member) =>
 			PERIOD_USAGE_MODES.has(member.usageMode),
@@ -133,6 +147,7 @@ export class QuickSimEvaluator implements QuickSimOptimizerEvaluator {
 			this.toQuickSimMembers(percents),
 			this.context.timeSlots,
 			scheduleDays,
+			this.exclusions,
 		);
 		let prepared: PreparedCandidate | null = null;
 		if (scheduleResult.ok) {
