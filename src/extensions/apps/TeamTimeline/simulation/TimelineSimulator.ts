@@ -3,7 +3,6 @@
  * シミュレーションを統合実行するモジュール
  */
 
-import i18next from "i18next";
 import { getEventBonus } from "../../../../data/events";
 import { isExpertField } from "../../../../data/fields";
 import type {
@@ -195,6 +194,25 @@ export interface SimulationInput {
 	cookingSettings?: CookingSimulationSettings;
 	/** 仮設定（公式未公開パラメータ、オプショナル） */
 	provisionalSettings?: ProvisionalSettings;
+	/**
+	 * ボーナス設定から構築済みの StrengthParameter（オプショナル）。
+	 * 省略時は個体値計算機の保存設定（localStorage）とボーナス設定から構築する。
+	 * Web Worker など localStorage を持たない環境では必ず指定する。
+	 */
+	strengthParameter?: StrengthParameter;
+	/**
+	 * 結果へ埋め込む表示名（スキル対象名など）の解決関数（オプショナル）。
+	 * 省略時はニックネーム、なければ内部名（英語名）を使う。
+	 */
+	resolvePokemonName?: PokemonNameResolver;
+}
+
+/** 結果へ埋め込むポケモン表示名を解決する関数 */
+export type PokemonNameResolver = (pokemon: PokemonBoxItem) => string;
+
+/** 表示名解決の既定動作（ニックネーム優先、なければ内部名） */
+export function resolveDefaultPokemonName(pokemon: PokemonBoxItem): string {
+	return pokemon.nickname || pokemon.iv.pokemonName;
 }
 
 /** ポケモンの状態（シミュレーション中の内部管理用） */
@@ -707,7 +725,20 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			analysisOptions?.disableEnergyRecoveryBonus === true,
 	};
 	const strengthParameter =
+		input.strengthParameter ??
 		buildStrengthParameterFromTimelineBonusSettings(bonusSettings);
+	const resolvePokemonName =
+		input.resolvePokemonName ?? resolveDefaultPokemonName;
+	// 表示名・フォームは試行中に変わらないため、ポケモンごとに1回だけ解決する
+	const pokemonNameMap = new Map<number, string>();
+	const pokemonIdFormMap = new Map<number, number>();
+	const registerDisplayInfo = (pokemon: PokemonBoxItem): void => {
+		if (pokemonNameMap.has(pokemon.id)) {
+			return;
+		}
+		pokemonNameMap.set(pokemon.id, resolvePokemonName(pokemon));
+		pokemonIdFormMap.set(pokemon.id, pokemon.iv.idForm);
+	};
 	const normalizedPokemonById = new Map<number, PokemonBoxItem>();
 	const getSimulationPokemon = (pokemon: PokemonBoxItem): PokemonBoxItem => {
 		const cached = normalizedPokemonById.get(pokemon.id);
@@ -1096,15 +1127,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		const additionalRecoveryReceivedMap = new Map<number, number>(); // pokemonId -> total additional recovery (nuzzle triggered)
 		const cookingMinusReceivedMap = new Map<number, number>(); // pokemonId -> total cooking minus recovery
 		const badDreamsReceivedMap = new Map<number, number>(); // pokemonId -> total bad dreams damage
-		const pokemonNameMap = new Map<number, string>(
-			currentTargetableTeam.map((member) => [
-				member.id,
-				member.nickname || i18next.t(`pokemons.${member.iv.pokemonName}`),
-			]),
-		);
-		const pokemonIdFormMap = new Map<number, number>(
-			currentTargetableTeam.map((member) => [member.id, member.iv.idForm]),
-		);
+		for (const member of currentTargetableTeam) {
+			registerDisplayInfo(member);
+		}
 
 		for (let idx = 0; idx < helpOutputs.length; idx++) {
 			const { state, helpOutput } = helpOutputs[idx];

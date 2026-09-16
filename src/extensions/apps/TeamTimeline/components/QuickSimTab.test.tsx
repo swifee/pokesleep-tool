@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
-import type { MultiTrialProgressInput } from "../simulation/MultiTrialSimulator";
 import type { SimulationInput } from "../simulation/TimelineSimulator";
+import type { ParallelMultiTrialInput } from "../simulation/TrialBatchRunner";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
 import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import { STORAGE_KEY_QUICK_SIM } from "../types/QuickSimTypes";
@@ -155,8 +155,8 @@ vi.mock("../simulation/TimelineSimulator", () => ({
 	runSimulation: (input: SimulationInput) => runSimulationMock(input),
 }));
 
-vi.mock("../simulation/MultiTrialSimulator", () => ({
-	runMultiTrialSimulationWithProgress: (input: MultiTrialProgressInput) =>
+vi.mock("../simulation/TrialBatchRunner", () => ({
+	runMultiTrialSimulationParallel: (input: ParallelMultiTrialInput) =>
 		runMultiTrialMock(input),
 }));
 
@@ -241,13 +241,7 @@ describe("QuickSimTab", () => {
 		runMultiTrialMock.mockReset();
 		runSimulationMock.mockImplementation(() => createSimulationResult(100));
 		runMultiTrialMock.mockImplementation(
-			async (input: MultiTrialProgressInput) => {
-				input.onTrialComplete?.({
-					index: 0,
-					trialCount: input.trialCount,
-					seed: 777,
-					result: createSimulationResult(90),
-				});
+			async (input: ParallelMultiTrialInput) => {
 				input.onProgress?.(100);
 				return {
 					trials: [
@@ -259,6 +253,8 @@ describe("QuickSimTab", () => {
 					averageDailySummaries: [],
 					averageTeamSummary: createSimulationResult(90).teamSummary,
 					averageCookingSummary: null,
+					baseSeed: 777,
+					aborted: false,
 				};
 			},
 		);
@@ -474,7 +470,7 @@ describe("QuickSimTab", () => {
 
 		expect(runMultiTrialMock).toHaveBeenCalledTimes(1);
 		const multiInput = runMultiTrialMock.mock
-			.calls[0][0] as MultiTrialProgressInput;
+			.calls[0][0] as ParallelMultiTrialInput;
 		expect(multiInput.trialCount).toBe(3);
 		expect(multiInput.initialSeed).toBeUndefined();
 		expect(multiInput.team?.map((member) => member?.id ?? null)).toEqual([

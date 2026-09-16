@@ -14,5 +14,8 @@
 		"isolatedModules": true,
 		"noEmit": true
 	},
-	"include": ["src/util/Team/teamSimulation.worker.ts"]
+	"include": [
+		"src/util/Team/teamSimulation.worker.ts",
+		"src/extensions/apps/TeamTimeline/simulation/timelineSimulation.worker.ts"
+	]
 }
