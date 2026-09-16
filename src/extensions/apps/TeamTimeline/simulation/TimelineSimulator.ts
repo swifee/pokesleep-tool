@@ -730,7 +730,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		(pokemon) => !disabledPokemonIds.has(pokemon.id),
 	);
 
-	if (activeTeamAtStart.length === 0 || timeSlots.length === 0) {
+	// 初期チームが空でも、入れ替えで途中から投入されるポケモンがいれば実行する
+	if (
+		(activeTeamAtStart.length === 0 && swaps.length === 0) ||
+		timeSlots.length === 0
+	) {
 		return {
 			slotResults: new Map(),
 			dailySummaries: [],

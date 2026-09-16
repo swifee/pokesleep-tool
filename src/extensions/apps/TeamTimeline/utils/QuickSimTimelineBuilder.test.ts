@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
+import { runSimulation } from "../simulation/TimelineSimulator";
 import {
 	MINUTES_PER_DAY,
 	QUICK_SIM_SWAP_INITIAL_ENERGY,
@@ -9,6 +10,7 @@ import {
 	type QuickSimSchedule,
 } from "../types/QuickSimTypes";
 import {
+	DEFAULT_SIMULATION_CONFIG,
 	DEFAULT_TIME_SLOTS,
 	SWAP_NONE_POKEMON_ID,
 	type TimeSlot,
@@ -19,6 +21,7 @@ import {
 	buildQuickSimTimeline,
 	QUICK_SIM_SLOT_ID_PREFIX,
 } from "./QuickSimTimelineBuilder";
+import { createDefaultTimelineBonusSettings } from "./TimelineBonusSettingsBridge";
 import { buildExpandedTimeline } from "./TimelineDayExpansion";
 import { calculateDuration } from "./TimeSlotUtils";
 
@@ -351,5 +354,45 @@ describe("buildQuickSimTimeline", () => {
 			total += calculateDuration(times[index - 1], times[index]);
 		}
 		expect(total).toBe(MINUTES_PER_DAY);
+	});
+
+	it("simulates a member that is only used after waking up", () => {
+		// A daytime member is placed from the wake slot, so every lane is empty at
+		// bedtime and the member only enters the team through a swap.
+		const members: QuickSimMember[] = [
+			{ pokemonId: pikachu.id, usagePercent: 40, usageMode: "daytime" },
+		];
+		const result = buildQuickSimSchedule(members, DEFAULT_TIME_SLOTS, 1);
+		if (!result.ok) {
+			throw new Error(result.error);
+		}
+		const timeline = buildQuickSimTimeline(
+			result.schedule,
+			DEFAULT_TIME_SLOTS,
+			1,
+			box,
+		);
+		expect(timeline.team).toEqual([null, null, null, null, null]);
+		expect(timeline.swaps[0]).toMatchObject({
+			dayIndex: 0,
+			slotId: "slot-1",
+			newPokemonId: pikachu.id,
+		});
+
+		const simulationResult = runSimulation({
+			team: timeline.team,
+			timeSlots: timeline.timeSlots,
+			config: { ...DEFAULT_SIMULATION_CONFIG, seed: 1, simulationDays: 1 },
+			bonusSettings: createDefaultTimelineBonusSettings(),
+			swaps: timeline.swaps,
+			noCollectCells: timeline.noCollectCells,
+			box,
+		});
+
+		const pikachuSummary = simulationResult.dailySummaries.find(
+			(summary) => summary.pokemonId === pikachu.id,
+		);
+		expect(pikachuSummary?.totalHelpCount ?? 0).toBeGreaterThan(0);
+		expect(simulationResult.teamSummary.grandTotalEP).toBeGreaterThan(0);
 	});
 });
