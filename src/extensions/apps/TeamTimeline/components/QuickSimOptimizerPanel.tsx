@@ -34,6 +34,7 @@ import {
 	type QuickSimOptimizerResultEntry,
 } from "../types/QuickSimOptimizerTypes";
 import {
+	QUICK_SIM_MAX_USAGE_PERCENT,
 	QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
 	type QuickSimMember,
 } from "../types/QuickSimTypes";
@@ -80,6 +81,9 @@ const WARNING_SX = {
 	lineHeight: "15px",
 	mt: "4px",
 };
+const ROW_BACKGROUND = "#fff";
+/** 「現在」行だけ薄い背景にして候補の行と区別する */
+const CURRENT_ROW_BACKGROUND = "#f5f5f5";
 const TABLE_CELL_SX = {
 	fontSize: "11px",
 	lineHeight: "14px",
@@ -93,10 +97,18 @@ const STICKY_CELL_SX = {
 	...TABLE_CELL_SX,
 	position: "sticky" as const,
 	left: 0,
-	backgroundColor: "#fff",
+	backgroundColor: ROW_BACKGROUND,
 	zIndex: 1,
 };
 const HEADER_ICON_SIZE_PX = 22;
+/** ポケモン列はアイコン幅に合わせて詰める（左右の余白は 2px ずつ） */
+const USAGE_CELL_SX = {
+	...TABLE_CELL_SX,
+	padding: "3px 2px",
+	width: `${HEADER_ICON_SIZE_PX}px`,
+};
+/** 起用率セルの背景に描く棒グラフの色 */
+const USAGE_BAR_COLOR = "#d0e0ff";
 const RANDOM_SEED_RANGE = 1_000_000;
 
 const PHASE_LABELS: Readonly<
@@ -166,6 +178,20 @@ function formatPercentDelta(meanEP: number, baseEP: number): string {
 	const rounded = Math.round(delta * 10) / 10;
 	const sign = rounded > 0 ? "+" : "";
 	return `${sign}${rounded.toFixed(1)}%`;
+}
+
+/**
+ * 起用率セルの style。セルの高さを 100% とした縦棒グラフを背景に描く。
+ */
+function buildUsageCellStyle(percent: number): React.CSSProperties {
+	if (percent <= 0) {
+		return USAGE_CELL_SX;
+	}
+	const barPercent = Math.min(percent, QUICK_SIM_MAX_USAGE_PERCENT);
+	return {
+		...USAGE_CELL_SX,
+		backgroundImage: `linear-gradient(to top, ${USAGE_BAR_COLOR} ${barPercent}%, transparent ${barPercent}%)`,
+	};
 }
 
 /**
@@ -395,7 +421,7 @@ export default function QuickSimOptimizerPanel({
 		resultValue: QuickSimOptimizerResult,
 		label: string,
 		testId: string,
-		showApply: boolean,
+		isCurrent: boolean,
 	) => {
 		const unmetNames = entry.unmetPokemonIds.flatMap((pokemonId) => {
 			const item = box.getById(pokemonId);
@@ -420,9 +446,20 @@ export default function QuickSimOptimizerPanel({
 			);
 		}
 		const baseEP = resultValue.current?.meanEP ?? 0;
+		const rowBackground = isCurrent ? CURRENT_ROW_BACKGROUND : ROW_BACKGROUND;
 		return (
-			<tr key={testId} data-testid={testId}>
-				<td style={{ ...STICKY_CELL_SX, fontWeight: 700 }}>
+			<tr
+				key={testId}
+				data-testid={testId}
+				style={{ backgroundColor: rowBackground }}
+			>
+				<td
+					style={{
+						...STICKY_CELL_SX,
+						fontWeight: 700,
+						backgroundColor: rowBackground,
+					}}
+				>
 					{label}
 					{warnings.length > 0 && (
 						<span
@@ -436,15 +473,18 @@ export default function QuickSimOptimizerPanel({
 						</span>
 					)}
 				</td>
-				{resultValue.members.map((member, index) => (
-					<td
-						key={member.pokemonId}
-						style={TABLE_CELL_SX}
-						data-testid={`${testId}-percent-${member.pokemonId}`}
-					>
-						{entry.percents[index] > 0 ? entry.percents[index] : "-"}
-					</td>
-				))}
+				{resultValue.members.map((member, index) => {
+					const percent = entry.percents[index] ?? 0;
+					return (
+						<td
+							key={member.pokemonId}
+							style={buildUsageCellStyle(percent)}
+							data-testid={`${testId}-percent-${member.pokemonId}`}
+						>
+							{percent > 0 ? percent : "-"}
+						</td>
+					);
+				})}
 				<td
 					style={{ ...TABLE_CELL_SX, textAlign: "right" }}
 					data-testid={`${testId}-ep`}
@@ -455,13 +495,13 @@ export default function QuickSimOptimizerPanel({
 					style={{ ...TABLE_CELL_SX, textAlign: "right" }}
 					data-testid={`${testId}-delta`}
 				>
-					{showApply ? formatPercentDelta(entry.meanEP, baseEP) : "-"}
+					{isCurrent ? "-" : formatPercentDelta(entry.meanEP, baseEP)}
 				</td>
 				<td style={TABLE_CELL_SX} data-testid={`${testId}-swaps`}>
 					{entry.swapsPerDay.toLocaleString()}
 				</td>
 				<td style={TABLE_CELL_SX}>
-					{showApply && (
+					{!isCurrent && (
 						<Button
 							size="small"
 							variant="text"
@@ -628,7 +668,7 @@ export default function QuickSimOptimizerPanel({
 										return (
 											<th
 												key={member.pokemonId}
-												style={TABLE_CELL_SX}
+												style={USAGE_CELL_SX}
 												title={item?.filledNickname(t)}
 												data-testid={`quick-sim-optimizer-header-${member.pokemonId}`}
 											>
@@ -663,7 +703,7 @@ export default function QuickSimOptimizerPanel({
 										result.value,
 										t("TeamTimeline.quick optimizer current", "現在"),
 										"quick-sim-optimizer-row-current",
-										false,
+										true,
 									)}
 								{result.value.entries.map((entry, index) =>
 									renderEntryRow(
@@ -671,7 +711,7 @@ export default function QuickSimOptimizerPanel({
 										result.value,
 										String(index + 1),
 										`quick-sim-optimizer-row-${index + 1}`,
-										true,
+										false,
 									),
 								)}
 							</tbody>
