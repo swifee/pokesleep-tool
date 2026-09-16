@@ -421,4 +421,37 @@ describe("QuickSimOptimizerPanel", () => {
 		expect(epCell.style.width).toBe("");
 		expect(epCell.style.padding).toBe("3px 4px");
 	});
+
+	it("passes the special Pokémon groups to the search and shows the note", async () => {
+		const items = [
+			"Mewtwo",
+			"Pikachu",
+			"Darkrai",
+			"Eevee",
+			"Bulbasaur",
+			"Gengar",
+		].map(
+			(name, index) =>
+				new PokemonBoxItem(new PokemonIv({ pokemonName: name }), "", index + 1),
+		);
+		runOptimizationMock.mockResolvedValue(createResult(6));
+		renderPanel(6, { box: new PokemonBox(items) });
+
+		expect(
+			screen.getByTestId("quick-sim-optimizer-special-note").textContent,
+		).toContain("同時に1体まで");
+
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
+		await waitFor(() => {
+			expect(runOptimizationMock).toHaveBeenCalledTimes(1);
+		});
+		const input = runOptimizationMock.mock
+			.calls[0][0] as QuickSimOptimizationInput;
+		expect(input.exclusiveGroups).toEqual([[0, 2]]);
+	});
+
+	it("does not show the special Pokémon note without conflicting members", () => {
+		renderPanel(6);
+		expect(screen.queryByTestId("quick-sim-optimizer-special-note")).toBeNull();
+	});
 });

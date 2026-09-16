@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import PokemonBox, { type PokemonBoxItem } from "../../../../util/PokemonBox";
+import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
+import PokemonIv from "../../../../util/PokemonIv";
 import type {
 	NoCollectCellSetting,
 	SimulationResult,
@@ -41,6 +42,7 @@ vi.mock("./TimelineRow", () => ({
 		displayMode,
 		isFirstTimelineSlot,
 		fitToViewport,
+		specialConflictTeamIndexes,
 	}: {
 		dayIndex: number;
 		originalSlotId: string;
@@ -75,11 +77,15 @@ vi.mock("./TimelineRow", () => ({
 		displayMode?: "detailed" | "simple";
 		isFirstTimelineSlot?: boolean;
 		fitToViewport?: boolean;
+		specialConflictTeamIndexes?: readonly number[];
 	}) => (
 		<>
 			<button
 				type="button"
 				data-testid={`swap-${dayIndex}-${originalSlotId}`}
+				data-special-conflict-team-indexes={(
+					specialConflictTeamIndexes ?? []
+				).join(",")}
 				data-compact-empty={compactEmptyCells ? "true" : "false"}
 				data-always-show-swap={alwaysShowSwapButton ? "true" : "false"}
 				data-display-mode={displayMode ?? "detailed"}
@@ -164,10 +170,11 @@ const EMPTY_RESULT: SimulationResult = {
 	},
 };
 
-const HEADER_TEST_POKEMON: PokemonBoxItem = {
-	iv: { idForm: 213, level: 50 },
-	filledNickname: () => "ツボツボ",
-} as unknown as PokemonBoxItem;
+const HEADER_TEST_POKEMON: PokemonBoxItem = new PokemonBoxItem(
+	new PokemonIv({ pokemonName: "Shuckle", level: 50 }),
+	"ツボツボ",
+	1,
+);
 
 function createTimeSlotResult(base: Partial<TimeSlotResult>): TimeSlotResult {
 	return {
@@ -770,5 +777,68 @@ describe("TimelineTable", () => {
 			configurable: true,
 			value: originalElementFromPoint,
 		});
+	});
+});
+
+describe("TimelineTable special Pokémon conflict", () => {
+	const createItem = (pokemonName: string, id: number): PokemonBoxItem =>
+		new PokemonBoxItem(new PokemonIv({ pokemonName, level: 30 }), "", id);
+
+	it("passes the conflicting team indexes to the rows where two special Pokémon overlap", () => {
+		const mewtwo = createItem("Mewtwo", 1);
+		const darkrai = createItem("Darkrai", 2);
+		const pikachu = createItem("Pikachu", 3);
+		render(
+			<TimelineTable
+				team={[mewtwo, pikachu, null, null, null]}
+				timeSlots={BASE_TIME_SLOTS}
+				simulationDays={1}
+				result={EMPTY_RESULT}
+				swaps={[
+					{
+						dayIndex: 0,
+						slotId: "wake",
+						teamSlotIndex: 2,
+						newPokemonId: darkrai.id,
+						initialEnergy: 100,
+					},
+				]}
+				box={new PokemonBox([mewtwo, darkrai, pikachu])}
+			/>,
+		);
+		// 行の並び: sleep(22:00) → night-snack(03:30) → wake(07:00) → sleep-end(22:00)
+		// 起床の行で入れ替えるので、その次の行（就寝の終端）だけ重複する
+		const flags = ["sleep", "night-snack", "wake", "sleep-end"].map((slotId) =>
+			screen
+				.getByTestId(`swap-0-${slotId}`)
+				.getAttribute("data-special-conflict-team-indexes"),
+		);
+		expect(flags).toEqual(["", "", "", "0,2"]);
+	});
+
+	it("passes no conflict for a normal team", () => {
+		render(
+			<TimelineTable
+				team={[
+					createItem("Pikachu", 1),
+					createItem("Mewtwo", 2),
+					null,
+					null,
+					null,
+				]}
+				timeSlots={BASE_TIME_SLOTS}
+				simulationDays={1}
+				result={EMPTY_RESULT}
+				swaps={[]}
+				box={new PokemonBox([])}
+			/>,
+		);
+		for (const slotId of ["sleep", "night-snack", "wake", "sleep-end"]) {
+			expect(
+				screen
+					.getByTestId(`swap-0-${slotId}`)
+					.getAttribute("data-special-conflict-team-indexes"),
+			).toBe("");
+		}
 	});
 });

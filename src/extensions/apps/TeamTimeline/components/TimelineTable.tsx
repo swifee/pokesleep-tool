@@ -29,6 +29,7 @@ import type {
 	TimeSlot,
 	Weekday,
 } from "../types/TimeSlotTypes";
+import { collectTimelineSpecialPokemonConflicts } from "../utils/SpecialPokemonUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import { buildExpandedTimeline } from "../utils/TimelineDayExpansion";
 import {
@@ -181,6 +182,18 @@ const TimelineTable = React.memo(
 		}, [expandedTimeline.dayBands]);
 		const shouldShowFirstDayBand =
 			simulationDays >= 2 && expandedTimeline.expandedSlots.length > 0;
+		// とくべつなポケモンが同じ時間帯に 2 体以上いる行のセルを目立たせる
+		const specialConflictTeamIndexesBySlotId = useMemo(
+			() =>
+				collectTimelineSpecialPokemonConflicts(
+					team,
+					timeSlots,
+					simulationDays,
+					swaps,
+					box,
+				).teamIndexesBySlotId,
+			[team, timeSlots, simulationDays, swaps, box],
+		);
 		const shouldShowDayEndEp = result.slotResults.size > 0;
 		const pokemonById = useMemo(() => {
 			const entries = new Map<number, PokemonBoxItem>();
@@ -760,6 +773,9 @@ const TimelineTable = React.memo(
 									swapDragSource={swapDragSource}
 									swapDragTarget={swapDragTarget}
 									displayMode={displayMode}
+									specialConflictTeamIndexes={specialConflictTeamIndexesBySlotId.get(
+										expandedSlot.slot.id,
+									)}
 								/>
 								{result.cookingResult &&
 									expandedSlot.slot.hasMeal &&

@@ -250,6 +250,49 @@ describe("runQuickSimOptimization", () => {
 		expect(result.current).not.toBeNull();
 	});
 
+	it("keeps every exclusive group within one lane and still finds the constrained optimum", async () => {
+		const evaluator = new FakeEvaluator();
+		// メンバー 0 と 1 は同時に編成できない（合計 100% まで）
+		const exclusiveGroups = [[0, 1]];
+		const result = await runQuickSimOptimization({
+			members: MEMBERS,
+			currentPercents: [100, 100, 100, 100, 100, 0],
+			evaluator,
+			options: { excludeSleepSwaps: false },
+			exclusiveGroups,
+			baseSeed: 4242,
+		});
+		const fits = (percents: number[]): boolean =>
+			percents[0] + percents[1] <= 100;
+		const expectedBest = bruteForceBest(MEMBERS.length, fits);
+		expect(result.entries[0].percents).toEqual(expectedBest);
+		// 残り 4 匹が 100% で埋まるので、候補は先頭 2 匹の配分 6 通りだけ
+		expect(result.entries).toHaveLength(6);
+		for (const entry of result.entries) {
+			expect(fits(entry.percents)).toBe(true);
+		}
+		// 制約なしの最適解（先頭 2 匹が 100%）は候補として評価すらされない
+		for (const call of evaluator.calls) {
+			if (call.options.disableCooking) {
+				continue;
+			}
+			for (const candidate of call.candidates) {
+				if (
+					call.options.usePeriodSchedule &&
+					candidate[0] === 100 &&
+					candidate[1] === 100
+				) {
+					// 現在の起用率だけは制約に関係なく評価する
+					expect(candidate).toEqual([100, 100, 100, 100, 100, 0]);
+					continue;
+				}
+				expect(fits([...candidate])).toBe(true);
+			}
+		}
+		// 現在の起用率（制約違反）も比較用に評価される
+		expect(result.current?.percents).toEqual([100, 100, 100, 100, 100, 0]);
+	});
+
 	it("returns null for the current allocation when it cannot be evaluated", async () => {
 		const evaluator = new FakeEvaluator();
 		const result = await runQuickSimOptimization({

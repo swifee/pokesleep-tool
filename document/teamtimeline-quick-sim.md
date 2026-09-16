@@ -103,7 +103,15 @@
 
 `validateQuickSimSchedule`（1 日分）と `validateQuickSimMultiDaySchedule`（期間全体）で
 「各枠が 24h を隙間なく覆う」「各メンバーの合計が目標と一致する」「同じメンバーが同時に
-2 枠に入らない」ことをテストで検証している。
+2 枠に入らない」「同時に編成できないメンバーが同じ時刻に入らない」ことをテストで検証している。
+
+### とくべつなポケモン（同時に 1 体まで）
+
+とくべつなポケモン（伝説・幻）は同時に 1 体まで（ラティアス＋ラティオスの組み合わせは可）
+というゲームの仕様を、`buildQuickSimSchedule` の第 4 引数 `exclusions`
+（同時に編成できないメンバーの組）で守る。どの配置手順でも「相手が別の枠にいる時刻」を
+自分がいる時刻と同じく避け、避けきれない分は `unmetPokemonIds` として警告する。
+詳細は `document/teamtimeline-special-pokemon.md`。
 
 ## シミュレーター入力への変換（`buildQuickSimTimeline`）
 

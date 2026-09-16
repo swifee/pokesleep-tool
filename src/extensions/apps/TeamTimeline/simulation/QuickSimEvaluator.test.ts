@@ -10,6 +10,7 @@ import {
 } from "../types/TimeSlotTypes";
 import { buildQuickSimSchedule } from "../utils/QuickSimScheduler";
 import { buildQuickSimTimeline } from "../utils/QuickSimTimelineBuilder";
+import { collectTimelineSpecialPokemonConflicts } from "../utils/SpecialPokemonUtils";
 import {
 	buildStrengthParameterFromTimelineBonusSettings,
 	createDefaultTimelineBonusSettings,
@@ -287,5 +288,58 @@ describe("QuickSimEvaluator", () => {
 			[1, 2],
 			[2, 2],
 		]);
+	});
+
+	it("never puts two special Pokémon in the team at the same time", () => {
+		const items = [
+			createItem("Mewtwo", 1),
+			createItem("Darkrai", 2),
+			...NAMES.slice(0, 4).map((name, index) => createItem(name, index + 3)),
+		];
+		const box = new PokemonBox(items);
+		const context = createContext({
+			box,
+			members: items.map((item) => ({
+				pokemonId: item.id,
+				usageMode: "even" as const,
+			})),
+			simulationConfig: { ...DEFAULT_SIMULATION_CONFIG, simulationDays: 2 },
+		});
+		const evaluator = new QuickSimEvaluator(context);
+
+		// 合計 100% 以内なら両方を時間をずらして起用する
+		const shared = evaluator.prepare([60, 40, 100, 100, 100, 100], true);
+		expect(shared).not.toBeNull();
+		if (shared === null) {
+			throw new Error("unreachable");
+		}
+		expect(shared.unmetPokemonIds).toEqual([]);
+		const conflicts = collectTimelineSpecialPokemonConflicts(
+			shared.timeline.team,
+			shared.timeline.timeSlots,
+			2,
+			shared.timeline.swaps,
+			box,
+		);
+		expect(conflicts.pokemonIds).toEqual([]);
+		const appearing = new Set([
+			...shared.timeline.team.map((member) => member?.id ?? null),
+			...shared.timeline.swaps.map((swap) => swap.newPokemonId),
+		]);
+		expect(appearing.has(1)).toBe(true);
+		expect(appearing.has(2)).toBe(true);
+
+		// 合計が 100% を超えると後のとくべつなポケモンは起用率を満たせない
+		const exceeded = evaluator.prepare([100, 40, 100, 100, 100, 60], true);
+		expect(exceeded?.unmetPokemonIds).toEqual([2]);
+		expect(
+			collectTimelineSpecialPokemonConflicts(
+				exceeded?.timeline.team ?? [],
+				exceeded?.timeline.timeSlots ?? [],
+				2,
+				exceeded?.timeline.swaps ?? [],
+				box,
+			).pokemonIds,
+		).toEqual([]);
 	});
 });

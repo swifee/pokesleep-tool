@@ -53,6 +53,8 @@ interface TimelineRowProps {
 	swapDragSource?: SwapCellCoordinate | null;
 	swapDragTarget?: SwapCellCoordinate | null;
 	displayMode?: TimelineDisplayMode;
+	/** この行で、とくべつなポケモンが重複しているチーム枠 index */
+	specialConflictTeamIndexes?: readonly number[];
 }
 
 const TEAM_SLOT_KEYS = [
@@ -101,6 +103,7 @@ const TimelineRow = React.memo(
 		swapDragSource = null,
 		swapDragTarget = null,
 		displayMode = "detailed",
+		specialConflictTeamIndexes = [],
 	}: TimelineRowProps) => {
 		const { t } = useTranslation();
 
@@ -322,6 +325,7 @@ const TimelineRow = React.memo(
 							onSwapLongPressStart={onSwapLongPressStart}
 							swapDragState={swapDragState}
 							displayMode={displayMode}
+							specialConflict={specialConflictTeamIndexes.includes(index)}
 						/>
 					);
 				})}

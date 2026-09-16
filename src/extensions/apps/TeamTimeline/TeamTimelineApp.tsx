@@ -30,6 +30,9 @@ import QuickSimTab from "./components/QuickSimTab";
 import type { ResimulationDeltaSummary } from "./components/ResimulationNoticeBar";
 import ResimulationNoticeBar from "./components/ResimulationNoticeBar";
 import SimulationControls from "./components/SimulationControls";
+import SpecialPokemonConflictBar, {
+	type SpecialPokemonConflictEntry,
+} from "./components/SpecialPokemonConflictBar";
 import SummaryValueModeToggle from "./components/SummaryValueModeToggle";
 import { SwapEnergyDialog } from "./components/SwapEnergyDialog";
 import SwapRemoveConfirmDialog from "./components/SwapRemoveConfirmDialog";
@@ -134,6 +137,7 @@ import {
 	saveProvisionalSettingsToStorage,
 } from "./utils/ProvisionalSettingsStorage";
 import { buildSimulationContextHash } from "./utils/SimulationContextHash";
+import { collectTimelineSpecialPokemonConflicts } from "./utils/SpecialPokemonUtils";
 import type { SummaryValueMode } from "./utils/SummaryValueModeUtils";
 import {
 	hydrateSwapsWithSerializedPokemon,
@@ -1836,6 +1840,41 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 		],
 	);
 
+	// とくべつなポケモン（伝説・幻）が同じ時間帯に 2 体以上いるとき、対象を知らせる
+	const specialPokemonConflictEntries = useMemo(
+		(): SpecialPokemonConflictEntry[] =>
+			collectTimelineSpecialPokemonConflicts(
+				state.team,
+				state.timeSlots,
+				state.simulationConfig.simulationDays,
+				state.swaps,
+				timelineRuntimeBoxRef.current ?? undefined,
+			).pokemonIds.flatMap((pokemonId) => {
+				const item =
+					timelineRuntimeBoxRef.current?.getById(pokemonId) ??
+					state.team.find((member) => member?.id === pokemonId) ??
+					null;
+				if (!item) {
+					return [];
+				}
+				return [
+					{
+						pokemonId,
+						pokemonIdForm: item.iv.idForm,
+						pokemonShiny: item.iv.shiny,
+						name: item.filledNickname(t),
+					},
+				];
+			}),
+		[
+			state.team,
+			state.timeSlots,
+			state.simulationConfig.simulationDays,
+			state.swaps,
+			t,
+		],
+	);
+
 	const baseSortedSeeds = useMemo(() => {
 		if (state.multiTrialResults && state.multiTrialResults.length > 0) {
 			return state.multiTrialResults.map((trial) => trial.seed);
@@ -3149,6 +3188,9 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 							noCollectCount={activeNoCollectCount}
 							entries={noCollectSupplementEntries}
 							onClear={handleClearNoCollectCells}
+						/>
+						<SpecialPokemonConflictBar
+							entries={specialPokemonConflictEntries}
 						/>
 
 						{/* シミュレーション実行コントロール */}

@@ -11,6 +11,10 @@
  *
  * 全候補で同じシード列を使う（共通乱数）ので、候補どうしの比較は同じ試行数の
  * 平均で行う。
+ *
+ * 同時に編成できないメンバーの組（とくべつなポケモンのルール）は exclusiveGroups で
+ * 受け取り、組の起用率の合計が 100% を超える候補は最初から生成しない。
+ * 評価器側のスケジューラも同じ組を同時に置かないので、結果を適用してもルールを守る。
  */
 
 import {
@@ -27,8 +31,10 @@ import {
 	QUICK_SIM_OPTIMIZER_SCREENING_LIMIT,
 	QUICK_SIM_OPTIMIZER_SEARCH_TRIALS,
 	QUICK_SIM_OPTIMIZER_SOLO_TRIALS,
+	QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
 	type QuickSimCandidateEvaluation,
 	type QuickSimOptimizerEvaluator,
+	type QuickSimOptimizerExclusiveGroups,
 	type QuickSimOptimizerMember,
 	type QuickSimOptimizerOptions,
 	type QuickSimOptimizerPercents,
@@ -54,6 +60,8 @@ export interface QuickSimOptimizationInput {
 	currentPercents: readonly number[];
 	evaluator: QuickSimOptimizerEvaluator;
 	options?: Partial<QuickSimOptimizerOptions>;
+	/** 同時に編成できないメンバー index の組（組の起用率の合計は 100% まで） */
+	exclusiveGroups?: QuickSimOptimizerExclusiveGroups;
 	/** シードの基点。候補 i 番目の試行はシード baseSeed + i */
 	baseSeed: number;
 	onProgress?: (progress: QuickSimOptimizerProgress) => void;
@@ -126,6 +134,10 @@ class SearchSession {
 
 	get memberCount(): number {
 		return this.input.members.length;
+	}
+
+	get exclusiveGroups(): QuickSimOptimizerExclusiveGroups {
+		return this.input.exclusiveGroups ?? [];
 	}
 
 	throwIfAborted(): void {
@@ -437,7 +449,15 @@ async function runScreeningAndRacing(
 	session.throwIfAborted();
 	session.reportProgress("screening", screeningStart, 0, 0);
 	let screeningLimit = QUICK_SIM_OPTIMIZER_SCREENING_LIMIT;
-	let screened = selectTopCandidatesBySurrogate(soloTable, screeningLimit);
+	const screen = (limit: number): number[][] =>
+		selectTopCandidatesBySurrogate(
+			soloTable,
+			limit,
+			QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
+			QUICK_SIM_OPTIMIZER_MAX_UNITS,
+			session.exclusiveGroups,
+		);
+	let screened = screen(screeningLimit);
 	session.throwIfAborted();
 	session.reportProgress(
 		"screening",
@@ -463,7 +483,7 @@ async function runScreeningAndRacing(
 	) {
 		const previousKeys = new Set(screened.map((units) => unitsKey(units)));
 		screeningLimit *= 2;
-		screened = selectTopCandidatesBySurrogate(soloTable, screeningLimit);
+		screened = screen(screeningLimit);
 		const additional = screened.filter(
 			(units) => !previousKeys.has(unitsKey(units)),
 		);
@@ -505,9 +525,11 @@ async function runLocalSearch(
 		const iterationEnd =
 			phaseStart + ((phaseEnd - phaseStart) * (iteration + 1)) / maxIterations;
 		const iterationMid = (iterationStart + iterationEnd) / 2;
-		const neighbors = generateNeighborUnits(current.units).map((units) =>
-			session.getRecord(units),
-		);
+		const neighbors = generateNeighborUnits(
+			current.units,
+			QUICK_SIM_OPTIMIZER_MAX_UNITS,
+			session.exclusiveGroups,
+		).map((units) => session.getRecord(units));
 		const evaluated = await session.ensureTrials(
 			neighbors,
 			neighborTrials,

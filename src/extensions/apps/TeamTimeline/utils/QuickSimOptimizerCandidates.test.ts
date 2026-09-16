@@ -7,6 +7,7 @@ import {
 	buildSoloUnits,
 	countFullCandidates,
 	generateNeighborUnits,
+	isWithinExclusiveGroups,
 	type QuickSimSoloTable,
 	selectTopCandidatesBySurrogate,
 	surrogateScore,
@@ -144,6 +145,105 @@ describe("QuickSimOptimizerCandidates", () => {
 			expect(Math.max(...units)).toBeLessThanOrEqual(
 				QUICK_SIM_OPTIMIZER_MAX_UNITS,
 			);
+		}
+	});
+});
+
+describe("QuickSimOptimizerCandidates with exclusive groups", () => {
+	it("checks the unit total of every exclusive group", () => {
+		expect(isWithinExclusiveGroups([5, 0, 3, 2], [[0, 1]])).toBe(true);
+		expect(isWithinExclusiveGroups([5, 1, 3, 2], [[0, 1]])).toBe(false);
+		expect(
+			isWithinExclusiveGroups(
+				[2, 3, 2, 1],
+				[
+					[0, 1],
+					[1, 2, 3],
+				],
+			),
+		).toBe(false);
+		expect(isWithinExclusiveGroups([2, 3, 2, 1], [])).toBe(true);
+		expect(isWithinExclusiveGroups([2, 3, 2, 1], [[0, 1]], 4)).toBe(false);
+	});
+
+	it("screens only candidates whose exclusive groups fit into one lane", () => {
+		const soloTable = buildConcaveSoloTable([1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4]);
+		const exclusiveGroups = [
+			[0, 1],
+			[1, 6],
+		];
+		const limit = 40;
+		const selected = selectTopCandidatesBySurrogate(
+			soloTable,
+			limit,
+			QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
+			QUICK_SIM_OPTIMIZER_MAX_UNITS,
+			exclusiveGroups,
+		);
+		const expected = enumerateAll(
+			7,
+			QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
+			QUICK_SIM_OPTIMIZER_MAX_UNITS,
+		)
+			.filter((units) => isWithinExclusiveGroups(units, exclusiveGroups))
+			.map((units) => ({ units, score: surrogateScore(soloTable, units) }))
+			.sort((left, right) => right.score - left.score);
+
+		expect(selected).toHaveLength(limit);
+		for (const units of selected) {
+			expect(units[0] + units[1]).toBeLessThanOrEqual(
+				QUICK_SIM_OPTIMIZER_MAX_UNITS,
+			);
+			expect(units[1] + units[6]).toBeLessThanOrEqual(
+				QUICK_SIM_OPTIMIZER_MAX_UNITS,
+			);
+		}
+		expect(selected.map((units) => surrogateScore(soloTable, units))).toEqual(
+			expected.slice(0, limit).map((entry) => entry.score),
+		);
+		// 制約なしの最良候補（先頭 2 匹が 5 単位ずつ）は除かれている
+		expect(selected.map(unitsKey)).not.toContain(
+			unitsKey(selectTopCandidatesBySurrogate(soloTable, 1)[0]),
+		);
+	});
+
+	it("keeps the constrained search tractable for twelve members", () => {
+		const weights = Array.from({ length: 12 }, (_, index) => 1 - index * 0.05);
+		const soloTable = buildConcaveSoloTable(weights);
+		const start = performance.now();
+		const selected = selectTopCandidatesBySurrogate(
+			soloTable,
+			2000,
+			QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
+			QUICK_SIM_OPTIMIZER_MAX_UNITS,
+			[
+				[0, 1, 2],
+				[0, 1, 3],
+			],
+		);
+		const elapsed = performance.now() - start;
+		expect(selected).toHaveLength(2000);
+		expect(elapsed).toBeLessThan(5000);
+		for (const units of selected) {
+			expect(units[0] + units[1] + units[2]).toBeLessThanOrEqual(5);
+			expect(units[0] + units[1] + units[3]).toBeLessThanOrEqual(5);
+		}
+	});
+
+	it("drops neighbors that break an exclusive group", () => {
+		const neighbors = generateNeighborUnits(
+			[3, 2, 3],
+			QUICK_SIM_OPTIMIZER_MAX_UNITS,
+			[[0, 1]],
+		);
+		const keys = neighbors.map(unitsKey);
+		expect(keys).toContain("2,2,4");
+		expect(keys).toContain("3,1,4");
+		expect(keys).toContain("2,3,3");
+		expect(keys).not.toContain("4,2,2");
+		expect(keys).not.toContain("3,3,2");
+		for (const units of neighbors) {
+			expect(units[0] + units[1]).toBeLessThanOrEqual(5);
 		}
 	});
 });

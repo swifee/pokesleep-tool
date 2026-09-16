@@ -58,6 +58,8 @@ interface TimelineCellProps {
 	displayMode?: TimelineDisplayMode;
 	noCollectEnabled?: boolean;
 	onNoCollectToggle?: () => void;
+	/** とくべつなポケモンが同じ時間帯に 2 体以上いる（ルール違反）セル */
+	specialConflict?: boolean;
 }
 
 const ENERGY_BAR_COLOR_HIGH = "#62d540";
@@ -66,6 +68,8 @@ const ENERGY_BAR_COLOR_MID = "#4e9ff2";
 const ENERGY_BAR_COLOR_LOW = "#b792f2";
 const ENERGY_BAR_COLOR_CRITICAL = "#a9a9a9";
 const ENERGY_BAR_TRACK_COLOR = "#f3f4f6";
+/** とくべつなポケモンが重複しているセルの背景（SpecialPokemonConflictBar と同じ色） */
+const SPECIAL_CONFLICT_CELL_BACKGROUND = "#fde8e8";
 
 function getEnergyBarColor(energy: number): string {
 	if (energy >= 80) {
@@ -147,6 +151,7 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 		displayMode = "detailed",
 		noCollectEnabled = false,
 		onNoCollectToggle,
+		specialConflict = false,
 	} = props;
 	const { t } = useTranslation();
 	const swapButtonTitle = t("TeamTimeline.swap pokemon");
@@ -661,6 +666,8 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 				$simple={false}
 				$fitToViewport={fitToViewport}
 				$swapDragState={swapDragState}
+				$specialConflict={specialConflict}
+				data-special-conflict={specialConflict ? "true" : "false"}
 				data-compact-layout={isCompactLayout ? "true" : "false"}
 				data-swap-slot-id={swapSlotId}
 				data-swap-team-index={teamIndex}
@@ -733,6 +740,8 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 				$simple={true}
 				$fitToViewport={fitToViewport}
 				$swapDragState={swapDragState}
+				$specialConflict={specialConflict}
+				data-special-conflict={specialConflict ? "true" : "false"}
 				data-compact-layout={isCompactLayout ? "true" : "false"}
 				data-swap-slot-id={swapSlotId}
 				data-swap-team-index={teamIndex}
@@ -1295,6 +1304,8 @@ const TimelineCell = React.memo((props: TimelineCellProps) => {
 			$simple={false}
 			$fitToViewport={fitToViewport}
 			$swapDragState={swapDragState}
+			$specialConflict={specialConflict}
+			data-special-conflict={specialConflict ? "true" : "false"}
 			data-compact-layout={isCompactLayout ? "true" : "false"}
 			data-swap-slot-id={swapSlotId}
 			data-swap-team-index={teamIndex}
@@ -1464,6 +1475,7 @@ const StyledCell = styled("div")<{
 	$simple: boolean;
 	$fitToViewport: boolean;
 	$swapDragState: SwapDragState;
+	$specialConflict: boolean;
 }>(
 	({
 		$isSleeping,
@@ -1474,6 +1486,7 @@ const StyledCell = styled("div")<{
 		$simple,
 		$fitToViewport,
 		$swapDragState,
+		$specialConflict,
 	}) => ({
 		position: "relative",
 		width: $fitToViewport
@@ -1507,9 +1520,11 @@ const StyledCell = styled("div")<{
 		backgroundColor:
 			$swapDragState === "target"
 				? "#fff4de"
-				: $isSleeping
-					? "#f5f6fb"
-					: "#fff",
+				: $specialConflict
+					? SPECIAL_CONFLICT_CELL_BACKGROUND
+					: $isSleeping
+						? "#f5f6fb"
+						: "#fff",
 		display: "flex",
 		flexDirection: "column",
 		gap: "1px",

@@ -3,6 +3,7 @@ import {
 	MINUTES_PER_DAY,
 	QUICK_SIM_USAGE_MODES,
 	type QuickSimDaySchedule,
+	type QuickSimExclusionMap,
 	type QuickSimLaneSegment,
 	type QuickSimMember,
 	type QuickSimSchedule,
@@ -753,6 +754,270 @@ describe("buildQuickSimSchedule with usage modes", () => {
 			);
 			expect(errors).toEqual([]);
 			expect(result.schedule.dayLanes).toHaveLength(days);
+			expect(countLaneChanges(result.schedule)).toBe(0);
+		}
+	});
+});
+
+/** 同時に編成できない組（とくべつなポケモンのルール相当）を pokemonId の組から作る */
+function exclusionsOf(...pairs: [number, number][]): QuickSimExclusionMap {
+	const map = new Map<number, Set<number>>();
+	for (const [left, right] of pairs) {
+		for (const [from, to] of [
+			[left, right],
+			[right, left],
+		]) {
+			const set = map.get(from) ?? new Set<number>();
+			set.add(to);
+			map.set(from, set);
+		}
+	}
+	return map;
+}
+
+/** 各日について、同時に編成できない組が同じ時刻に入っている箇所（分単位で確認） */
+function findExcludedOverlaps(
+	schedule: QuickSimSchedule,
+	exclusions: QuickSimExclusionMap,
+): string[] {
+	const overlaps: string[] = [];
+	schedule.dayLanes.forEach((lanes, dayIndex) => {
+		const occupants = lanes.map((lane) => {
+			const minutes = new Int32Array(MINUTES_PER_DAY).fill(-1);
+			for (const segment of lane) {
+				if (segment.pokemonId !== null) {
+					minutes.fill(
+						segment.pokemonId,
+						segment.startMinute,
+						segment.endMinute,
+					);
+				}
+			}
+			return minutes;
+		});
+		for (let minute = 0; minute < MINUTES_PER_DAY; minute++) {
+			const present = occupants
+				.map((minutes) => minutes[minute])
+				.filter((pokemonId) => pokemonId >= 0);
+			for (const pokemonId of present) {
+				const excluded = exclusions.get(pokemonId);
+				if (excluded?.size && present.some((other) => excluded.has(other))) {
+					overlaps.push(`day ${dayIndex} minute ${minute}: ${pokemonId}`);
+				}
+			}
+		}
+	});
+	return overlaps;
+}
+
+function expectNoExcludedOverlap(
+	schedule: QuickSimSchedule,
+	exclusions: QuickSimExclusionMap,
+): void {
+	expect(findExcludedOverlaps(schedule, exclusions)).toEqual([]);
+}
+
+describe("buildQuickSimSchedule with exclusions", () => {
+	it("keeps two excluded even members apart in time", () => {
+		// 100 と 101 は同時に編成できない（例: ミュウツーとダークライ）
+		const list = members(60, 40, 100, 100, 100, 100);
+		const exclusions = exclusionsOf([100, 101]);
+		const result = buildQuickSimSchedule(
+			list,
+			DEFAULT_TIME_SLOTS,
+			1,
+			exclusions,
+		);
+		if (!result.ok) {
+			throw new Error(result.error);
+		}
+		expectMultiValid(result.schedule, list, 1);
+		expect(
+			validateQuickSimMultiDaySchedule(
+				result.schedule,
+				getQuickSimTotalTargetMinutesById(list, 1),
+				exclusions,
+			),
+		).toEqual([]);
+		expectNoExcludedOverlap(result.schedule, exclusions);
+		expect(result.schedule.usesSleepSwaps).toBe(false);
+	});
+
+	it("shifts a sleep member behind an excluded sleep member instead of overlapping", () => {
+		const list = modeMembers(
+			[40, "sleep"],
+			[40, "sleep"],
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[20, "even"],
+		);
+		const exclusions = exclusionsOf([200, 201]);
+		const result = buildQuickSimSchedule(
+			list,
+			DEFAULT_TIME_SLOTS,
+			1,
+			exclusions,
+		);
+		if (!result.ok) {
+			throw new Error(result.error);
+		}
+		expectMultiValid(result.schedule, list, 1);
+		expectNoExcludedOverlap(result.schedule, exclusions);
+		// 200 は就寝時刻から、201 はその直後から連続して起用する
+		expect(segmentsOf(result.schedule, 0, 200)).toEqual([
+			{ laneIndex: 0, startMinute: 0, endMinute: 576 },
+		]);
+		expect(segmentsOf(result.schedule, 0, 201)).toEqual([
+			{ laneIndex: 0, startMinute: 576, endMinute: 1152 },
+		]);
+	});
+
+	it("does not choose two excluded members as night members", () => {
+		// 3 匹の 100% が夜担当を 3 枠使い、残り 2 枠の夜担当候補は 50% の 4 匹。
+		// 先頭の 2 匹（同時に編成できない）を両方とも夜担当にしてはいけない。
+		const list = members(50, 50, 100, 100, 100, 50, 50);
+		const exclusions = exclusionsOf([100, 101]);
+		const result = buildQuickSimSchedule(
+			list,
+			DEFAULT_TIME_SLOTS,
+			1,
+			exclusions,
+		);
+		if (!result.ok) {
+			throw new Error(result.error);
+		}
+		expectMultiValid(result.schedule, list, 1);
+		expectNoExcludedOverlap(result.schedule, exclusions);
+		expect(result.schedule.usesSleepSwaps).toBe(false);
+	});
+
+	it("reports the member whose usage cannot be met when the excluded pair exceeds one lane", () => {
+		const list = members(100, 20, 100, 100, 100, 80);
+		const exclusions = exclusionsOf([100, 101]);
+		const result = buildQuickSimSchedule(
+			list,
+			DEFAULT_TIME_SLOTS,
+			2,
+			exclusions,
+		);
+		if (!result.ok) {
+			throw new Error(result.error);
+		}
+		expect(result.schedule.unmetPokemonIds).toEqual([101]);
+		expectNoExcludedOverlap(result.schedule, exclusions);
+		const errors = validateQuickSimMultiDaySchedule(
+			result.schedule,
+			getQuickSimTotalTargetMinutesById(list, 2),
+			exclusions,
+		).filter((error) => !error.startsWith("pokemon 101: "));
+		expect(errors).toEqual([]);
+	});
+
+	it("lets a pair that is not excluded (Latias + Latios) overlap while a third special stays apart", () => {
+		// 100(ラティアス) と 101(ラティオス) は同時可。102(ミュウツー) はどちらとも不可。
+		const list = members(60, 60, 40, 100, 100, 100, 40);
+		const exclusions = exclusionsOf([100, 102], [101, 102]);
+		const result = buildQuickSimSchedule(
+			list,
+			DEFAULT_TIME_SLOTS,
+			1,
+			exclusions,
+		);
+		if (!result.ok) {
+			throw new Error(result.error);
+		}
+		expectMultiValid(result.schedule, list, 1);
+		expectNoExcludedOverlap(result.schedule, exclusions);
+	});
+
+	it("validates excluded overlaps in a hand-made schedule", () => {
+		const schedule: QuickSimSchedule = {
+			dayLanes: [
+				[
+					fullLane(100),
+					[
+						{ pokemonId: null, startMinute: 0, endMinute: 600 },
+						{ pokemonId: 101, startMinute: 600, endMinute: MINUTES_PER_DAY },
+					],
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+			],
+			sleepSlotId: "slot-5",
+			sleepTime: "23:00",
+			sleepMinutes: SLEEP_MINUTES,
+			usesSleepSwaps: false,
+			unmetPokemonIds: [],
+		};
+		const errors = validateQuickSimMultiDaySchedule(
+			schedule,
+			new Map([
+				[100, MINUTES_PER_DAY],
+				[101, MINUTES_PER_DAY - 600],
+			]),
+			exclusionsOf([100, 101]),
+		);
+		expect(errors).toEqual(["day 0: pokemon 100 and 101: both present at 600"]);
+	});
+
+	it("never overlaps excluded members across random usage and mode mixes", {
+		timeout: 30_000,
+	}, () => {
+		let seed = 97531;
+		const random = (): number => {
+			seed = (seed * 1103515245 + 12345) % 2147483648;
+			return seed / 2147483648;
+		};
+		for (let trial = 0; trial < 120; trial++) {
+			const count = 2 + Math.floor(random() * 9);
+			const entries: [number, QuickSimUsageMode][] = [];
+			let remaining = 500;
+			for (let index = 0; index < count; index++) {
+				const usage = Math.min(remaining, Math.floor(random() * 101));
+				const mode =
+					QUICK_SIM_USAGE_MODES[
+						Math.floor(random() * QUICK_SIM_USAGE_MODES.length)
+					];
+				entries.push([usage, mode]);
+				remaining -= usage;
+			}
+			const list = modeMembers(...entries);
+			// 先頭 2〜3 匹を同時に編成できない組にする
+			const specialCount = 2 + Math.floor(random() * 2);
+			const pairs: [number, number][] = [];
+			for (let left = 0; left < specialCount; left++) {
+				for (let right = left + 1; right < specialCount; right++) {
+					pairs.push([200 + left, 200 + right]);
+				}
+			}
+			const exclusions = exclusionsOf(...pairs);
+			const days = 1 + Math.floor(random() * 7);
+			const result = buildQuickSimSchedule(
+				list,
+				DEFAULT_TIME_SLOTS,
+				days,
+				exclusions,
+			);
+			if (!result.ok) {
+				expect(result.error).toBe("noMembers");
+				continue;
+			}
+			expectNoExcludedOverlap(result.schedule, exclusions);
+			const unmet = new Set(result.schedule.unmetPokemonIds);
+			const errors = validateQuickSimMultiDaySchedule(
+				result.schedule,
+				getQuickSimTotalTargetMinutesById(list, days),
+				exclusions,
+			).filter(
+				(error) =>
+					![...unmet].some((pokemonId) =>
+						error.startsWith(`pokemon ${pokemonId}: `),
+					),
+			);
+			expect(errors).toEqual([]);
 			expect(countLaneChanges(result.schedule)).toBe(0);
 		}
 	});

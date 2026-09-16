@@ -25,10 +25,15 @@
  *    入っているか」だけを決めるものとみなし、続投するメンバーは同じ枠に居続け、
  *    入れ替わるメンバーは抜けたメンバーの枠に入るように枠を付け替える。
  *    これで続投中のポケモンの列が変わることはなくなる。
+ *
+ * 同時に編成できないメンバーの組（とくべつなポケモンのルール。`QuickSimExclusionMap`）が
+ * あるときは、どの手順でも「相手が別の枠にいる時刻」を自分がいる時刻と同じく避けて
+ * 配置する。避けきれずに置けなかった分は起用率を満たせないメンバーとして報告する。
  */
 
 import {
 	DEFAULT_QUICK_SIM_USAGE_MODE,
+	EMPTY_QUICK_SIM_EXCLUSION_MAP,
 	MINUTES_PER_DAY,
 	QUICK_SIM_MAX_USAGE_PERCENT,
 	QUICK_SIM_MIN_USAGE_PERCENT,
@@ -36,6 +41,7 @@ import {
 	QUICK_SIM_USAGE_MODE_PRIORITY,
 	type QuickSimDaySchedule,
 	type QuickSimDayScheduleResult,
+	type QuickSimExclusionMap,
 	type QuickSimLaneSegment,
 	type QuickSimMember,
 	type QuickSimSchedule,
@@ -239,23 +245,44 @@ function trimRoundingExcess(jobs: readonly ScheduleJob[]): ScheduleJob[] {
 class DayGrid {
 	readonly lanes: Int32Array[];
 
-	constructor(lanes?: readonly Int32Array[]) {
+	constructor(
+		readonly exclusions: QuickSimExclusionMap,
+		lanes?: readonly Int32Array[],
+	) {
 		this.lanes = lanes
 			? lanes.map((lane) => Int32Array.from(lane))
 			: allLaneIndexes().map(() => new Int32Array(MINUTES_PER_DAY).fill(FREE));
 	}
 
 	clone(): DayGrid {
-		return new DayGrid(this.lanes);
+		return new DayGrid(this.exclusions, this.lanes);
 	}
 
 	isFree(laneIndex: number, minute: number): boolean {
 		return this.lanes[laneIndex][minute] === FREE;
 	}
 
-	/** 同じ時刻に別の枠へ入っていないか */
-	isBusy(pokemonId: number, minute: number): boolean {
+	/** 同じ時刻に別の枠へ入っているか */
+	isPresent(pokemonId: number, minute: number): boolean {
 		return this.lanes.some((lane) => lane[minute] === pokemonId);
+	}
+
+	/**
+	 * その時刻に置けないか。
+	 * 自分が別の枠にいる、または同時に編成できないメンバーがどこかの枠にいる。
+	 */
+	isBlocked(pokemonId: number, minute: number): boolean {
+		const excluded = this.exclusions.get(pokemonId);
+		for (const lane of this.lanes) {
+			const occupant = lane[minute];
+			if (occupant === FREE) {
+				continue;
+			}
+			if (occupant === pokemonId || excluded?.has(occupant)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	isRangeFree(laneIndex: number, start: number, end: number): boolean {
@@ -268,18 +295,14 @@ class DayGrid {
 		return true;
 	}
 
-	isRangeAvailable(
-		pokemonId: number,
-		laneIndex: number,
-		start: number,
-		end: number,
-	): boolean {
+	/** 範囲内に置けない時刻があるか（枠は問わない） */
+	isRangeBlocked(pokemonId: number, start: number, end: number): boolean {
 		for (let minute = start; minute < end; minute++) {
-			if (!this.isFree(laneIndex, minute) || this.isBusy(pokemonId, minute)) {
-				return false;
+			if (this.isBlocked(pokemonId, minute)) {
+				return true;
 			}
 		}
-		return true;
+		return false;
 	}
 
 	occupyRange(
@@ -291,28 +314,45 @@ class DayGrid {
 		this.lanes[laneIndex].fill(pokemonId, start, end);
 	}
 
-	/** 指定した時刻から連続する空きの長さ */
-	freeRunFrom(laneIndex: number, start: number): number {
+	/** 指定した時刻から、そのメンバーを連続して置ける長さ（枠が空きで、置けない時刻がない） */
+	availableRunFrom(
+		pokemonId: number,
+		laneIndex: number,
+		start: number,
+	): number {
 		const lane = this.lanes[laneIndex];
 		let minute = start;
-		while (minute < MINUTES_PER_DAY && lane[minute] === FREE) {
+		while (
+			minute < MINUTES_PER_DAY &&
+			lane[minute] === FREE &&
+			!this.isBlocked(pokemonId, minute)
+		) {
 			minute++;
 		}
 		return minute - start;
 	}
 
-	/** 範囲内の空き区間 */
-	freeIntervals(laneIndex: number, start: number, end: number): FreeInterval[] {
+	/** 範囲内で、そのメンバーを置ける区間（枠が空きで、置けない時刻がない） */
+	availableIntervals(
+		pokemonId: number,
+		laneIndex: number,
+		start: number,
+		end: number,
+	): FreeInterval[] {
 		const lane = this.lanes[laneIndex];
 		const intervals: FreeInterval[] = [];
 		let minute = start;
 		while (minute < end) {
-			if (lane[minute] !== FREE) {
+			if (lane[minute] !== FREE || this.isBlocked(pokemonId, minute)) {
 				minute++;
 				continue;
 			}
 			const intervalStart = minute;
-			while (minute < end && lane[minute] === FREE) {
+			while (
+				minute < end &&
+				lane[minute] === FREE &&
+				!this.isBlocked(pokemonId, minute)
+			) {
 				minute++;
 			}
 			intervals.push({ startMinute: intervalStart, endMinute: minute });
@@ -358,8 +398,8 @@ class DayGrid {
 
 	/**
 	 * 枠順にジョブを詰める（McNaughton の巻き付け法の一般形）。
-	 * 同じ時刻に別の枠へ入らないよう、自分が既にいる分は飛ばす。
-	 * 置けなかった分数を返す。
+	 * 同じ時刻に別の枠へ入らないよう、自分（や同時に編成できないメンバー）が
+	 * 既にいる分は飛ばす。置けなかった分数を返す。
 	 */
 	fillLaneMajor(
 		job: DayJob,
@@ -371,7 +411,7 @@ class DayGrid {
 		for (const laneIndex of laneOrder) {
 			const lane = this.lanes[laneIndex];
 			for (let minute = start; minute < end && remaining > 0; minute++) {
-				if (lane[minute] !== FREE || this.isBusy(job.pokemonId, minute)) {
+				if (lane[minute] !== FREE || this.isBlocked(job.pokemonId, minute)) {
 					continue;
 				}
 				lane[minute] = job.pokemonId;
@@ -412,8 +452,8 @@ class PeriodGrid {
 	/** 枠ごとの使用済み分数。固定配置のメンバーを少ない枠に寄せるために使う */
 	private readonly usedMinutesByLane: number[] = allLaneIndexes().map(() => 0);
 
-	constructor(dayCount: number) {
-		this.days = Array.from({ length: dayCount }, () => new DayGrid());
+	constructor(dayCount: number, exclusions: QuickSimExclusionMap) {
+		this.days = Array.from({ length: dayCount }, () => new DayGrid(exclusions));
 	}
 
 	get totalMinutes(): number {
@@ -437,7 +477,7 @@ class PeriodGrid {
 	}
 
 	/**
-	 * 1分だけ配置する。空き枠がなければ false。
+	 * 1分だけ配置する。空き枠がない、または同時に編成できないメンバーがいれば false。
 	 * 直前（または直後）の分で使っていた枠 → 使用済みの分数が多い枠 → 若い番号の枠
 	 * の順に選ぶ。固定配置のメンバー同士を同じ枠に寄せ（前半が抜けた枠に後半が入るなど）、
 	 * まるごと空いた枠を均等メンバーのために残す。
@@ -448,8 +488,11 @@ class PeriodGrid {
 		adjacentMinute: number,
 	): boolean {
 		const { day, minuteInDay } = this.split(minute);
-		if (day.isBusy(pokemonId, minuteInDay)) {
+		if (day.isPresent(pokemonId, minuteInDay)) {
 			return true;
+		}
+		if (day.isBlocked(pokemonId, minuteInDay)) {
+			return false;
 		}
 		const byUsage = allLaneIndexes().sort(
 			(left, right) =>
@@ -764,7 +807,7 @@ function chooseNightLane(
 ): number {
 	const remainder = job.minutes - sleepMinutes;
 	const rank = (laneIndex: number): [number, number] => {
-		const run = grid.freeRunFrom(laneIndex, sleepMinutes);
+		const run = grid.availableRunFrom(job.pokemonId, laneIndex, sleepMinutes);
 		return [run >= remainder ? 1 : 0, run];
 	};
 	return candidates.reduce((best, candidate) => {
@@ -799,7 +842,10 @@ function packDayJobsNaturally(
 		const laneIndex = chooseNightLane(grid, remainingLanes, job, sleepMinutes);
 		remainingLanes.splice(remainingLanes.indexOf(laneIndex), 1);
 		const remainder = job.minutes - sleepMinutes;
-		const run = Math.min(remainder, grid.freeRunFrom(laneIndex, sleepMinutes));
+		const run = Math.min(
+			remainder,
+			grid.availableRunFrom(job.pokemonId, laneIndex, sleepMinutes),
+		);
 		grid.occupyRange(laneIndex, 0, sleepMinutes + run, job.pokemonId);
 		boundaries.add(sleepMinutes + run);
 		if (remainder > run) {
@@ -810,7 +856,8 @@ function packDayJobsNaturally(
 	for (const job of sortByMinutesDesc([...dayOnlyJobs, ...leftovers])) {
 		let best: PlacementCandidate | null = null;
 		for (const laneIndex of allLaneIndexes()) {
-			for (const interval of grid.freeIntervals(
+			for (const interval of grid.availableIntervals(
+				job.pokemonId,
 				laneIndex,
 				sleepMinutes,
 				MINUTES_PER_DAY,
@@ -821,9 +868,6 @@ function packDayJobsNaturally(
 				}
 				const start = interval.startMinute;
 				const end = start + job.minutes;
-				if (!grid.isRangeAvailable(job.pokemonId, laneIndex, start, end)) {
-					continue;
-				}
 				const candidate: PlacementCandidate = {
 					laneIndex,
 					start,
@@ -919,6 +963,12 @@ function scheduleDayWithProtectedSleep(
 	const nightCapableLanes = allLaneIndexes().filter((laneIndex) =>
 		base.isRangeFree(laneIndex, 0, sleepMinutes),
 	);
+	// 就寝中に同時に編成できないメンバー（固定配置、または他の夜担当）がいると夜担当にできない
+	const canTakeNight = (job: DayJob, chosen: readonly DayJob[]): boolean =>
+		!base.isRangeBlocked(job.pokemonId, 0, sleepMinutes) &&
+		chosen.every(
+			(other) => !base.exclusions.get(job.pokemonId)?.has(other.pokemonId),
+		);
 
 	// 起床後だけでは足りないメンバーは必ず夜担当になる
 	const mustNightJobs = sortByMinutesDesc(
@@ -930,6 +980,13 @@ function scheduleDayWithProtectedSleep(
 	if (mustNightJobs.some((job) => job.minutes < sleepMinutes)) {
 		return null;
 	}
+	if (
+		mustNightJobs.some(
+			(job, index) => !canTakeNight(job, mustNightJobs.slice(0, index)),
+		)
+	) {
+		return null;
+	}
 
 	// 残りの夜担当は、就寝を丸ごと担当できるメンバーから起用時間の多い順に選ぶ
 	const nightJobs: DayJob[] = [...mustNightJobs];
@@ -937,7 +994,11 @@ function scheduleDayWithProtectedSleep(
 		if (nightJobs.length >= nightCapableLanes.length) {
 			break;
 		}
-		if (job.minutes < sleepMinutes || nightJobs.includes(job)) {
+		if (
+			job.minutes < sleepMinutes ||
+			nightJobs.includes(job) ||
+			!canTakeNight(job, nightJobs)
+		) {
 			continue;
 		}
 		nightJobs.push(job);
@@ -1093,6 +1154,49 @@ function validateDayLanes(
 	});
 }
 
+/**
+ * 同時に編成できないメンバーが同じ時刻に別の枠へ入っていないか。
+ */
+function validateDayExclusions(
+	lanes: readonly QuickSimLaneSegment[][],
+	label: string,
+	exclusions: QuickSimExclusionMap,
+	errors: string[],
+): void {
+	const segments = lanes.flatMap((lane) =>
+		lane.filter((segment) => segment.pokemonId !== null),
+	);
+	for (let left = 0; left < segments.length; left++) {
+		const leftId = segments[left].pokemonId;
+		if (leftId === null) {
+			continue;
+		}
+		const excluded = exclusions.get(leftId);
+		if (!excluded) {
+			continue;
+		}
+		for (let right = left + 1; right < segments.length; right++) {
+			const rightId = segments[right].pokemonId;
+			if (rightId === null || !excluded.has(rightId)) {
+				continue;
+			}
+			const overlapStart = Math.max(
+				segments[left].startMinute,
+				segments[right].startMinute,
+			);
+			const overlapEnd = Math.min(
+				segments[left].endMinute,
+				segments[right].endMinute,
+			);
+			if (overlapStart < overlapEnd) {
+				errors.push(
+					`${label}pokemon ${leftId} and ${rightId}: both present at ${overlapStart}`,
+				);
+			}
+		}
+	}
+}
+
 function validateTotals(
 	totalById: ReadonlyMap<number, number>,
 	targetMinutesById: ReadonlyMap<number, number>,
@@ -1118,14 +1222,17 @@ function validateTotals(
  * - 各枠が 0〜24h を隙間なく覆っている
  * - 各メンバーの合計時間が目標と一致する
  * - 同じメンバーが同じ時刻に複数の枠へ入っていない
+ * - 同時に編成できないメンバーが同じ時刻に入っていない
  */
 export function validateQuickSimSchedule(
 	schedule: QuickSimDaySchedule,
 	targetMinutesById: ReadonlyMap<number, number>,
+	exclusions: QuickSimExclusionMap = EMPTY_QUICK_SIM_EXCLUSION_MAP,
 ): string[] {
 	const errors: string[] = [];
 	const totalById = new Map<number, number>();
 	validateDayLanes(schedule.lanes, "", errors, totalById);
+	validateDayExclusions(schedule.lanes, "", exclusions, errors);
 	validateTotals(totalById, targetMinutesById, errors);
 	return errors;
 }
@@ -1137,11 +1244,13 @@ export function validateQuickSimSchedule(
 export function validateQuickSimMultiDaySchedule(
 	schedule: QuickSimSchedule,
 	targetMinutesById: ReadonlyMap<number, number>,
+	exclusions: QuickSimExclusionMap = EMPTY_QUICK_SIM_EXCLUSION_MAP,
 ): string[] {
 	const errors: string[] = [];
 	const totalById = new Map<number, number>();
 	schedule.dayLanes.forEach((lanes, dayIndex) => {
 		validateDayLanes(lanes, `day ${dayIndex}: `, errors, totalById);
+		validateDayExclusions(lanes, `day ${dayIndex}: `, exclusions, errors);
 	});
 	validateTotals(totalById, targetMinutesById, errors);
 	return errors;
@@ -1177,11 +1286,13 @@ export function getQuickSimTotalTargetMinutesById(
 
 /**
  * 起用率・起用方法から、集計期間全体の自動入れ替えスケジュールを生成する。
+ * `exclusions` に挙げた同時に編成できないメンバーの組は、同じ時刻に別の枠へ入れない。
  */
 export function buildQuickSimSchedule(
 	members: readonly QuickSimMember[],
 	timeSlots: readonly TimeSlot[],
 	simulationDays: number,
+	exclusions: QuickSimExclusionMap = EMPTY_QUICK_SIM_EXCLUSION_MAP,
 ): QuickSimScheduleResult {
 	const structure = resolveQuickSimDayStructure(timeSlots);
 	if (!structure) {
@@ -1196,7 +1307,7 @@ export function buildQuickSimSchedule(
 	}
 
 	const dayCount = clampSimulationDays(simulationDays);
-	const grid = new PeriodGrid(dayCount);
+	const grid = new PeriodGrid(dayCount, exclusions);
 	placeFixedJobs(grid, jobs, structure.sleepMinutes);
 	placeEvenJobs(grid, jobs, structure.sleepMinutes);
 	grid.rethreadLanes();
@@ -1229,8 +1340,9 @@ export function buildQuickSimSchedule(
 export function buildQuickSimDaySchedule(
 	members: readonly QuickSimMember[],
 	timeSlots: readonly TimeSlot[],
+	exclusions: QuickSimExclusionMap = EMPTY_QUICK_SIM_EXCLUSION_MAP,
 ): QuickSimDayScheduleResult {
-	const result = buildQuickSimSchedule(members, timeSlots, 1);
+	const result = buildQuickSimSchedule(members, timeSlots, 1, exclusions);
 	if (!result.ok) {
 		return result;
 	}

@@ -6,12 +6,15 @@
  * - 単体 EP 表（メンバーごと・単位数ごとの単独 EP）の和を代理スコアとして、
  *   上位 K 件を深さ優先探索 + 上界による枝刈りで取り出す。
  * - 局所探索の近傍は「1 単位の移動」と「2 匹の起用率の入れ替え」。
+ * - 同時に編成できないメンバーの組（とくべつなポケモン）は、組の合計単位数が
+ *   1 匹分（maxUnits）を超える候補を生成しない。
  */
 
 import {
 	QUICK_SIM_OPTIMIZER_MAX_UNITS,
 	QUICK_SIM_OPTIMIZER_STEP_PERCENT,
 	QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
+	type QuickSimOptimizerExclusiveGroups,
 	type QuickSimOptimizerPercents,
 } from "../types/QuickSimOptimizerTypes";
 
@@ -43,6 +46,25 @@ export function buildSoloUnits(
 	const result: number[] = Array.from({ length: memberCount }, () => 0);
 	result[memberIndex] = units;
 	return result;
+}
+
+/**
+ * 同時に編成できない組の合計単位数が上限以内か。
+ * 組のメンバーは同じ時刻に編成できないので、合計が 1 匹分（maxUnits）を超えると
+ * どう並べても起用率を満たせない。
+ */
+export function isWithinExclusiveGroups(
+	units: QuickSimOptimizerUnits,
+	exclusiveGroups: QuickSimOptimizerExclusiveGroups,
+	maxUnits: number = QUICK_SIM_OPTIMIZER_MAX_UNITS,
+): boolean {
+	return exclusiveGroups.every((group) => {
+		let total = 0;
+		for (const memberIndex of group) {
+			total += units[memberIndex] ?? 0;
+		}
+		return total <= maxUnits;
+	});
 }
 
 /** 代理スコア: 単体 EP の和 */
@@ -169,12 +191,14 @@ class MinScoreHeap {
  * 代理スコア（単体 EP の和）が高い候補を上位 limit 件、スコアの高い順に返す。
  * 合計 totalUnits 単位・各メンバー maxUnits 単位以下の候補を、深さ優先で列挙しながら
  * 「残りメンバーで達成できる最大スコア」の上界で枝刈りする。
+ * 同時に編成できない組（exclusiveGroups）の合計が maxUnits を超える枝は辿らない。
  */
 export function selectTopCandidatesBySurrogate(
 	soloTable: QuickSimSoloTable,
 	limit: number,
 	totalUnits: number = QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
 	maxUnits: number = QUICK_SIM_OPTIMIZER_MAX_UNITS,
+	exclusiveGroups: QuickSimOptimizerExclusiveGroups = [],
 ): number[][] {
 	const memberCount = soloTable.length;
 	if (memberCount === 0 || limit <= 0) {
@@ -186,6 +210,26 @@ export function selectTopCandidatesBySurrogate(
 	}
 	const heap = new MinScoreHeap();
 	const current: number[] = [];
+	// メンバーごとに所属する組の index。組の合計は枝を進めながら更新する
+	const groupIndexesByMember: number[][] = Array.from(
+		{ length: memberCount },
+		() => [],
+	);
+	exclusiveGroups.forEach((group, groupIndex) => {
+		for (const memberIndex of group) {
+			groupIndexesByMember[memberIndex]?.push(groupIndex);
+		}
+	});
+	const groupTotals: number[] = exclusiveGroups.map(() => 0);
+	const canAddToGroups = (memberIndex: number, units: number): boolean =>
+		groupIndexesByMember[memberIndex].every(
+			(groupIndex) => groupTotals[groupIndex] + units <= maxUnits,
+		);
+	const adjustGroupTotals = (memberIndex: number, delta: number): void => {
+		for (const groupIndex of groupIndexesByMember[memberIndex]) {
+			groupTotals[groupIndex] += delta;
+		}
+	};
 
 	const visit = (index: number, remaining: number, score: number): void => {
 		if (index === memberCount) {
@@ -207,16 +251,19 @@ export function selectTopCandidatesBySurrogate(
 		// 大きい単位から試すと良い候補が早く見つかり、枝刈りが効きやすい
 		for (let units = Math.min(maxUnits, remaining); units >= 0; units--) {
 			if (
-				suffixBest[index + 1][remaining - units] === Number.NEGATIVE_INFINITY
+				suffixBest[index + 1][remaining - units] === Number.NEGATIVE_INFINITY ||
+				!canAddToGroups(index, units)
 			) {
 				continue;
 			}
 			current.push(units);
+			adjustGroupTotals(index, units);
 			visit(
 				index + 1,
 				remaining - units,
 				score + (soloTable[index][units] ?? 0),
 			);
+			adjustGroupTotals(index, -units);
 			current.pop();
 		}
 	};
@@ -228,16 +275,21 @@ export function selectTopCandidatesBySurrogate(
  * 局所探索の近傍。
  * - メンバー i の 1 単位をメンバー j へ移す
  * - メンバー i と j の単位数を入れ替える
+ * 同時に編成できない組（exclusiveGroups）の合計が maxUnits を超える近傍は除く。
  */
 export function generateNeighborUnits(
 	units: QuickSimOptimizerUnits,
 	maxUnits: number = QUICK_SIM_OPTIMIZER_MAX_UNITS,
+	exclusiveGroups: QuickSimOptimizerExclusiveGroups = [],
 ): number[][] {
 	const neighbors: number[][] = [];
 	const seen = new Set<string>();
 	const offer = (candidate: number[]): void => {
 		const key = unitsKey(candidate);
-		if (seen.has(key)) {
+		if (
+			seen.has(key) ||
+			!isWithinExclusiveGroups(candidate, exclusiveGroups, maxUnits)
+		) {
 			return;
 		}
 		seen.add(key);
