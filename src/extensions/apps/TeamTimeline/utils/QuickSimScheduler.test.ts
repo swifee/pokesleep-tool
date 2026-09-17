@@ -18,6 +18,7 @@ import {
 	getQuickSimTotalTargetMinutesById,
 	getQuickSimTotalUsagePercent,
 	isQuickSimUsageExceeded,
+	isQuickSimUsageModeEffective,
 	resolveQuickSimDayStructure,
 	usagePercentToMinutes,
 	validateQuickSimMultiDaySchedule,
@@ -82,6 +83,16 @@ describe("usage helpers", () => {
 		expect(clampQuickSimUsagePercent(150)).toBe(100);
 		expect(clampQuickSimUsagePercent(33.4)).toBe(33);
 		expect(clampQuickSimUsagePercent(Number.NaN)).toBe(0);
+	});
+
+	it("treats the usage mode as effective only between 1% and 99%", () => {
+		expect(isQuickSimUsageModeEffective(0)).toBe(false);
+		expect(isQuickSimUsageModeEffective(1)).toBe(true);
+		expect(isQuickSimUsageModeEffective(50)).toBe(true);
+		expect(isQuickSimUsageModeEffective(99)).toBe(true);
+		expect(isQuickSimUsageModeEffective(100)).toBe(false);
+		expect(isQuickSimUsageModeEffective(150)).toBe(false);
+		expect(isQuickSimUsageModeEffective(Number.NaN)).toBe(false);
 	});
 
 	it("converts usage percent to minutes per day", () => {

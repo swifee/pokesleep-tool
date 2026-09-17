@@ -128,25 +128,23 @@ describe("TeamTimelineApp quick simulation tab", () => {
 		localStorage.clear();
 	});
 
-	it("shows the quick tab first and keeps the detailed tab selected by default", () => {
+	it("shows the auto simulation tab first and opens on it by default", () => {
 		render(<TeamTimelineApp />);
 
 		const tabs = screen.getAllByRole("tab");
 		expect(tabs.map((tab) => tab.textContent)).toEqual([
-			"簡易シミュ",
+			"自動シミュ",
 			"詳細シミュ",
 			"基本設定",
 			"料理設定",
 		]);
-		expect(tabs[1].getAttribute("aria-selected")).toBe("true");
-		expect(screen.queryByTestId("quick-sim-tab")).toBeNull();
-		expect(screen.getByTestId("timeline-table")).toBeDefined();
+		expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+		expect(screen.getByTestId("quick-sim-tab")).toBeDefined();
+		expect(screen.queryByTestId("timeline-table")).toBeNull();
 	});
 
 	it("renders the quick tab with the active team and shared controls", () => {
 		render(<TeamTimelineApp />);
-
-		fireEvent.click(screen.getByRole("tab", { name: "簡易シミュ" }));
 
 		const quickTab = screen.getByTestId("quick-sim-tab");
 		expect(quickTab.getAttribute("data-team")).toBe(

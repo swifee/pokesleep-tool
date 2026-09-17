@@ -256,13 +256,14 @@ describe("QuickSimOptimizerPanel", () => {
 		]);
 	});
 
-	it("passes the sleep-swap option and a random seed when requested", async () => {
+	it("always excludes sleep-swap candidates and uses a random seed when requested", async () => {
 		runOptimizationMock.mockResolvedValue(createResult(6));
 		renderPanel(6, { seedMode: "random" });
 
-		fireEvent.click(
-			screen.getByTestId("quick-sim-optimizer-exclude-sleep-swaps"),
-		);
+		// There is no longer a checkbox to allow candidates that need sleep swaps.
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-exclude-sleep-swaps"),
+		).toBeNull();
 		fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
 
 		await waitFor(() => {
@@ -270,7 +271,7 @@ describe("QuickSimOptimizerPanel", () => {
 		});
 		const input = runOptimizationMock.mock
 			.calls[0][0] as QuickSimOptimizationInput;
-		expect(input.options).toEqual({ excludeSleepSwaps: false });
+		expect(input.options).toEqual({ excludeSleepSwaps: true });
 		expect(input.baseSeed).not.toBe(777);
 	});
 
@@ -422,7 +423,7 @@ describe("QuickSimOptimizerPanel", () => {
 		expect(epCell.style.padding).toBe("3px 4px");
 	});
 
-	it("passes the special Pokémon groups to the search and shows the note", async () => {
+	it("passes the special Pokémon groups to the search without showing a note", async () => {
 		const items = [
 			"Mewtwo",
 			"Pikachu",
@@ -437,9 +438,8 @@ describe("QuickSimOptimizerPanel", () => {
 		runOptimizationMock.mockResolvedValue(createResult(6));
 		renderPanel(6, { box: new PokemonBox(items) });
 
-		expect(
-			screen.getByTestId("quick-sim-optimizer-special-note").textContent,
-		).toContain("同時に1体まで");
+		// The rule is applied silently here; the schedule section explains it.
+		expect(screen.queryByTestId("quick-sim-optimizer-special-note")).toBeNull();
 
 		fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
 		await waitFor(() => {
@@ -448,10 +448,5 @@ describe("QuickSimOptimizerPanel", () => {
 		const input = runOptimizationMock.mock
 			.calls[0][0] as QuickSimOptimizationInput;
 		expect(input.exclusiveGroups).toEqual([[0, 2]]);
-	});
-
-	it("does not show the special Pokémon note without conflicting members", () => {
-		renderPanel(6);
-		expect(screen.queryByTestId("quick-sim-optimizer-special-note")).toBeNull();
 	});
 });

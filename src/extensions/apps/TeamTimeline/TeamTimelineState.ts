@@ -291,7 +291,8 @@ export function createInitialState(): TeamTimelineState {
 		simulationResult: null,
 		simulationLoading: false,
 		simulationError: null,
-		activeTab: "team",
+		// 最初に開くタブは自動シミュ
+		activeTab: "quick",
 		editingSlotIndex: null,
 		timeSlotDialogOpen: false,
 		// Phase 4: ポケモン入れ替え

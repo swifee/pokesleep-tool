@@ -118,6 +118,18 @@ export function clampQuickSimUsagePercent(percent: number): number {
 }
 
 /**
+ * 起用方法が配置に影響するか。
+ * 0% はスケジュールに含めず、100% は常に1枠を占有するので、1〜99% のときだけ影響する。
+ */
+export function isQuickSimUsageModeEffective(percent: number): boolean {
+	const clamped = clampQuickSimUsagePercent(percent);
+	return (
+		clamped > QUICK_SIM_MIN_USAGE_PERCENT &&
+		clamped < QUICK_SIM_MAX_USAGE_PERCENT
+	);
+}
+
+/**
  * 起用率(%)を1日あたりの分数に変換する
  */
 export function usagePercentToMinutes(percent: number): number {
