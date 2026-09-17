@@ -13,8 +13,13 @@ function createItem(
 	pokemonName: string,
 	id: number,
 	nickname = "",
+	level = 30,
 ): PokemonBoxItem {
-	return new PokemonBoxItem(new PokemonIv({ pokemonName }), nickname, id);
+	return new PokemonBoxItem(
+		new PokemonIv({ pokemonName, level }),
+		nickname,
+		id,
+	);
 }
 
 describe("QuickSimStorage", () => {
@@ -87,6 +92,41 @@ describe("QuickSimStorage", () => {
 			members: [
 				{ pokemonId: 1, usagePercent: 40, usageMode: "even" },
 				{ pokemonId: 2, usagePercent: 60, usageMode: "even" },
+			],
+		});
+	});
+
+	it("re-resolves edited members by similarity and only among the given candidates", () => {
+		const editedPikachu = createItem("Pikachu", 1, "Pika", 45);
+		const hiddenPreset = createItem("Eevee", 1000001, "", 45);
+		const box = new PokemonBox([editedPikachu, hiddenPreset]);
+		localStorage.setItem(
+			STORAGE_KEY_QUICK_SIM,
+			JSON.stringify({
+				members: [
+					{
+						serialized: createItem("Pikachu", 9, "Pika", 30).serialize(),
+						usagePercent: 80,
+						usageMode: "sleep",
+					},
+					{
+						serialized: createItem("Eevee", 9, "", 30).serialize(),
+						usagePercent: 20,
+					},
+				],
+			}),
+		);
+
+		// The hidden preset entry is not a similarity candidate, so Eevee is dropped.
+		expect(loadQuickSimSettingsFromStorage(box, [editedPikachu])).toEqual({
+			members: [
+				{ pokemonId: editedPikachu.id, usagePercent: 80, usageMode: "sleep" },
+			],
+		});
+		expect(loadQuickSimSettingsFromStorage(box)).toEqual({
+			members: [
+				{ pokemonId: editedPikachu.id, usagePercent: 80, usageMode: "sleep" },
+				{ pokemonId: hiddenPreset.id, usagePercent: 20, usageMode: "even" },
 			],
 		});
 	});
