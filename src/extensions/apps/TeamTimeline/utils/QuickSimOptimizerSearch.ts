@@ -2,12 +2,19 @@
  * QuickSimOptimizerSearch.ts
  * 起用率最適化の探索手順。評価器（シミュレーション）は注入する。
  *
+ * 対象 usage（起用率）:
  * 1. 単体 EP 表: 各メンバーを単独で各単位数に置き、料理なしで少数試行する。
  * 2. 絞り込み: 単体 EP の和（代理スコア）が高い候補を上位 N 件だけ残す。
  * 3. racing: 残った候補を少ない試行で評価し、上位だけ試行を増やしていく。
  * 4. 局所探索: racing の最良から近傍（1 単位の移動・入れ替え）を試す。
  * 5. 最終確認: 上位候補と現在の起用率を、通常の実行と同じスケジュールで
  *    多数の試行により評価し直して並べる。
+ *
+ * 対象 ingredients（初期食材）: 現在の起用率を固定し、初期食材の配分を
+ * `QuickSimIngredientSearch` で探し、上位と現在の配分を最終確認する。
+ *
+ * 対象 both（両方）: 起用率の 1〜4 を行い、100 試行以上の上位 K 候補それぞれに
+ * 初期食材を探索して、K 組と現在の組み合わせを最終確認する。
  *
  * 全候補で同じシード列を使う（共通乱数）ので、候補どうしの比較は同じ試行数の
  * 平均で行う。
@@ -17,10 +24,14 @@
  * 評価器側のスケジューラも同じ組を同時に置かないので、結果を適用してもルールを守る。
  */
 
+import type { CookingSimulationSettings } from "../types/CookingTypes";
 import {
 	DEFAULT_QUICK_SIM_OPTIMIZER_OPTIONS,
+	DEFAULT_QUICK_SIM_OPTIMIZER_TARGET,
+	optimizerTargetIncludesIngredients,
 	QUICK_SIM_OPTIMIZER_CONFIRM_CANDIDATES,
 	QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
+	QUICK_SIM_OPTIMIZER_JOINT_USAGE_CANDIDATES,
 	QUICK_SIM_OPTIMIZER_MAX_LOCAL_SEARCH_ITERATIONS,
 	QUICK_SIM_OPTIMIZER_MAX_UNITS,
 	QUICK_SIM_OPTIMIZER_NEIGHBOR_TRIALS,
@@ -33,6 +44,9 @@ import {
 	QUICK_SIM_OPTIMIZER_SOLO_TRIALS,
 	QUICK_SIM_OPTIMIZER_TOTAL_UNITS,
 	type QuickSimCandidateEvaluation,
+	type QuickSimIngredientEvaluator,
+	type QuickSimIngredientSearchSettings,
+	type QuickSimIngredientStock,
 	type QuickSimOptimizerEvaluator,
 	type QuickSimOptimizerExclusiveGroups,
 	type QuickSimOptimizerMember,
@@ -42,8 +56,15 @@ import {
 	type QuickSimOptimizerProgress,
 	type QuickSimOptimizerResult,
 	type QuickSimOptimizerResultEntry,
+	type QuickSimOptimizerTarget,
 } from "../types/QuickSimOptimizerTypes";
 import { QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT } from "../types/QuickSimTypes";
+import {
+	initialIngredientsToStock,
+	stockKey,
+	stockToInitialIngredients,
+} from "./QuickSimIngredientCandidates";
+import { runIngredientSearch } from "./QuickSimIngredientSearch";
 import {
 	buildSoloUnits,
 	generateNeighborUnits,
@@ -53,6 +74,20 @@ import {
 	unitsKey,
 	unitsToPercents,
 } from "./QuickSimOptimizerCandidates";
+import {
+	keepCount,
+	meanOfFirst,
+	type PercentRange,
+	partialRange,
+	SearchController,
+	sortByMeanDesc,
+	splitRange,
+} from "./QuickSimOptimizerSearchCommon";
+
+export {
+	createQuickSimOptimizerAbortError,
+	isQuickSimOptimizerAbortError,
+} from "./QuickSimOptimizerSearchCommon";
 
 export interface QuickSimOptimizationInput {
 	members: readonly QuickSimOptimizerMember[];
@@ -66,6 +101,12 @@ export interface QuickSimOptimizationInput {
 	baseSeed: number;
 	onProgress?: (progress: QuickSimOptimizerProgress) => void;
 	signal?: AbortSignal;
+	/** 最適化の対象（既定は起用率） */
+	target?: QuickSimOptimizerTarget;
+	/** 初期食材を探索する対象で必要 */
+	ingredientEvaluator?: QuickSimIngredientEvaluator;
+	cookingSettings?: CookingSimulationSettings;
+	ingredientSettings?: QuickSimIngredientSearchSettings;
 }
 
 /** 候補ごとの評価の蓄積 */
@@ -80,42 +121,54 @@ interface CandidateRecord {
 	swapsPerDay: number;
 }
 
-/** 進捗の段階ごとの範囲（%） */
-const PHASE_PERCENT_RANGE: Readonly<
-	Record<QuickSimOptimizerPhase, readonly [number, number]>
+/** 進捗の範囲を決める区分（起用率の各段階・初期食材の探索・最終確認） */
+type ProgressStage = QuickSimOptimizerPhase | "ingredient";
+
+/** 対象ごとの進捗の範囲（%） */
+const PHASE_PERCENT_RANGES: Readonly<
+	Record<
+		QuickSimOptimizerTarget,
+		Readonly<Partial<Record<ProgressStage, PercentRange>>>
+	>
 > = {
-	solo: [0, 5],
-	screening: [5, 6],
-	racing: [6, 55],
-	localSearch: [55, 75],
-	final: [75, 100],
+	usage: {
+		solo: [0, 5],
+		screening: [5, 6],
+		racing: [6, 55],
+		localSearch: [55, 75],
+		final: [75, 100],
+	},
+	ingredients: {
+		ingredient: [0, 75],
+		final: [75, 100],
+	},
+	both: {
+		solo: [0, 4],
+		screening: [4, 5],
+		racing: [5, 40],
+		localSearch: [40, 55],
+		ingredient: [55, 80],
+		final: [80, 100],
+	},
 };
 
 /** 絞り込みで候補が足りないときに件数を増やす上限（倍率） */
 const SCREENING_LIMIT_MAX_MULTIPLIER = 4;
 
-const ABORT_ERROR_NAME = "AbortError";
+/** 最終確認の進捗のうち、現在の設定の評価に使う割合 */
+const FINAL_CURRENT_RATIO = 0.1;
 
-export function createQuickSimOptimizerAbortError(): Error {
-	const error = new Error("Quick sim optimization aborted");
-	error.name = ABORT_ERROR_NAME;
-	return error;
+/** 初期食材を探索する対象に必要な入力 */
+interface IngredientSearchContext {
+	evaluator: QuickSimIngredientEvaluator;
+	cookingSettings: CookingSimulationSettings;
+	settings: QuickSimIngredientSearchSettings;
 }
 
-export function isQuickSimOptimizerAbortError(error: unknown): boolean {
-	return error instanceof Error && error.name === ABORT_ERROR_NAME;
-}
-
-function meanOfFirst(values: readonly number[], count: number): number {
-	const n = Math.min(count, values.length);
-	if (n <= 0) {
-		return 0;
-	}
-	let sum = 0;
-	for (let index = 0; index < n; index++) {
-		sum += values[index];
-	}
-	return sum / n;
+/** 最終確認の 1 組（起用率と初期食材の配分） */
+interface FinalCandidate {
+	percents: QuickSimOptimizerPercents;
+	stock: QuickSimIngredientStock;
 }
 
 /**
@@ -124,12 +177,16 @@ function meanOfFirst(values: readonly number[], count: number): number {
 class SearchSession {
 	private readonly records = new Map<string, CandidateRecord>();
 	private readonly options: QuickSimOptimizerOptions;
+	readonly controller: SearchController;
+	readonly target: QuickSimOptimizerTarget;
 
 	constructor(private readonly input: QuickSimOptimizationInput) {
 		this.options = {
 			...DEFAULT_QUICK_SIM_OPTIMIZER_OPTIONS,
 			...input.options,
 		};
+		this.controller = new SearchController(input);
+		this.target = input.target ?? DEFAULT_QUICK_SIM_OPTIMIZER_TARGET;
 	}
 
 	get memberCount(): number {
@@ -140,10 +197,17 @@ class SearchSession {
 		return this.input.exclusiveGroups ?? [];
 	}
 
+	get excludeSleepSwaps(): boolean {
+		return this.options.excludeSleepSwaps;
+	}
+
+	/** 進捗の範囲。対象に含まれない段階は幅 0 */
+	range(stage: ProgressStage): PercentRange {
+		return PHASE_PERCENT_RANGES[this.target][stage] ?? [0, 0];
+	}
+
 	throwIfAborted(): void {
-		if (this.input.signal?.aborted) {
-			throw createQuickSimOptimizerAbortError();
-		}
+		this.controller.throwIfAborted();
 	}
 
 	reportProgress(
@@ -152,12 +216,7 @@ class SearchSession {
 		completed: number,
 		total: number,
 	): void {
-		this.input.onProgress?.({
-			phase,
-			percent: Math.max(0, Math.min(100, Math.round(percent))),
-			completed,
-			total,
-		});
+		this.controller.reportProgress(phase, percent, completed, total);
 	}
 
 	getRecord(units: QuickSimOptimizerUnits): CandidateRecord {
@@ -181,10 +240,6 @@ class SearchSession {
 
 	allRecords(): CandidateRecord[] {
 		return [...this.records.values()];
-	}
-
-	private seedAt(index: number): number {
-		return this.input.baseSeed + index;
 	}
 
 	private applyEvaluation(
@@ -213,7 +268,7 @@ class SearchSession {
 		records: readonly CandidateRecord[],
 		trialCount: number,
 		phase: QuickSimOptimizerPhase,
-		percentRange: readonly [number, number],
+		percentRange: PercentRange,
 		options: { disableCooking?: boolean; excludeSleepSwaps?: boolean } = {},
 	): Promise<CandidateRecord[]> {
 		const excludeSleepSwaps =
@@ -237,10 +292,7 @@ class SearchSession {
 		this.reportProgress(phase, start, 0, totalCount);
 		for (const [have, group] of pending) {
 			this.throwIfAborted();
-			const seeds: number[] = [];
-			for (let index = have; index < trialCount; index++) {
-				seeds.push(this.seedAt(index));
-			}
+			const seeds = this.controller.seedsBetween(have, trialCount);
 			const evaluations = await this.input.evaluator.evaluate(
 				group.map((record) => record.percents),
 				seeds,
@@ -285,17 +337,14 @@ class SearchSession {
 	async evaluateFinal(
 		candidates: readonly QuickSimOptimizerPercents[],
 		trialCount: number,
-		percentRange: readonly [number, number],
+		percentRange: PercentRange,
 		excludeSleepSwaps: boolean,
 	): Promise<QuickSimOptimizerResultEntry[]> {
 		if (candidates.length === 0) {
 			return [];
 		}
 		this.throwIfAborted();
-		const seeds: number[] = [];
-		for (let index = 0; index < trialCount; index++) {
-			seeds.push(this.seedAt(index));
-		}
+		const seeds = this.controller.seedsBetween(0, trialCount);
 		const [start, end] = percentRange;
 		this.reportProgress("final", start, 0, candidates.length);
 		const evaluations = await this.input.evaluator.evaluate(
@@ -326,21 +375,30 @@ class SearchSession {
 			.sort((left, right) => right.meanEP - left.meanEP);
 	}
 
+	/** 現在の起用率が評価できる形か（合計が 0 より大きく上限以内） */
+	hasValidCurrentPercents(): boolean {
+		const percents = this.input.currentPercents;
+		if (percents.length !== this.memberCount) {
+			return false;
+		}
+		const total = percents.reduce((sum, percent) => sum + percent, 0);
+		return total > 0 && total <= QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT;
+	}
+
+	get currentPercents(): number[] {
+		return [...this.input.currentPercents];
+	}
+
 	/** 現在の起用率を同じシードで評価する（候補の格子に乗っていなくてもよい） */
 	async evaluateCurrent(
 		trialCount: number,
-		percentRange: readonly [number, number],
+		percentRange: PercentRange,
 	): Promise<QuickSimOptimizerResultEntry | null> {
-		const percents = [...this.input.currentPercents];
-		if (percents.length !== this.memberCount) {
-			return null;
-		}
-		const total = percents.reduce((sum, percent) => sum + percent, 0);
-		if (total <= 0 || total > QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT) {
+		if (!this.hasValidCurrentPercents()) {
 			return null;
 		}
 		const [entry] = await this.evaluateFinal(
-			[percents],
+			[this.currentPercents],
 			trialCount,
 			percentRange,
 			false,
@@ -348,8 +406,102 @@ class SearchSession {
 		return entry ?? null;
 	}
 
-	get excludeSleepSwaps(): boolean {
-		return this.options.excludeSleepSwaps;
+	/** 初期食材を探索する対象に必要な入力。足りなければ例外 */
+	requireIngredientContext(): IngredientSearchContext {
+		const { ingredientEvaluator, cookingSettings, ingredientSettings } =
+			this.input;
+		if (!ingredientEvaluator || !cookingSettings || !ingredientSettings) {
+			throw new Error(
+				"Ingredient optimization requires an ingredient evaluator, cooking settings and ingredient settings",
+			);
+		}
+		return {
+			evaluator: ingredientEvaluator,
+			cookingSettings,
+			settings: ingredientSettings,
+		};
+	}
+
+	/**
+	 * 初期食材を含む組み合わせの最終確認。
+	 * 起用率ごとに配分をまとめて料理だけを再計算し、起用方法の情報（入れ替え回数など）は
+	 * 通常の評価器から 1 試行で取る。平均 EP の高い順に返す。
+	 */
+	async evaluateFinalWithStocks(
+		context: IngredientSearchContext,
+		candidates: readonly FinalCandidate[],
+		trialCount: number,
+		percentRange: PercentRange,
+		excludeSleepSwaps: boolean,
+	): Promise<QuickSimOptimizerResultEntry[]> {
+		if (candidates.length === 0) {
+			return [];
+		}
+		const groups = new Map<
+			string,
+			{ percents: QuickSimOptimizerPercents; stocks: QuickSimIngredientStock[] }
+		>();
+		for (const candidate of candidates) {
+			const key = candidate.percents.join(",");
+			const group = groups.get(key) ?? {
+				percents: candidate.percents,
+				stocks: [],
+			};
+			group.stocks.push(candidate.stock);
+			groups.set(key, group);
+		}
+		const seeds = this.controller.seedsBetween(0, trialCount);
+		const ranges = splitRange(percentRange, groups.size);
+		const entries: QuickSimOptimizerResultEntry[] = [];
+		let groupIndex = 0;
+		for (const group of groups.values()) {
+			this.throwIfAborted();
+			const [start, end] = ranges[groupIndex++];
+			const totalStocks = group.stocks.length;
+			this.reportProgress("final", start, 0, totalStocks);
+			const [metadata] = await this.input.evaluator.evaluate(
+				[group.percents],
+				[this.controller.seedAt(0)],
+				{ excludeSleepSwaps, usePeriodSchedule: true },
+			);
+			if (!metadata || metadata.excluded) {
+				continue;
+			}
+			const evaluations = await context.evaluator.evaluateIngredients(
+				group.percents,
+				group.stocks,
+				seeds,
+				{ excludeSleepSwaps, usePeriodSchedule: true },
+				(completedSeeds, totalSeeds) => {
+					const done = Math.floor(
+						(totalStocks * completedSeeds) / Math.max(1, totalSeeds),
+					);
+					this.reportProgress(
+						"final",
+						start + ((end - start) * done) / Math.max(1, totalStocks),
+						done,
+						totalStocks,
+					);
+				},
+			);
+			this.throwIfAborted();
+			for (const evaluation of evaluations) {
+				if (evaluation.excluded) {
+					continue;
+				}
+				entries.push({
+					percents: [...group.percents],
+					initialIngredients: stockToInitialIngredients(evaluation.stock),
+					meanEP: meanOfFirst(evaluation.epBySeed, trialCount),
+					trialCount: evaluation.epBySeed.length,
+					usesSleepSwaps: metadata.usesSleepSwaps,
+					unmetPokemonIds: [...metadata.unmetPokemonIds],
+					swapsPerDay: metadata.swapsPerDay,
+				});
+			}
+			this.reportProgress("final", end, totalStocks, totalStocks);
+		}
+		return entries.sort((left, right) => right.meanEP - left.meanEP);
 	}
 }
 
@@ -372,16 +524,10 @@ async function buildSoloTable(
 		}
 		soloRecords.push(row);
 	}
-	await session.ensureTrials(
-		flat,
-		soloTrials,
-		"solo",
-		PHASE_PERCENT_RANGE.solo,
-		{
-			disableCooking: true,
-			excludeSleepSwaps: false,
-		},
-	);
+	await session.ensureTrials(flat, soloTrials, "solo", session.range("solo"), {
+		disableCooking: true,
+		excludeSleepSwaps: false,
+	});
 	return soloRecords.map((row) => [
 		0,
 		...row.map((record) =>
@@ -390,43 +536,31 @@ async function buildSoloTable(
 	]);
 }
 
-function keepCount(poolSize: number): number {
-	return Math.min(
+function usageKeepCount(poolSize: number): number {
+	return keepCount(
 		poolSize,
-		Math.max(
-			QUICK_SIM_OPTIMIZER_RACING_MIN_KEEP,
-			Math.ceil(poolSize * QUICK_SIM_OPTIMIZER_RACING_KEEP_RATIO),
-		),
-	);
-}
-
-function sortByMeanDesc(
-	records: readonly CandidateRecord[],
-	trialCount: number,
-): CandidateRecord[] {
-	return [...records].sort(
-		(left, right) =>
-			meanOfFirst(right.epBySeed, trialCount) -
-			meanOfFirst(left.epBySeed, trialCount),
+		QUICK_SIM_OPTIMIZER_RACING_KEEP_RATIO,
+		QUICK_SIM_OPTIMIZER_RACING_MIN_KEEP,
 	);
 }
 
 /** racing の各段階の進捗範囲を、見込みの仕事量（候補数 × 追加試行数）で按分する */
 function buildRacingPercentRanges(
+	range: PercentRange,
 	poolSize: number,
 	trialStages: readonly number[],
-): [number, number][] {
-	const [start, end] = PHASE_PERCENT_RANGE.racing;
+): PercentRange[] {
+	const [start, end] = range;
 	const works: number[] = [];
 	let size = poolSize;
 	let previousTrials = 0;
 	for (const trials of trialStages) {
 		works.push(size * (trials - previousTrials));
 		previousTrials = trials;
-		size = keepCount(size);
+		size = usageKeepCount(size);
 	}
 	const totalWork = works.reduce((sum, work) => sum + work, 0) || 1;
-	const ranges: [number, number][] = [];
+	const ranges: PercentRange[] = [];
 	let cursor = start;
 	for (const work of works) {
 		const next = cursor + ((end - start) * work) / totalWork;
@@ -445,7 +579,7 @@ async function runScreeningAndRacing(
 	session: SearchSession,
 	soloTable: QuickSimSoloTable,
 ): Promise<CandidateRecord[]> {
-	const [screeningStart, screeningEnd] = PHASE_PERCENT_RANGE.screening;
+	const [screeningStart, screeningEnd] = session.range("screening");
 	session.throwIfAborted();
 	session.reportProgress("screening", screeningStart, 0, 0);
 	let screeningLimit = QUICK_SIM_OPTIMIZER_SCREENING_LIMIT;
@@ -466,7 +600,11 @@ async function runScreeningAndRacing(
 		screened.length,
 	);
 	const trialStages = QUICK_SIM_OPTIMIZER_RACING_TRIALS;
-	const ranges = buildRacingPercentRanges(screened.length, trialStages);
+	const ranges = buildRacingPercentRanges(
+		session.range("racing"),
+		screened.length,
+		trialStages,
+	);
 	const firstTrials = trialStages[0];
 
 	let pool = await session.ensureTrials(
@@ -503,7 +641,7 @@ async function runScreeningAndRacing(
 		}
 		pool = sortByMeanDesc(pool, trials);
 		if (stage < trialStages.length - 1) {
-			pool = pool.slice(0, keepCount(pool.length));
+			pool = pool.slice(0, usageKeepCount(pool.length));
 		}
 	}
 	return pool;
@@ -514,17 +652,16 @@ async function runLocalSearch(
 	session: SearchSession,
 	start: CandidateRecord,
 ): Promise<CandidateRecord> {
-	const [phaseStart, phaseEnd] = PHASE_PERCENT_RANGE.localSearch;
 	const maxIterations = QUICK_SIM_OPTIMIZER_MAX_LOCAL_SEARCH_ITERATIONS;
 	const searchTrials = QUICK_SIM_OPTIMIZER_SEARCH_TRIALS;
 	const neighborTrials = QUICK_SIM_OPTIMIZER_NEIGHBOR_TRIALS;
+	const iterationRanges = splitRange(
+		session.range("localSearch"),
+		maxIterations,
+	);
 	let current = start;
 	for (let iteration = 0; iteration < maxIterations; iteration++) {
-		const iterationStart =
-			phaseStart + ((phaseEnd - phaseStart) * iteration) / maxIterations;
-		const iterationEnd =
-			phaseStart + ((phaseEnd - phaseStart) * (iteration + 1)) / maxIterations;
-		const iterationMid = (iterationStart + iterationEnd) / 2;
+		const range = iterationRanges[iteration];
 		const neighbors = generateNeighborUnits(
 			current.units,
 			QUICK_SIM_OPTIMIZER_MAX_UNITS,
@@ -534,7 +671,7 @@ async function runLocalSearch(
 			neighbors,
 			neighborTrials,
 			"localSearch",
-			[iterationStart, iterationMid],
+			partialRange(range, 0, 0.5),
 		);
 		const currentNeighborMean = meanOfFirst(current.epBySeed, neighborTrials);
 		const promising = sortByMeanDesc(
@@ -551,7 +688,7 @@ async function runLocalSearch(
 			promising,
 			searchTrials,
 			"localSearch",
-			[iterationMid, iterationEnd],
+			partialRange(range, 0.5, 1),
 		);
 		const best = sortByMeanDesc(confirmed, searchTrials)[0];
 		if (
@@ -566,45 +703,195 @@ async function runLocalSearch(
 	return current;
 }
 
-/** 5. 最終確認。探索で試行数が十分な候補の上位を、多数の試行で評価し直す */
-async function runFinalEvaluation(
+/** 起用率の探索（1〜4）。100 試行以上の候補を平均 EP の高い順に返す */
+async function runUsageSearch(
+	session: SearchSession,
+): Promise<CandidateRecord[]> {
+	const soloTable = await buildSoloTable(
+		session,
+		QUICK_SIM_OPTIMIZER_SOLO_TRIALS,
+	);
+	const racingPool = await runScreeningAndRacing(session, soloTable);
+	if (racingPool.length === 0) {
+		throw new Error("No candidate satisfied the constraints");
+	}
+	await runLocalSearch(session, racingPool[0]);
+	const searchTrials = QUICK_SIM_OPTIMIZER_SEARCH_TRIALS;
+	return sortByMeanDesc(
+		session
+			.allRecords()
+			.filter(
+				(record) => !record.excluded && record.epBySeed.length >= searchTrials,
+			),
+		searchTrials,
+	);
+}
+
+function buildResult(
 	session: SearchSession,
 	members: readonly QuickSimOptimizerMember[],
-	baseSeed: number,
-): Promise<QuickSimOptimizerResult> {
-	const [phaseStart, phaseEnd] = PHASE_PERCENT_RANGE.final;
-	const searchTrials = QUICK_SIM_OPTIMIZER_SEARCH_TRIALS;
-	const finalTrials = QUICK_SIM_OPTIMIZER_FINAL_TRIALS;
-	const qualified = session
-		.allRecords()
-		.filter(
-			(record) => !record.excluded && record.epBySeed.length >= searchTrials,
-		);
-	const top = sortByMeanDesc(qualified, searchTrials).slice(
-		0,
-		QUICK_SIM_OPTIMIZER_RESULT_COUNT,
-	);
-	const currentRangeStart = phaseStart + (phaseEnd - phaseStart) * 0.9;
-	const entries = await session.evaluateFinal(
-		top.map((record) => record.percents),
-		finalTrials,
-		[phaseStart, currentRangeStart],
-		session.excludeSleepSwaps,
-	);
-	const current = await session.evaluateCurrent(finalTrials, [
-		currentRangeStart,
-		phaseEnd,
-	]);
+	entries: QuickSimOptimizerResultEntry[],
+	current: QuickSimOptimizerResultEntry | null,
+	ingredientTotalCount?: number,
+): QuickSimOptimizerResult {
 	return {
+		target: session.target,
 		members: members.map((member) => ({ ...member })),
 		entries,
 		current,
-		baseSeed,
+		baseSeed: session.controller.baseSeed,
+		...(ingredientTotalCount !== undefined ? { ingredientTotalCount } : {}),
 	};
 }
 
+/** 対象 usage: 5. 最終確認。探索で試行数が十分な候補の上位を、多数の試行で評価し直す */
+async function runUsageTarget(
+	session: SearchSession,
+	members: readonly QuickSimOptimizerMember[],
+): Promise<QuickSimOptimizerResult> {
+	const qualified = await runUsageSearch(session);
+	const finalRange = session.range("final");
+	const top = qualified.slice(0, QUICK_SIM_OPTIMIZER_RESULT_COUNT);
+	const entries = await session.evaluateFinal(
+		top.map((record) => record.percents),
+		QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
+		partialRange(finalRange, 0, 1 - FINAL_CURRENT_RATIO),
+		session.excludeSleepSwaps,
+	);
+	const current = await session.evaluateCurrent(
+		QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
+		partialRange(finalRange, 1 - FINAL_CURRENT_RATIO, 1),
+	);
+	return buildResult(session, members, entries, current);
+}
+
+/** 対象 ingredients: 現在の起用率を固定して初期食材を探索し、上位と現在を最終確認する */
+async function runIngredientsTarget(
+	session: SearchSession,
+	members: readonly QuickSimOptimizerMember[],
+): Promise<QuickSimOptimizerResult> {
+	const context = session.requireIngredientContext();
+	if (!session.hasValidCurrentPercents()) {
+		throw new Error("Current usage percents are not valid");
+	}
+	const percents = session.currentPercents;
+	const { space, records } = await runIngredientSearch({
+		percents,
+		cookingSettings: context.cookingSettings,
+		settings: context.settings,
+		evaluator: context.evaluator,
+		controller: session.controller,
+		excludeSleepSwaps: false,
+		percentRange: session.range("ingredient"),
+	});
+	const currentStock = initialIngredientsToStock(
+		context.cookingSettings.initialIngredients,
+	);
+	const currentKey = stockKey(currentStock);
+	const top = records.slice(0, QUICK_SIM_OPTIMIZER_RESULT_COUNT);
+	const evaluated = await session.evaluateFinalWithStocks(
+		context,
+		[
+			...top.map((record) => ({ percents, stock: record.stock })),
+			{ percents, stock: currentStock },
+		],
+		QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
+		session.range("final"),
+		false,
+	);
+	const entryKey = (entry: QuickSimOptimizerResultEntry): string =>
+		stockKey(initialIngredientsToStock(entry.initialIngredients ?? {}));
+	const current =
+		evaluated.find((entry) => entryKey(entry) === currentKey) ?? null;
+	// 現在の配分は「現在」の行に出す。上位に同じ配分があるときは候補の行にも 1 つ残す
+	const currentInTop = top.some(
+		(record) => stockKey(record.stock) === currentKey,
+	);
+	let currentEntriesLeft = currentInTop ? 1 : 0;
+	const entries = evaluated.filter((entry) => {
+		if (entryKey(entry) !== currentKey) {
+			return true;
+		}
+		if (currentEntriesLeft > 0) {
+			currentEntriesLeft -= 1;
+			return true;
+		}
+		return false;
+	});
+	return buildResult(
+		session,
+		members,
+		entries.slice(0, QUICK_SIM_OPTIMIZER_RESULT_COUNT),
+		current,
+		space.effectiveTotalCount,
+	);
+}
+
+/** 対象 both: 起用率の上位候補ごとに初期食材を探索し、組み合わせを最終確認する */
+async function runBothTarget(
+	session: SearchSession,
+	members: readonly QuickSimOptimizerMember[],
+): Promise<QuickSimOptimizerResult> {
+	const context = session.requireIngredientContext();
+	const qualified = await runUsageSearch(session);
+	const usageCandidates = qualified.slice(
+		0,
+		QUICK_SIM_OPTIMIZER_JOINT_USAGE_CANDIDATES,
+	);
+	const ingredientRanges = splitRange(
+		session.range("ingredient"),
+		usageCandidates.length,
+	);
+	const pairs: FinalCandidate[] = [];
+	let effectiveTotalCount: number | undefined;
+	for (let index = 0; index < usageCandidates.length; index++) {
+		const candidate = usageCandidates[index];
+		const { space, records } = await runIngredientSearch({
+			percents: candidate.percents,
+			cookingSettings: context.cookingSettings,
+			settings: context.settings,
+			evaluator: context.evaluator,
+			controller: session.controller,
+			excludeSleepSwaps: session.excludeSleepSwaps,
+			percentRange: ingredientRanges[index],
+		});
+		effectiveTotalCount = space.effectiveTotalCount;
+		const best = records[0];
+		if (best) {
+			pairs.push({ percents: candidate.percents, stock: best.stock });
+		}
+	}
+	const finalRange = session.range("final");
+	const entries = await session.evaluateFinalWithStocks(
+		context,
+		pairs,
+		QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
+		partialRange(finalRange, 0, 1 - FINAL_CURRENT_RATIO),
+		session.excludeSleepSwaps,
+	);
+	let current: QuickSimOptimizerResultEntry | null = null;
+	if (session.hasValidCurrentPercents()) {
+		const [entry] = await session.evaluateFinalWithStocks(
+			context,
+			[
+				{
+					percents: session.currentPercents,
+					stock: initialIngredientsToStock(
+						context.cookingSettings.initialIngredients,
+					),
+				},
+			],
+			QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
+			partialRange(finalRange, 1 - FINAL_CURRENT_RATIO, 1),
+			false,
+		);
+		current = entry ?? null;
+	}
+	return buildResult(session, members, entries, current, effectiveTotalCount);
+}
+
 /**
- * 起用率の最適化を実行する。
+ * 最適化を実行する。対象は input.target（既定は起用率）。
  * 中止されたときは name が "AbortError" の例外を投げる。
  */
 export async function runQuickSimOptimization(
@@ -615,14 +902,16 @@ export async function runQuickSimOptimization(
 	}
 	const session = new SearchSession(input);
 	session.throwIfAborted();
-	const soloTable = await buildSoloTable(
-		session,
-		QUICK_SIM_OPTIMIZER_SOLO_TRIALS,
-	);
-	const racingPool = await runScreeningAndRacing(session, soloTable);
-	if (racingPool.length === 0) {
-		throw new Error("No candidate satisfied the constraints");
+	if (optimizerTargetIncludesIngredients(session.target)) {
+		// 入力の不足は探索を始める前に検出する
+		session.requireIngredientContext();
 	}
-	await runLocalSearch(session, racingPool[0]);
-	return runFinalEvaluation(session, input.members, input.baseSeed);
+	switch (session.target) {
+		case "ingredients":
+			return runIngredientsTarget(session, input.members);
+		case "both":
+			return runBothTarget(session, input.members);
+		default:
+			return runUsageTarget(session, input.members);
+	}
 }

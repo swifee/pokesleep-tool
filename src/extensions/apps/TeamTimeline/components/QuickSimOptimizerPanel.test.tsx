@@ -6,20 +6,31 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	type IngredientName,
+	IngredientNames,
+} from "../../../../data/pokemons";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
 import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type {
+	QuickSimIngredientSearchSettings,
 	QuickSimOptimizerProgress,
 	QuickSimOptimizerResult,
+	QuickSimOptimizerTarget,
 } from "../types/QuickSimOptimizerTypes";
 import type { QuickSimMember } from "../types/QuickSimTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
 	DEFAULT_TIME_SLOTS,
 } from "../types/TimeSlotTypes";
+import {
+	initialIngredientsToStock,
+	stockToInitialIngredients,
+} from "../utils/QuickSimIngredientCandidates";
 import type { QuickSimOptimizationInput } from "../utils/QuickSimOptimizerSearch";
+import { STORAGE_KEY_QUICK_SIM_OPTIMIZER } from "../utils/QuickSimOptimizerStorage";
 import { createDefaultTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import QuickSimOptimizerPanel from "./QuickSimOptimizerPanel";
 
@@ -94,31 +105,54 @@ function createMembers(count: number): QuickSimMember[] {
 	}));
 }
 
-function createResult(memberCount: number): QuickSimOptimizerResult {
+/** 19 種すべてのキーを持つ初期食材（結果の行は全置換用にすべてのキーを持つ） */
+function fullStock(
+	counts: Partial<Record<IngredientName, number>>,
+): Partial<Record<IngredientName, number>> {
+	return stockToInitialIngredients(initialIngredientsToStock(counts));
+}
+
+function createResult(
+	memberCount: number,
+	target: QuickSimOptimizerTarget = "usage",
+): QuickSimOptimizerResult {
 	const members = createMembers(memberCount).map((member) => ({
 		pokemonId: member.pokemonId,
 		usageMode: member.usageMode,
 	}));
-	const base = (percents: number[]) => ({
+	const withStock = target !== "usage";
+	const base = (
+		percents: number[],
+		stock?: Partial<Record<IngredientName, number>>,
+	) => ({
 		percents,
 		trialCount: 1000,
 		usesSleepSwaps: false,
 		unmetPokemonIds: [],
 		swapsPerDay: 2,
+		...(withStock && stock ? { initialIngredients: fullStock(stock) } : {}),
 	});
 	return {
+		target,
 		members,
 		entries: [
-			{ ...base([100, 100, 100, 100, 60, 40]), meanEP: 123456.7 },
 			{
-				...base([100, 100, 100, 80, 80, 40]),
+				...base([100, 100, 100, 100, 60, 40], { apple: 90, tomato: 60 }),
+				meanEP: 123456.7,
+			},
+			{
+				...base([100, 100, 100, 80, 80, 40], { milk: 150 }),
 				meanEP: 120000,
 				unmetPokemonIds: [3],
 				usesSleepSwaps: true,
 			},
 		],
-		current: { ...base([100, 100, 100, 100, 100, 0]), meanEP: 100000 },
+		current: {
+			...base([100, 100, 100, 100, 100, 0], { honey: 15 }),
+			meanEP: 100000,
+		},
 		baseSeed: 42,
+		...(withStock ? { ingredientTotalCount: 150 } : {}),
 	};
 }
 
@@ -127,6 +161,7 @@ function renderPanel(
 	overrides: Partial<React.ComponentProps<typeof QuickSimOptimizerPanel>> = {},
 ) {
 	const onApply = vi.fn();
+	const onApplyIngredients = vi.fn();
 	const props: React.ComponentProps<typeof QuickSimOptimizerPanel> = {
 		members: createMembers(memberCount),
 		box: createBox(memberCount),
@@ -138,10 +173,49 @@ function renderPanel(
 		seedMode: "fixed",
 		hasSleepSlot: true,
 		onApply,
+		onApplyIngredients,
 		...overrides,
 	};
 	const view = render(<QuickSimOptimizerPanel {...props} />);
-	return { ...view, onApply, props };
+	return { ...view, onApply, onApplyIngredients, props };
+}
+
+/** 対象の Select を開いて選ぶ */
+async function selectTarget(target: QuickSimOptimizerTarget) {
+	const root = screen.getByTestId("quick-sim-optimizer-target");
+	const combobox = root.querySelector('[role="combobox"]');
+	if (!combobox) {
+		throw new Error("combobox not found");
+	}
+	fireEvent.mouseDown(combobox);
+	const option = await screen.findByTestId(
+		`quick-sim-optimizer-target-${target}`,
+	);
+	fireEvent.click(option);
+}
+
+const ENABLED_COOKING = {
+	...createDefaultCookingSettings(),
+	enabled: true,
+	category: "curry" as const,
+	initialIngredients: { honey: 15 },
+};
+
+function seedIngredientSettings(
+	settings: Partial<QuickSimIngredientSearchSettings>,
+) {
+	localStorage.setItem(
+		STORAGE_KEY_QUICK_SIM_OPTIMIZER,
+		JSON.stringify({
+			totalCount: 300,
+			maxCountByIngredient: { apple: 90, milk: 210 },
+			...settings,
+		}),
+	);
+}
+
+function isDisabled(testId: string): boolean {
+	return (screen.getByTestId(testId) as HTMLButtonElement).disabled;
 }
 
 async function renderPanelWithResult(memberCount: number) {
@@ -169,6 +243,7 @@ describe("QuickSimOptimizerPanel", () => {
 		runOptimizationMock.mockReset();
 		disposeMock.mockReset();
 		evaluateMock.mockReset();
+		localStorage.clear();
 	});
 
 	it("disables the run button when there are fewer than six members", () => {
@@ -448,5 +523,217 @@ describe("QuickSimOptimizerPanel", () => {
 		const input = runOptimizationMock.mock
 			.calls[0][0] as QuickSimOptimizationInput;
 		expect(input.exclusiveGroups).toEqual([[0, 2]]);
+	});
+
+	it("starts on the usage target and passes it to the search", async () => {
+		runOptimizationMock.mockResolvedValue(createResult(6));
+		renderPanel(6);
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-ingredient-settings"),
+		).toBeNull();
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
+		await waitFor(() => {
+			expect(runOptimizationMock).toHaveBeenCalledTimes(1);
+		});
+		const input = runOptimizationMock.mock
+			.calls[0][0] as QuickSimOptimizationInput;
+		expect(input.target).toBe("usage");
+		expect(input.ingredientEvaluator).toBeUndefined();
+		expect(input.ingredientSettings).toBeUndefined();
+	});
+
+	it("requires the cooking simulation for the ingredient targets only", async () => {
+		seedIngredientSettings({});
+		renderPanel(6);
+		await selectTarget("ingredients");
+		expect(isDisabled("quick-sim-optimizer-run")).toBe(true);
+		expect(
+			screen.getByTestId("quick-sim-optimizer-disabled-reason").textContent,
+		).toContain("料理シミュレーション");
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-ingredient-settings"),
+		).not.toBeNull();
+		await selectTarget("usage");
+		expect(isDisabled("quick-sim-optimizer-run")).toBe(false);
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-disabled-reason"),
+		).toBeNull();
+	});
+
+	it("explains when no ingredient has a limit and when the total is too small", async () => {
+		renderPanel(6, { cookingSettings: ENABLED_COOKING });
+		await selectTarget("ingredients");
+		expect(isDisabled("quick-sim-optimizer-run")).toBe(true);
+		expect(
+			screen.getByTestId("quick-sim-optimizer-disabled-reason").textContent,
+		).toContain("上限");
+		expect(
+			screen.getByTestId("quick-sim-optimizer-ingredient-settings-summary")
+				.textContent,
+		).toContain("対象 0 種");
+
+		// 上限を 1 単位足すと探索できる
+		fireEvent.click(
+			screen.getByTestId("quick-sim-optimizer-ingredient-settings-toggle"),
+		);
+		fireEvent.click(screen.getByTestId("ingredient-max-increment-apple"));
+		expect(
+			(
+				screen
+					.getByTestId("ingredient-max-input-apple")
+					.querySelector("input") as HTMLInputElement
+			).value,
+		).toBe("30");
+		expect(isDisabled("quick-sim-optimizer-run")).toBe(false);
+		expect(
+			screen.getByTestId("quick-sim-optimizer-ingredient-settings-summary")
+				.textContent,
+		).toContain("対象 1 種");
+		expect(localStorage.getItem(STORAGE_KEY_QUICK_SIM_OPTIMIZER)).toContain(
+			'"apple":30',
+		);
+		// 800 個は 30 の倍数でないので、実際に配分する個数を注記する
+		expect(
+			screen.getByTestId("quick-sim-optimizer-ingredient-effective-total")
+				.textContent,
+		).toContain("30");
+
+		// 合計を刻み未満にすると実行できない
+		const totalInput = screen
+			.getByTestId("quick-sim-optimizer-ingredient-total")
+			.querySelector("input") as HTMLInputElement;
+		fireEvent.change(totalInput, { target: { value: "20" } });
+		expect(isDisabled("quick-sim-optimizer-run")).toBe(true);
+		expect(
+			screen.getByTestId("quick-sim-optimizer-disabled-reason").textContent,
+		).toContain("合計");
+	});
+
+	it("optimizes the ingredients for any member count and applies only the stock", async () => {
+		seedIngredientSettings({});
+		runOptimizationMock.mockResolvedValue(createResult(3, "ingredients"));
+		const { onApply, onApplyIngredients } = renderPanel(3, {
+			cookingSettings: ENABLED_COOKING,
+		});
+		await selectTarget("ingredients");
+		expect(isDisabled("quick-sim-optimizer-run")).toBe(false);
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
+		await waitFor(() => {
+			expect(screen.queryByTestId("quick-sim-optimizer-table")).not.toBeNull();
+		});
+		const input = runOptimizationMock.mock
+			.calls[0][0] as QuickSimOptimizationInput;
+		expect(input.target).toBe("ingredients");
+		expect(input.ingredientEvaluator).toBeDefined();
+		expect(input.cookingSettings).toEqual(ENABLED_COOKING);
+		expect(input.ingredientSettings).toEqual({
+			totalCount: 300,
+			maxCountByIngredient: { apple: 90, milk: 210 },
+		});
+
+		// 起用率の列はなく、初期食材のチップが出る
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-row-1-percent-1"),
+		).toBeNull();
+		expect(screen.queryByTestId("quick-sim-optimizer-row-1-swaps")).toBeNull();
+		expect(
+			screen.getByTestId("quick-sim-optimizer-row-1-stock-apple").textContent,
+		).toContain("90");
+		expect(
+			screen.getByTestId("quick-sim-optimizer-row-1-stock-tomato").textContent,
+		).toContain("60");
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-row-1-stock-milk"),
+		).toBeNull();
+		expect(
+			screen.getByTestId("quick-sim-optimizer-row-current-stock-honey")
+				.textContent,
+		).toContain("15");
+
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-row-1-apply"));
+		expect(onApply).not.toHaveBeenCalled();
+		expect(onApplyIngredients).toHaveBeenCalledTimes(1);
+		const applied = onApplyIngredients.mock.calls[0][0] as Record<
+			string,
+			number
+		>;
+		expect(Object.keys(applied)).toHaveLength(IngredientNames.length);
+		expect(applied.apple).toBe(90);
+		expect(applied.tomato).toBe(60);
+		expect(applied.milk).toBe(0);
+	});
+
+	it("shows usage columns and the stock for the joint target and applies both", async () => {
+		seedIngredientSettings({});
+		runOptimizationMock.mockResolvedValue(createResult(6, "both"));
+		const { onApply, onApplyIngredients } = renderPanel(6, {
+			cookingSettings: ENABLED_COOKING,
+		});
+		await selectTarget("both");
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
+		await waitFor(() => {
+			expect(screen.queryByTestId("quick-sim-optimizer-table")).not.toBeNull();
+		});
+		const input = runOptimizationMock.mock
+			.calls[0][0] as QuickSimOptimizationInput;
+		expect(input.target).toBe("both");
+		expect(
+			screen.getByTestId("quick-sim-optimizer-row-1-percent-5").textContent,
+		).toContain("60");
+		expect(
+			screen.getByTestId("quick-sim-optimizer-row-1-stock-apple").textContent,
+		).toContain("90");
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-row-1-swaps"),
+		).not.toBeNull();
+
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-row-1-apply"));
+		expect(onApply).toHaveBeenCalledTimes(1);
+		expect(onApplyIngredients).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps an ingredient result fresh when the stock is applied but stales it when the search settings change", async () => {
+		seedIngredientSettings({});
+		runOptimizationMock.mockResolvedValue(createResult(6, "ingredients"));
+		const { rerender, props } = renderPanel(6, {
+			cookingSettings: ENABLED_COOKING,
+		});
+		await selectTarget("ingredients");
+		fireEvent.click(screen.getByTestId("quick-sim-optimizer-run"));
+		await waitFor(() => {
+			expect(screen.queryByTestId("quick-sim-optimizer-table")).not.toBeNull();
+		});
+		expect(screen.queryByTestId("quick-sim-optimizer-stale-notice")).toBeNull();
+
+		rerender(
+			<QuickSimOptimizerPanel
+				{...props}
+				cookingSettings={{
+					...ENABLED_COOKING,
+					initialIngredients: { apple: 90, tomato: 60 },
+				}}
+			/>,
+		);
+		expect(screen.queryByTestId("quick-sim-optimizer-stale-notice")).toBeNull();
+
+		rerender(
+			<QuickSimOptimizerPanel
+				{...props}
+				cookingSettings={{ ...ENABLED_COOKING, basePotCapacity: 99 }}
+			/>,
+		);
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-stale-notice"),
+		).not.toBeNull();
+
+		rerender(<QuickSimOptimizerPanel {...props} />);
+		expect(screen.queryByTestId("quick-sim-optimizer-stale-notice")).toBeNull();
+		fireEvent.click(
+			screen.getByTestId("quick-sim-optimizer-ingredient-settings-toggle"),
+		);
+		fireEvent.click(screen.getByTestId("ingredient-max-increment-tomato"));
+		expect(
+			screen.queryByTestId("quick-sim-optimizer-stale-notice"),
+		).not.toBeNull();
 	});
 });

@@ -50,7 +50,10 @@ import {
 	HUGE_MAGO_BERRY_TYPE,
 } from "../utils/HugeMagoBerryUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
-import { buildExpandedTimeline } from "../utils/TimelineDayExpansion";
+import {
+	buildExpandedTimeline,
+	type ExpandedTimelineSlot,
+} from "../utils/TimelineDayExpansion";
 import {
 	getProvisionalBaseFrequencySeconds,
 	getTimelineCarryLimit,
@@ -1687,4 +1690,77 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		teamSummary,
 		cookingResult,
 	};
+}
+
+/**
+ * おてつだいシミュレーションの結果のスナップショット。
+ * 料理は後処理（`runCookingPostProcess`）で、おてつだいのループは料理設定を読まない。
+ * このスナップショットを固定して料理設定（初期食材など）だけを変えた合計 EP を
+ * 何度でも再計算できる（初期食材の最適化で使う）。
+ */
+export interface HelpingSimulationSnapshot {
+	expandedSlots: ExpandedTimelineSlot[];
+	slotResults: Map<string, TimeSlotResult[]>;
+	totalBerryEP: number;
+	totalSkillEP: number;
+	/** 料理なしの総合計 EP（きのみ + 食材 + スキル）。料理 OFF や空の結果のときに返す */
+	grandTotalEPWithoutCooking: number;
+	seed: number;
+	startDayOfWeek: Weekday;
+	bonusSettings: TimelineBonusSettings;
+	/** runSimulation が早期 return した（料理も走らない）か */
+	isEmpty: boolean;
+}
+
+/**
+ * 料理を切ってシミュレーションし、料理の再計算に必要な結果を残す。
+ */
+export function runHelpingSimulation(
+	input: SimulationInput,
+): HelpingSimulationSnapshot {
+	const cookingSettings = input.cookingSettings
+		? { ...input.cookingSettings, enabled: false }
+		: undefined;
+	const result = runSimulation({ ...input, cookingSettings });
+	return {
+		expandedSlots: buildExpandedTimeline(
+			input.timeSlots,
+			input.config.simulationDays,
+		).expandedSlots,
+		slotResults: result.slotResults,
+		totalBerryEP: result.teamSummary.totalBerryEP,
+		totalSkillEP: result.teamSummary.totalSkillEP,
+		grandTotalEPWithoutCooking: result.teamSummary.grandTotalEP,
+		seed: input.config.seed,
+		startDayOfWeek: resolveStartDayOfWeek(
+			input.config.simulationDays,
+			input.config.startDayOfWeek,
+		),
+		bonusSettings: input.bonusSettings,
+		isEmpty: result.slotResults.size === 0,
+	};
+}
+
+/**
+ * スナップショットに料理設定を適用した総合計 EP。
+ * 同じ入力で `runSimulation` を実行したときの `teamSummary.grandTotalEP` と一致する。
+ */
+export function calculateGrandTotalEPWithCooking(
+	snapshot: HelpingSimulationSnapshot,
+	cookingSettings: CookingSimulationSettings,
+): number {
+	if (!cookingSettings.enabled || snapshot.isEmpty) {
+		return snapshot.grandTotalEPWithoutCooking;
+	}
+	const cookingResult = runCookingPostProcess(
+		snapshot.expandedSlots,
+		snapshot.slotResults,
+		cookingSettings,
+		snapshot.bonusSettings,
+		snapshot.seed,
+		snapshot.startDayOfWeek,
+	);
+	return (
+		snapshot.totalBerryEP + cookingResult.totalCookingEP + snapshot.totalSkillEP
+	);
 }

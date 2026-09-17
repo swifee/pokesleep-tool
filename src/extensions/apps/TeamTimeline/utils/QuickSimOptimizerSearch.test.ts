@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { IngredientNames } from "../../../../data/pokemons";
+import { createDefaultCookingSettings } from "../types/CookingTypes";
 import {
 	QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
+	QUICK_SIM_OPTIMIZER_JOINT_USAGE_CANDIDATES,
 	QUICK_SIM_OPTIMIZER_RESULT_COUNT,
 	QUICK_SIM_OPTIMIZER_SEARCH_TRIALS,
 	type QuickSimCandidateEvaluation,
+	type QuickSimIngredientEvaluation,
+	type QuickSimIngredientEvaluator,
+	type QuickSimIngredientStock,
 	type QuickSimOptimizerEvaluateOptions,
 	type QuickSimOptimizerEvaluator,
 	type QuickSimOptimizerMember,
@@ -11,6 +17,10 @@ import {
 	type QuickSimOptimizerProgress,
 } from "../types/QuickSimOptimizerTypes";
 import { QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT } from "../types/QuickSimTypes";
+import {
+	initialIngredientsToStock,
+	stockKey,
+} from "./QuickSimIngredientCandidates";
 import { percentsKey } from "./QuickSimOptimizerCandidates";
 import {
 	isQuickSimOptimizerAbortError,
@@ -103,6 +113,76 @@ class FakeEvaluator implements QuickSimOptimizerEvaluator {
 		return results;
 	}
 }
+
+/**
+ * 初期食材の擬似目的関数: 起用率の目的関数 × (1 + 食材の価値の和 / 10^4)。
+ * りんご 1 個 = 3、ミルク 1 個 = 2、それ以外 = 1。
+ * ノイズは起用率とシードだけで決まる（実際の評価器と同じく、同じシードの
+ * おてつだい結果と大成功の乱数は配分に依存しない）。
+ */
+function stockBonus(stock: QuickSimIngredientStock): number {
+	let value = 0;
+	IngredientNames.forEach((name, index) => {
+		const weight = name === "apple" ? 3 : name === "milk" ? 2 : 1;
+		value += weight * stock[index];
+	});
+	return value / 10_000;
+}
+
+class FakeCombinedEvaluator
+	extends FakeEvaluator
+	implements QuickSimIngredientEvaluator
+{
+	readonly ingredientCalls: {
+		percents: QuickSimOptimizerPercents;
+		stocks: QuickSimIngredientStock[];
+		seeds: number[];
+		options: QuickSimOptimizerEvaluateOptions;
+	}[] = [];
+
+	async evaluateIngredients(
+		percents: QuickSimOptimizerPercents,
+		stocks: readonly QuickSimIngredientStock[],
+		seeds: readonly number[],
+		options: QuickSimOptimizerEvaluateOptions,
+		onProgress?: (completed: number, total: number) => void,
+	): Promise<QuickSimIngredientEvaluation[]> {
+		this.ingredientCalls.push({
+			percents: [...percents],
+			stocks: stocks.map((stock) => [...stock]),
+			seeds: [...seeds],
+			options,
+		});
+		const excluded =
+			percents.every((percent) => percent <= 0) ||
+			(options.excludeSleepSwaps && needsSleepSwaps(percents));
+		const base = noiselessObjective(percents);
+		const results = stocks.map((stock) => ({
+			stock: [...stock],
+			epBySeed: excluded
+				? []
+				: seeds.map(
+						(seed) =>
+							base * (1 + stockBonus(stock)) * (1 + noise(percents, seed)),
+					),
+			excluded,
+		}));
+		onProgress?.(seeds.length, seeds.length);
+		return results;
+	}
+}
+
+const INGREDIENT_SETTINGS = {
+	totalCount: 180,
+	maxCountByIngredient: { apple: 90, milk: 90, honey: 60 },
+};
+
+const COOKING_SETTINGS = {
+	...createDefaultCookingSettings(),
+	enabled: true,
+	category: "curry" as const,
+	initialIngredients: { milk: 30, honey: 30 },
+};
 
 function bruteForceBest(
 	memberCount: number,
@@ -367,5 +447,180 @@ describe("runQuickSimOptimization", () => {
 				baseSeed: 1,
 			}),
 		).rejects.toThrow();
+	});
+
+	it("rejects an ingredient target without the ingredient inputs", async () => {
+		const evaluator = new FakeEvaluator();
+		await expect(
+			runQuickSimOptimization({
+				members: MEMBERS,
+				currentPercents: [100, 100, 100, 100, 100, 0],
+				evaluator,
+				baseSeed: 1,
+				target: "ingredients",
+			}),
+		).rejects.toThrow(/Ingredient optimization requires/);
+	});
+
+	it("optimizes the initial ingredients for the current usage", async () => {
+		const evaluator = new FakeCombinedEvaluator();
+		const progress: QuickSimOptimizerProgress[] = [];
+		const currentPercents = [100, 100, 100, 100, 60, 40];
+		const result = await runQuickSimOptimization({
+			members: MEMBERS,
+			currentPercents,
+			evaluator,
+			baseSeed: 2024,
+			target: "ingredients",
+			ingredientEvaluator: evaluator,
+			cookingSettings: COOKING_SETTINGS,
+			ingredientSettings: INGREDIENT_SETTINGS,
+			onProgress: (value) => progress.push(value),
+		});
+		expect(result.target).toBe("ingredients");
+		expect(result.ingredientTotalCount).toBe(180);
+		expect(result.entries.length).toBeGreaterThan(0);
+		expect(result.entries.length).toBeLessThanOrEqual(
+			QUICK_SIM_OPTIMIZER_RESULT_COUNT,
+		);
+		// りんご 90 + ミルク 90 が最良
+		expect(result.entries[0].initialIngredients).toMatchObject({
+			apple: 90,
+			milk: 90,
+			honey: 0,
+		});
+		for (const entry of result.entries) {
+			expect(entry.percents).toEqual(currentPercents);
+			expect(entry.trialCount).toBe(QUICK_SIM_OPTIMIZER_FINAL_TRIALS);
+			const stock = initialIngredientsToStock(entry.initialIngredients ?? {});
+			expect(Object.keys(entry.initialIngredients ?? {})).toHaveLength(
+				IngredientNames.length,
+			);
+			expect(stock.reduce((sum, count) => sum + count, 0)).toBe(180);
+		}
+		for (let index = 1; index < result.entries.length; index++) {
+			expect(result.entries[index].meanEP).toBeLessThanOrEqual(
+				result.entries[index - 1].meanEP,
+			);
+		}
+		// 現在の配分（格子に乗っていない）も同じ起用率で評価される
+		expect(result.current?.initialIngredients).toMatchObject({
+			milk: 30,
+			honey: 30,
+			apple: 0,
+		});
+		expect(result.current?.percents).toEqual(currentPercents);
+		expect(result.current?.trialCount).toBe(QUICK_SIM_OPTIMIZER_FINAL_TRIALS);
+		const currentKey = stockKey(
+			initialIngredientsToStock(COOKING_SETTINGS.initialIngredients),
+		);
+		expect(
+			result.entries.some(
+				(entry) =>
+					stockKey(
+						initialIngredientsToStock(entry.initialIngredients ?? {}),
+					) === currentKey,
+			),
+		).toBe(false);
+		// 起用率の探索は行わず、通常の評価器は起用方法の情報を 1 試行で取るだけ
+		expect(evaluator.calls).toHaveLength(1);
+		expect(evaluator.calls[0].seeds).toHaveLength(1);
+		expect(evaluator.calls[0].options.usePeriodSchedule).toBe(true);
+		const finalCalls = evaluator.ingredientCalls.filter(
+			(call) => call.options.usePeriodSchedule,
+		);
+		expect(finalCalls).toHaveLength(1);
+		expect(finalCalls[0].seeds).toHaveLength(QUICK_SIM_OPTIMIZER_FINAL_TRIALS);
+		expect(finalCalls[0].stocks).toHaveLength(result.entries.length + 1);
+		expect(new Set(progress.map((value) => value.phase))).toEqual(
+			new Set(["ingredientStart", "ingredientSearch", "final"]),
+		);
+		expect(progress[progress.length - 1].percent).toBe(100);
+		for (let index = 1; index < progress.length; index++) {
+			expect(progress[index].percent).toBeGreaterThanOrEqual(
+				progress[index - 1].percent,
+			);
+		}
+	});
+
+	it("optimizes usage and ingredients together", async () => {
+		const evaluator = new FakeCombinedEvaluator();
+		const progress: QuickSimOptimizerProgress[] = [];
+		const result = await runQuickSimOptimization({
+			members: MEMBERS,
+			currentPercents: [100, 100, 100, 100, 100, 0],
+			evaluator,
+			baseSeed: 77,
+			target: "both",
+			ingredientEvaluator: evaluator,
+			cookingSettings: COOKING_SETTINGS,
+			ingredientSettings: INGREDIENT_SETTINGS,
+			onProgress: (value) => progress.push(value),
+		});
+		expect(result.target).toBe("both");
+		expect(result.entries.length).toBeGreaterThan(0);
+		expect(result.entries.length).toBeLessThanOrEqual(
+			QUICK_SIM_OPTIMIZER_JOINT_USAGE_CANDIDATES,
+		);
+		const expectedBest = bruteForceBest(
+			MEMBERS.length,
+			(percents) => !needsSleepSwaps(percents),
+		);
+		expect(result.entries[0].percents).toEqual(expectedBest);
+		expect(result.entries[0].initialIngredients).toMatchObject({
+			apple: 90,
+			milk: 90,
+		});
+		for (const entry of result.entries) {
+			expect(entry.trialCount).toBe(QUICK_SIM_OPTIMIZER_FINAL_TRIALS);
+			expect(entry.usesSleepSwaps).toBe(false);
+			expect(
+				initialIngredientsToStock(entry.initialIngredients ?? {}).reduce(
+					(sum, count) => sum + count,
+					0,
+				),
+			).toBe(180);
+		}
+		expect(
+			new Set(result.entries.map((entry) => percentsKey(entry.percents))).size,
+		).toBe(result.entries.length);
+		expect(result.current?.percents).toEqual([100, 100, 100, 100, 100, 0]);
+		expect(result.current?.initialIngredients).toMatchObject({
+			milk: 30,
+			honey: 30,
+		});
+		// 起用率の最終確認（1,000 試行）は行わない
+		const periodCalls = evaluator.calls.filter(
+			(call) => call.options.usePeriodSchedule,
+		);
+		expect(periodCalls.length).toBeGreaterThan(0);
+		expect(periodCalls.every((call) => call.seeds.length === 1)).toBe(true);
+		// 上位 K 件の起用率それぞれに初期食材を探索する
+		const searchedPercents = new Set(
+			evaluator.ingredientCalls
+				.filter((call) => !call.options.usePeriodSchedule)
+				.map((call) => percentsKey(call.percents)),
+		);
+		expect(searchedPercents.size).toBe(
+			QUICK_SIM_OPTIMIZER_JOINT_USAGE_CANDIDATES,
+		);
+		expect(searchedPercents.has(percentsKey(expectedBest))).toBe(true);
+		expect(new Set(progress.map((value) => value.phase))).toEqual(
+			new Set([
+				"solo",
+				"screening",
+				"racing",
+				"localSearch",
+				"ingredientStart",
+				"ingredientSearch",
+				"final",
+			]),
+		);
+		expect(progress[progress.length - 1].percent).toBe(100);
+		for (let index = 1; index < progress.length; index++) {
+			expect(progress[index].percent).toBeGreaterThanOrEqual(
+				progress[index - 1].percent,
+			);
+		}
 	});
 });

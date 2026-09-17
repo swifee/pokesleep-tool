@@ -15,6 +15,7 @@ import type { CookingSimulationSettings } from "../types/CookingTypes";
 import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type {
 	QuickSimCandidateEvaluation,
+	QuickSimIngredientEvaluation,
 	QuickSimOptimizerEvaluateOptions,
 } from "../types/QuickSimOptimizerTypes";
 import type { QuickSimUsageMode } from "../types/QuickSimTypes";
@@ -49,6 +50,15 @@ export type QuickSimOptimizerWorkerRequest =
 			candidates: number[][];
 			seeds: number[];
 			options: QuickSimOptimizerEvaluateOptions;
+	  }
+	| {
+			/** 起用率を固定し、初期食材の配分（IngredientNames 順の個数）ごとに評価する */
+			type: "evaluateIngredients";
+			requestId: number;
+			percents: number[];
+			stocks: number[][];
+			seeds: number[];
+			options: QuickSimOptimizerEvaluateOptions;
 	  };
 
 export type QuickSimOptimizerWorkerResponse =
@@ -59,7 +69,18 @@ export type QuickSimOptimizerWorkerResponse =
 			requestId: number;
 			evaluations: QuickSimCandidateEvaluation[];
 	  }
+	| {
+			type: "ingredientResult";
+			requestId: number;
+			evaluations: QuickSimIngredientEvaluation[];
+	  }
 	| { type: "error"; requestId: number | null; message: string };
+
+/** 評価の完了を表す応答 */
+export type QuickSimOptimizerWorkerResultResponse = Extract<
+	QuickSimOptimizerWorkerResponse,
+	{ type: "result" | "ingredientResult" }
+>;
 
 /**
  * 評価器の文脈を postMessage で送れる形にする。

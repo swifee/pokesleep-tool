@@ -11,6 +11,8 @@
  *   同じシードで比べられるようにする（共通乱数）。
  * - とくべつなポケモンのルール（同時に 1 体まで。ラティアス＋ラティオスは可）は
  *   スケジューラに同時に編成できない組として渡し、どの候補でも守る。
+ * - 初期食材の評価（evaluateIngredients）では、起用率とシードごとのおてつだい結果を
+ *   キャッシュし、食材の配分ごとに料理だけを再計算する。
  */
 
 import type PokemonBox from "../../../../util/PokemonBox";
@@ -19,6 +21,9 @@ import type { CookingSimulationSettings } from "../types/CookingTypes";
 import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type {
 	QuickSimCandidateEvaluation,
+	QuickSimIngredientEvaluation,
+	QuickSimIngredientEvaluator,
+	QuickSimIngredientStock,
 	QuickSimOptimizerEvaluateOptions,
 	QuickSimOptimizerEvaluator,
 	QuickSimOptimizerMember,
@@ -34,6 +39,7 @@ import {
 	type SimulationConfig,
 	type TimeSlot,
 } from "../types/TimeSlotTypes";
+import { stockToInitialIngredients } from "../utils/QuickSimIngredientCandidates";
 import { percentsKey } from "../utils/QuickSimOptimizerCandidates";
 import { buildQuickSimSchedule } from "../utils/QuickSimScheduler";
 import {
@@ -41,7 +47,13 @@ import {
 	type QuickSimTimeline,
 } from "../utils/QuickSimTimelineBuilder";
 import { buildSpecialPokemonExclusionMap } from "../utils/SpecialPokemonUtils";
-import { runSimulation } from "./TimelineSimulator";
+import {
+	calculateGrandTotalEPWithCooking,
+	type HelpingSimulationSnapshot,
+	runHelpingSimulation,
+	runSimulation,
+	type SimulationInput,
+} from "./TimelineSimulator";
 
 export interface QuickSimEvaluatorContext {
 	/** メンバーのポケモンを含むボックス */
@@ -62,6 +74,8 @@ export interface QuickSimEvaluatorContext {
 
 /** 候補のシミュレーション入力（試行間で共有） */
 interface PreparedCandidate {
+	/** タイムラインのキャッシュキー（スケジュール日数 + 起用率） */
+	key: string;
 	timeline: QuickSimTimeline;
 	usesSleepSwaps: boolean;
 	unmetPokemonIds: number[];
@@ -70,6 +84,11 @@ interface PreparedCandidate {
 
 /** 候補ごとのタイムラインのキャッシュ上限（超えたら古いものから捨てる） */
 const TIMELINE_CACHE_LIMIT = 4000;
+/**
+ * おてつだい結果（起用率 × シード）のキャッシュ上限。
+ * 7 日分の結果は数百 KB あるので、タイムラインより小さくする。
+ */
+const HELPING_CACHE_LIMIT = 64;
 /** メインスレッドで評価するとき、描画のために処理を譲る間隔 */
 const YIELD_INTERVAL_MS = 50;
 /** 期間全体の配置が必要な起用方法 */
@@ -85,8 +104,27 @@ function roundToSingleDecimal(value: number): number {
 	return Math.round(value * 10) / 10;
 }
 
-export class QuickSimEvaluator implements QuickSimOptimizerEvaluator {
+/** 上限を超えたら最も古いエントリを捨てるキャッシュへの追加 */
+function setWithLimit<T>(
+	cache: Map<string, T>,
+	key: string,
+	value: T,
+	limit: number,
+): void {
+	if (cache.size >= limit) {
+		const oldestKey = cache.keys().next().value;
+		if (oldestKey !== undefined) {
+			cache.delete(oldestKey);
+		}
+	}
+	cache.set(key, value);
+}
+
+export class QuickSimEvaluator
+	implements QuickSimOptimizerEvaluator, QuickSimIngredientEvaluator
+{
 	private readonly timelineCache = new Map<string, PreparedCandidate | null>();
+	private readonly helpingCache = new Map<string, HelpingSimulationSnapshot>();
 	private readonly simulationDays: number;
 	/** 1 日分のスケジュールを繰り返せるか（前半・後半のメンバーがいない） */
 	private readonly canRepeatDaySchedule: boolean;
@@ -158,6 +196,7 @@ export class QuickSimEvaluator implements QuickSimOptimizerEvaluator {
 				this.context.box,
 			);
 			prepared = {
+				key,
 				timeline,
 				usesSleepSwaps: scheduleResult.schedule.usesSleepSwaps,
 				unmetPokemonIds: [...scheduleResult.schedule.unmetPokemonIds],
@@ -166,23 +205,17 @@ export class QuickSimEvaluator implements QuickSimOptimizerEvaluator {
 				),
 			};
 		}
-		if (this.timelineCache.size >= TIMELINE_CACHE_LIMIT) {
-			const oldestKey = this.timelineCache.keys().next().value;
-			if (oldestKey !== undefined) {
-				this.timelineCache.delete(oldestKey);
-			}
-		}
-		this.timelineCache.set(key, prepared);
+		setWithLimit(this.timelineCache, key, prepared, TIMELINE_CACHE_LIMIT);
 		return prepared;
 	}
 
-	private runTrial(
+	private buildSimulationInput(
 		prepared: PreparedCandidate,
 		seed: number,
-		disableCooking: boolean,
-	): number {
+		cookingSettings: CookingSimulationSettings,
+	): SimulationInput {
 		const { timeline } = prepared;
-		return runSimulation({
+		return {
 			team: timeline.team,
 			timeSlots: timeline.timeSlots,
 			config: { ...this.context.simulationConfig, seed },
@@ -190,13 +223,53 @@ export class QuickSimEvaluator implements QuickSimOptimizerEvaluator {
 			swaps: timeline.swaps,
 			noCollectCells: timeline.noCollectCells,
 			box: this.context.box,
-			cookingSettings: disableCooking
-				? this.cookingDisabledSettings
-				: this.context.cookingSettings,
+			cookingSettings,
 			provisionalSettings: this.context.provisionalSettings,
 			strengthParameter: this.context.strengthParameter,
 			analysisOptions: { perPokemonRandomStreams: true },
-		}).teamSummary.grandTotalEP;
+		};
+	}
+
+	private runTrial(
+		prepared: PreparedCandidate,
+		seed: number,
+		disableCooking: boolean,
+	): number {
+		return runSimulation(
+			this.buildSimulationInput(
+				prepared,
+				seed,
+				disableCooking
+					? this.cookingDisabledSettings
+					: this.context.cookingSettings,
+			),
+		).teamSummary.grandTotalEP;
+	}
+
+	/** 起用率とシードごとのおてつだい結果（料理なし）。キャッシュして配分間で共有する */
+	private getHelpingSnapshot(
+		prepared: PreparedCandidate,
+		seed: number,
+	): HelpingSimulationSnapshot {
+		const key = `${prepared.key}:${seed}`;
+		const cached = this.helpingCache.get(key);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const snapshot = runHelpingSimulation(
+			this.buildSimulationInput(prepared, seed, this.context.cookingSettings),
+		);
+		setWithLimit(this.helpingCache, key, snapshot, HELPING_CACHE_LIMIT);
+		return snapshot;
+	}
+
+	private toCookingSettings(
+		stock: QuickSimIngredientStock,
+	): CookingSimulationSettings {
+		return {
+			...this.context.cookingSettings,
+			initialIngredients: stockToInitialIngredients(stock),
+		};
 	}
 
 	/** 1 候補を評価する */
@@ -258,6 +331,111 @@ export class QuickSimEvaluator implements QuickSimOptimizerEvaluator {
 		for (const candidate of candidates) {
 			results.push(this.evaluateOne(candidate, seeds, options));
 			onProgress?.(results.length, candidates.length);
+			if (Date.now() - lastYieldAt >= YIELD_INTERVAL_MS) {
+				await waitNextTick();
+				lastYieldAt = Date.now();
+			}
+		}
+		return results;
+	}
+
+	/**
+	 * 初期食材の評価の準備。起用率のスケジュールを作れない、または就寝中の入れ替えが
+	 * 必要で除外するときは、全配分を除外扱いにした結果だけを返す。
+	 */
+	private prepareIngredientEvaluation(
+		percents: QuickSimOptimizerPercents,
+		stocks: readonly QuickSimIngredientStock[],
+		options: QuickSimOptimizerEvaluateOptions,
+	): {
+		prepared: PreparedCandidate | null;
+		results: QuickSimIngredientEvaluation[];
+		cookingSettingsByStock: CookingSimulationSettings[];
+	} {
+		const prepared = this.prepare(percents, options.usePeriodSchedule === true);
+		const excluded =
+			prepared === null ||
+			(options.excludeSleepSwaps && prepared.usesSleepSwaps);
+		return {
+			prepared: excluded ? null : prepared,
+			results: stocks.map((stock) => ({
+				stock: [...stock],
+				epBySeed: [],
+				excluded,
+			})),
+			cookingSettingsByStock: excluded
+				? []
+				: stocks.map((stock) => this.toCookingSettings(stock)),
+		};
+	}
+
+	/** 1 シードのおてつだい結果を全配分で共有し、料理だけを再計算して EP を追加する */
+	private evaluateIngredientSeed(
+		prepared: PreparedCandidate,
+		seed: number,
+		cookingSettingsByStock: readonly CookingSimulationSettings[],
+		results: QuickSimIngredientEvaluation[],
+	): void {
+		const snapshot = this.getHelpingSnapshot(prepared, seed);
+		cookingSettingsByStock.forEach((cookingSettings, stockIndex) => {
+			results[stockIndex].epBySeed.push(
+				calculateGrandTotalEPWithCooking(snapshot, cookingSettings),
+			);
+		});
+	}
+
+	/**
+	 * 同期的に初期食材の配分を評価する（ワーカー内で使う）。
+	 * シードを外側のループにし、進捗は評価し終えたシード数で知らせる。
+	 */
+	evaluateIngredientsSync(
+		percents: QuickSimOptimizerPercents,
+		stocks: readonly QuickSimIngredientStock[],
+		seeds: readonly number[],
+		options: QuickSimOptimizerEvaluateOptions,
+		onProgress?: (completed: number, total: number) => void,
+	): QuickSimIngredientEvaluation[] {
+		const { prepared, results, cookingSettingsByStock } =
+			this.prepareIngredientEvaluation(percents, stocks, options);
+		if (prepared === null) {
+			onProgress?.(seeds.length, seeds.length);
+			return results;
+		}
+		seeds.forEach((seed, seedIndex) => {
+			this.evaluateIngredientSeed(
+				prepared,
+				seed,
+				cookingSettingsByStock,
+				results,
+			);
+			onProgress?.(seedIndex + 1, seeds.length);
+		});
+		return results;
+	}
+
+	/** メインスレッド向け: 描画を止めないよう、定期的に処理を譲りながら評価する */
+	async evaluateIngredients(
+		percents: QuickSimOptimizerPercents,
+		stocks: readonly QuickSimIngredientStock[],
+		seeds: readonly number[],
+		options: QuickSimOptimizerEvaluateOptions,
+		onProgress?: (completed: number, total: number) => void,
+	): Promise<QuickSimIngredientEvaluation[]> {
+		const { prepared, results, cookingSettingsByStock } =
+			this.prepareIngredientEvaluation(percents, stocks, options);
+		if (prepared === null) {
+			onProgress?.(seeds.length, seeds.length);
+			return results;
+		}
+		let lastYieldAt = Date.now();
+		for (let seedIndex = 0; seedIndex < seeds.length; seedIndex++) {
+			this.evaluateIngredientSeed(
+				prepared,
+				seeds[seedIndex],
+				cookingSettingsByStock,
+				results,
+			);
+			onProgress?.(seedIndex + 1, seeds.length);
 			if (Date.now() - lastYieldAt >= YIELD_INTERVAL_MS) {
 				await waitNextTick();
 				lastYieldAt = Date.now();
