@@ -12,6 +12,20 @@ vi.mock("react-i18next", () => ({
 	}),
 }));
 
+// These tests exercise the detailed tab, which is no longer the default.
+vi.mock("./TeamTimelineState", async () => {
+	const actual = await vi.importActual<typeof import("./TeamTimelineState")>(
+		"./TeamTimelineState",
+	);
+	return {
+		...actual,
+		createInitialState: () => ({
+			...actual.createInitialState(),
+			activeTab: "team",
+		}),
+	};
+});
+
 vi.mock("../../../ui/IvCalc/PokemonIcon", () => ({
 	default: ({ idForm }: { idForm: number }) => (
 		<span data-testid={`pokemon-icon-${idForm}`} />

@@ -5,7 +5,9 @@
 エンジン（`runSimulation` / `runMultiTrialSimulationParallel`）で計算する。
 複数試行の実行方法は `document/teamtimeline-simulation-workers.md` を参照。
 
-- タブ: 「簡易シミュ」（従来の「シミュレーション」タブは「詳細シミュ」に改名）
+- タブ: 「自動シミュ」（2026-09-17 に「簡易シミュ」から改名。従来の「シミュレーション」
+  タブは「詳細シミュ」に改名）。`/timeline/` を開いたときに最初に表示するタブ
+  （`createInitialState().activeTab = "quick"`）。コード上の識別子は `quick` のまま。
 - 保存先: `localStorage["PstTeamTimelineQuickSimV1"]`（メンバー・起用率・起用方法。ポケモンは
   入れ替え設定と同じくシリアライズ文字列で保存し、読み込み時にボックスの ID へ解決する。
   `usageMode` がない旧データは「均等」として読む）

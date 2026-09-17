@@ -53,6 +53,8 @@ vi.mock("./TeamTimelineState", async () => {
 		...actual,
 		createInitialState: () => ({
 			...baseState,
+			// These tests exercise the detailed tab, which is no longer the default.
+			activeTab: "team",
 			simulationResult: {
 				slotResults: new Map(),
 				dailySummaries: [],

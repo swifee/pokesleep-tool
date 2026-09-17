@@ -51,18 +51,18 @@ describe("TeamTimelineTabs", () => {
 		expect(screen.getAllByRole("tab")).toHaveLength(4);
 	});
 
-	it("shows the quick simulation tab first and the detailed one second", () => {
+	it("shows the auto simulation tab first and the detailed one second", () => {
 		const onTabChange = vi.fn();
 		render(<TeamTimelineTabs activeTab="team" onTabChange={onTabChange} />);
 
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-			"簡易シミュ",
+			"自動シミュ",
 			"詳細シミュ",
 			"基本設定",
 			"料理設定",
 		]);
 
-		fireEvent.click(screen.getByRole("tab", { name: "簡易シミュ" }));
+		fireEvent.click(screen.getByRole("tab", { name: "自動シミュ" }));
 
 		expect(onTabChange).toHaveBeenCalledWith("quick");
 	});

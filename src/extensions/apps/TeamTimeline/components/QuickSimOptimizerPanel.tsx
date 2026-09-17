@@ -1,11 +1,4 @@
-import {
-	Box,
-	Button,
-	Checkbox,
-	FormControlLabel,
-	LinearProgress,
-	Typography,
-} from "@mui/material";
+import { Box, Button, LinearProgress, Typography } from "@mui/material";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,7 +12,6 @@ import {
 import type { CookingSimulationSettings } from "../types/CookingTypes";
 import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import {
-	DEFAULT_QUICK_SIM_OPTIMIZER_OPTIONS,
 	isQuickSimOptimizerMemberCountSupported,
 	QUICK_SIM_OPTIMIZER_FINAL_TRIALS,
 	QUICK_SIM_OPTIMIZER_MAX_MEMBERS,
@@ -28,6 +20,7 @@ import {
 	QUICK_SIM_OPTIMIZER_SEARCH_TRIALS,
 	QUICK_SIM_OPTIMIZER_STEP_PERCENT,
 	type QuickSimOptimizerMember,
+	type QuickSimOptimizerOptions,
 	type QuickSimOptimizerPhase,
 	type QuickSimOptimizerProgress,
 	type QuickSimOptimizerResult,
@@ -111,6 +104,8 @@ const USAGE_CELL_SX = {
 /** 起用率セルの背景に描く棒グラフの色 */
 const USAGE_BAR_COLOR = "#d0e0ff";
 const RANDOM_SEED_RANGE = 1_000_000;
+/** 就寝中の入れ替えが必要な候補は深夜に操作できないので常に除外する */
+const OPTIMIZER_OPTIONS: QuickSimOptimizerOptions = { excludeSleepSwaps: true };
 
 const PHASE_LABELS: Readonly<
 	Record<QuickSimOptimizerPhase, { key: string; defaultValue: string }>
@@ -158,7 +153,6 @@ function buildOptimizerSignature(input: {
 	bonusSettings: TimelineBonusSettings;
 	cookingSettings: CookingSimulationSettings;
 	provisionalSettings: ProvisionalSettings;
-	excludeSleepSwaps: boolean;
 }): string {
 	return JSON.stringify({
 		members: input.members,
@@ -167,7 +161,6 @@ function buildOptimizerSignature(input: {
 		bonusSettings: input.bonusSettings,
 		cookingSettings: input.cookingSettings,
 		provisionalSettings: input.provisionalSettings,
-		excludeSleepSwaps: input.excludeSleepSwaps,
 	});
 }
 
@@ -198,7 +191,7 @@ function buildUsageCellStyle(percent: number): React.CSSProperties {
 /**
  * 簡易シミュの起用率を自動で最適化するパネル。
  * メンバーの起用方法は固定し、20% 刻み・合計 500% の配分から平均 EP が高い
- * 上位を探して表示する。
+ * 上位を探して表示する。就寝中の入れ替えが必要な候補は常に除外する。
  */
 export default function QuickSimOptimizerPanel({
 	members,
@@ -213,9 +206,6 @@ export default function QuickSimOptimizerPanel({
 	onApply,
 }: QuickSimOptimizerPanelProps) {
 	const { t } = useTranslation();
-	const [excludeSleepSwaps, setExcludeSleepSwaps] = useState(
-		DEFAULT_QUICK_SIM_OPTIMIZER_OPTIONS.excludeSleepSwaps,
-	);
 	const [running, setRunning] = useState(false);
 	const [progress, setProgress] = useState<QuickSimOptimizerProgress | null>(
 		null,
@@ -258,7 +248,6 @@ export default function QuickSimOptimizerPanel({
 				bonusSettings,
 				cookingSettings,
 				provisionalSettings,
-				excludeSleepSwaps,
 			}),
 		[
 			optimizerMembers,
@@ -267,7 +256,6 @@ export default function QuickSimOptimizerPanel({
 			bonusSettings,
 			cookingSettings,
 			provisionalSettings,
-			excludeSleepSwaps,
 		],
 	);
 
@@ -340,7 +328,7 @@ export default function QuickSimOptimizerPanel({
 					members: optimizerMembers,
 					currentPercents,
 					evaluator: handle.evaluator,
-					options: { excludeSleepSwaps },
+					options: OPTIMIZER_OPTIONS,
 					exclusiveGroups,
 					baseSeed: resolveBaseSeed(seedMode, simulationConfig.seed),
 					signal: abortController.signal,
@@ -386,7 +374,6 @@ export default function QuickSimOptimizerPanel({
 		bonusSettings,
 		cookingSettings,
 		provisionalSettings,
-		excludeSleepSwaps,
 		exclusiveGroups,
 		seedMode,
 	]);
@@ -396,13 +383,6 @@ export default function QuickSimOptimizerPanel({
 		setRunning(false);
 		setProgress(null);
 	}, [stopRun]);
-
-	const handleExcludeSleepSwapsChange = useCallback(
-		(event: React.ChangeEvent<HTMLInputElement>) => {
-			setExcludeSleepSwaps(event.target.checked);
-		},
-		[],
-	);
 
 	const handleApply = useCallback(
 		(entry: QuickSimOptimizerResultEntry) => {
@@ -581,43 +561,6 @@ export default function QuickSimOptimizerPanel({
 					},
 				)}
 			</Typography>
-			<FormControlLabel
-				sx={{ m: 0, mt: "2px" }}
-				control={
-					<Checkbox
-						checked={excludeSleepSwaps}
-						onChange={handleExcludeSleepSwapsChange}
-						size="small"
-						disabled={running}
-						sx={{ p: "2px", mr: "2px" }}
-						inputProps={
-							{
-								"data-testid": "quick-sim-optimizer-exclude-sleep-swaps",
-							} as React.InputHTMLAttributes<HTMLInputElement>
-						}
-					/>
-				}
-				label={
-					<Typography sx={{ fontSize: "11px", lineHeight: "14px" }}>
-						{t(
-							"TeamTimeline.quick optimizer exclude sleep swaps",
-							"就寝中の入れ替えが必要な候補を除く",
-						)}
-					</Typography>
-				}
-			/>
-			{exclusiveGroups.length > 0 && (
-				<Typography
-					variant="caption"
-					sx={NOTE_SX}
-					data-testid="quick-sim-optimizer-special-note"
-				>
-					{t(
-						"TeamTimeline.quick special pokemon note",
-						"とくべつなポケモン（伝説・幻）は同時に1体まで（ラティアス＋ラティオスの組み合わせは可）として入れ替えを組みます。",
-					)}
-				</Typography>
-			)}
 			{disabledReason !== null && (
 				<Typography
 					variant="caption"
