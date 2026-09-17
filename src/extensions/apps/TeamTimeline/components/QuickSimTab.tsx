@@ -218,7 +218,8 @@ export default function QuickSimTab({
 }: QuickSimTabProps) {
 	const { t } = useTranslation();
 	const [members, setMembers] = useState<QuickSimMember[]>(() => {
-		const stored = loadQuickSimSettingsFromStorage(runtimeBox);
+		// 一致度で探し直す候補はユーザーのボックスだけ（初回プリセットの隠しポケモンは除く）
+		const stored = loadQuickSimSettingsFromStorage(runtimeBox, userBox.items);
 		if (stored) {
 			return stored.members;
 		}

@@ -120,6 +120,7 @@ import {
 	type AnalysisBaseMetricsCache,
 	resolvePrecomputedBaseAverageMetrics,
 } from "./utils/AnalysisBaseMetricsUtils";
+import { resolveDistinctBoxItems } from "./utils/BoxItemMatchingUtils";
 import {
 	loadCookingSettingsFromStorage,
 	saveCookingSettingsToStorage,
@@ -308,30 +309,29 @@ function pickEveryTenthSeeds(sortedSeeds: readonly number[]): number[] {
 	return [...sortedSeeds];
 }
 
-function normalizeTeamWithBoxItems(
+/**
+ * 保存されたチームをボックスのポケモンに対応付ける。
+ * 完全一致で見つからないメンバー（個体値計算機で編集された等）は
+ * 一致度で探し直し、それでも見つからなければ保存時のまま残す。
+ */
+function normalizeTeamWithBox(
 	loadedTeam: (PokemonBoxItem | null)[],
-	boxItems: readonly PokemonBoxItem[],
+	runtimeBox: PokemonBox,
+	fuzzyCandidates: readonly PokemonBoxItem[],
 ): TeamNormalizationResult {
-	const bucket = new Map<string, PokemonBoxItem[]>();
-	boxItems.forEach((item) => {
-		const key = item.serialize();
-		const list = bucket.get(key) ?? [];
-		list.push(item);
-		bucket.set(key, list);
-	});
+	const resolvedMembers = resolveDistinctBoxItems(
+		loadedTeam.map((member) => member?.serialize() ?? null),
+		runtimeBox,
+		{ fuzzyCandidates },
+	);
 
 	const idRemap = new Map<number, number>();
-	const normalizedTeam = loadedTeam.map((member) => {
+	const normalizedTeam = loadedTeam.map((member, index) => {
 		if (member === null) {
 			return null;
 		}
-		const key = member.serialize();
-		const candidates = bucket.get(key);
-		if (!candidates || candidates.length === 0) {
-			return member;
-		}
-		const matched = candidates.shift();
-		if (matched === undefined) {
+		const matched = resolvedMembers[index];
+		if (!matched) {
 			return member;
 		}
 		idRemap.set(member.id, matched.id);
@@ -344,15 +344,22 @@ function normalizeTeamWithBoxItems(
 function normalizeTeamSetWithRuntimeBox(
 	teamSet: TeamSetState,
 	runtimeBox: PokemonBox,
+	fuzzyCandidates: readonly PokemonBoxItem[],
 ): TeamSetState {
-	const { normalizedTeam, idRemap } = normalizeTeamWithBoxItems(
+	const { normalizedTeam, idRemap } = normalizeTeamWithBox(
 		teamSet.team,
-		runtimeBox.items,
+		runtimeBox,
+		fuzzyCandidates,
 	);
 	return {
 		...teamSet,
 		team: normalizedTeam,
-		swaps: normalizeLoadedSwapsWithBox(teamSet.swaps, runtimeBox, idRemap),
+		swaps: normalizeLoadedSwapsWithBox(
+			teamSet.swaps,
+			runtimeBox,
+			idRemap,
+			fuzzyCandidates,
+		),
 		noCollectCells: [...teamSet.noCollectCells],
 	};
 }
@@ -578,14 +585,20 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 	// 初回マウント時にデータをロード
 	useEffect(() => {
 		const runtimeBox = timelineRuntimeBoxRef.current;
-		if (!runtimeBox) {
+		const loadedUserBox = userBoxRef.current;
+		if (!runtimeBox || !loadedUserBox) {
 			return;
 		}
 
 		const loadedTeamSets = loadTeamSetsFromStorage(runtimeBox);
 		if (loadedTeamSets) {
+			// 一致度で探し直す候補はユーザーのボックスだけ（初回プリセットの隠しポケモンは除く）
 			const normalizedTeamSets = loadedTeamSets.teamSets.map((teamSet) =>
-				normalizeTeamSetWithRuntimeBox(teamSet, runtimeBox),
+				normalizeTeamSetWithRuntimeBox(
+					teamSet,
+					runtimeBox,
+					loadedUserBox.items,
+				),
 			);
 			dispatch({
 				type: "loadTeamSets",

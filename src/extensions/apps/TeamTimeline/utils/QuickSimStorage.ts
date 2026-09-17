@@ -13,6 +13,7 @@ import {
 	collectAppearingTimelineMembers,
 	collectTimelineDurationSummaryByPokemon,
 } from "./AdditionalAnalysisUtils";
+import { resolveDistinctBoxItems } from "./BoxItemMatchingUtils";
 import { clampQuickSimUsagePercent } from "./QuickSimScheduler";
 
 /**
@@ -28,19 +29,6 @@ interface SerializedQuickSimMember {
 
 interface SerializedQuickSimSettings {
 	members: SerializedQuickSimMember[];
-}
-
-function buildSerializedToItemsMap(
-	box: PokemonBox,
-): Map<string, PokemonBoxItem[]> {
-	const map = new Map<string, PokemonBoxItem[]>();
-	for (const item of box.items) {
-		const key = item.serialize();
-		const items = map.get(key) ?? [];
-		items.push(item);
-		map.set(key, items);
-	}
-	return map;
 }
 
 /**
@@ -67,12 +55,28 @@ export function saveQuickSimSettingsToStorage(
 	localStorage.setItem(STORAGE_KEY_QUICK_SIM, JSON.stringify(payload));
 }
 
+function isSerializedQuickSimMember(
+	value: unknown,
+): value is SerializedQuickSimMember {
+	if (!value || typeof value !== "object") {
+		return false;
+	}
+	const candidate = value as Partial<SerializedQuickSimMember>;
+	return (
+		typeof candidate.serialized === "string" &&
+		typeof candidate.usagePercent === "number"
+	);
+}
+
 /**
  * 簡易シミュ設定を localStorage から読み込む。
- * 未保存なら null。ボックスから消えたメンバーは除いて返す。
+ * 未保存なら null。完全一致で見つからないメンバー（個体値計算機で編集された等）は
+ * 一致度で探し直し、それでも見つからなければ除いて返す。
+ * @param fuzzyCandidates 一致度で探し直すときの候補。省略時はボックスの全アイテム。
  */
 export function loadQuickSimSettingsFromStorage(
 	box: PokemonBox,
+	fuzzyCandidates?: readonly PokemonBoxItem[],
 ): QuickSimSettings | null {
 	const raw = localStorage.getItem(STORAGE_KEY_QUICK_SIM);
 	if (raw === null) {
@@ -83,24 +87,18 @@ export function loadQuickSimSettingsFromStorage(
 		if (!Array.isArray(parsed.members)) {
 			return null;
 		}
-		const serializedToItems = buildSerializedToItemsMap(box);
-		const usedIds = new Set<number>();
+		const rawMembers = parsed.members.filter(isSerializedQuickSimMember);
+		const resolvedItems = resolveDistinctBoxItems(
+			rawMembers.map((rawMember) => rawMember.serialized),
+			box,
+			{ fuzzyCandidates },
+		);
 		const members: QuickSimMember[] = [];
-		for (const rawMember of parsed.members) {
-			if (
-				!rawMember ||
-				typeof rawMember !== "object" ||
-				typeof rawMember.serialized !== "string" ||
-				typeof rawMember.usagePercent !== "number"
-			) {
-				continue;
-			}
-			const candidates = serializedToItems.get(rawMember.serialized) ?? [];
-			const item = candidates.find((candidate) => !usedIds.has(candidate.id));
+		rawMembers.forEach((rawMember, index) => {
+			const item = resolvedItems[index];
 			if (!item) {
-				continue;
+				return;
 			}
-			usedIds.add(item.id);
 			members.push({
 				pokemonId: item.id,
 				usagePercent: clampQuickSimUsagePercent(rawMember.usagePercent),
@@ -108,7 +106,7 @@ export function loadQuickSimSettingsFromStorage(
 					? rawMember.usageMode
 					: DEFAULT_QUICK_SIM_USAGE_MODE,
 			});
-		}
+		});
 		return { members };
 	} catch {
 		return null;
