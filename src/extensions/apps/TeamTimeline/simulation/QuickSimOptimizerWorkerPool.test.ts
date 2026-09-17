@@ -8,6 +8,7 @@ import {
 	DEFAULT_SIMULATION_CONFIG,
 	DEFAULT_TIME_SLOTS,
 } from "../types/TimeSlotTypes";
+import { initialIngredientsToStock } from "../utils/QuickSimIngredientCandidates";
 import {
 	buildStrengthParameterFromTimelineBonusSettings,
 	createDefaultTimelineBonusSettings,
@@ -18,6 +19,7 @@ import {
 } from "./QuickSimEvaluator";
 import {
 	buildEvaluationTasks,
+	buildIngredientEvaluationTasks,
 	QuickSimOptimizerWorkerPool,
 	resolveQuickSimOptimizerWorkerCount,
 } from "./QuickSimOptimizerWorkerPool";
@@ -86,18 +88,34 @@ class FakeWorker {
 				});
 				return;
 			}
+			const reportProgress = (completed: number, total: number) => {
+				this.emit({
+					type: "progress",
+					requestId: request.requestId,
+					completed,
+					total,
+				});
+			};
+			if (request.type === "evaluateIngredients") {
+				const evaluations = this.evaluator.evaluateIngredientsSync(
+					request.percents,
+					request.stocks,
+					request.seeds,
+					request.options,
+					reportProgress,
+				);
+				this.emit({
+					type: "ingredientResult",
+					requestId: request.requestId,
+					evaluations: structuredClone(evaluations),
+				});
+				return;
+			}
 			const evaluations = this.evaluator.evaluateSync(
 				request.candidates,
 				request.seeds,
 				request.options,
-				(completed, total) => {
-					this.emit({
-						type: "progress",
-						requestId: request.requestId,
-						completed,
-						total,
-					});
-				},
+				reportProgress,
 			);
 			this.emit({
 				type: "result",
@@ -140,7 +158,11 @@ function createContext(): QuickSimEvaluatorContext {
 		timeSlots: DEFAULT_TIME_SLOTS,
 		simulationConfig: { ...DEFAULT_SIMULATION_CONFIG, simulationDays: 1 },
 		bonusSettings,
-		cookingSettings: createDefaultCookingSettings(),
+		cookingSettings: {
+			...createDefaultCookingSettings(),
+			enabled: true,
+			category: "curry",
+		},
 		provisionalSettings: createDefaultProvisionalSettings(),
 		strengthParameter:
 			buildStrengthParameterFromTimelineBonusSettings(bonusSettings),
@@ -197,9 +219,109 @@ describe("buildEvaluationTasks", () => {
 	});
 });
 
+describe("buildIngredientEvaluationTasks", () => {
+	it("keeps every stock in each task and splits only the seeds", () => {
+		const seeds = Array.from({ length: 1000 }, (_, index) => index);
+		const tasks = buildIngredientEvaluationTasks(11, seeds, 8);
+		expect(tasks).toHaveLength(16);
+		for (const task of tasks) {
+			expect(task.candidateIndexes).toEqual(
+				Array.from({ length: 11 }, (_, index) => index),
+			);
+			expect(task.seeds.length).toBeLessThanOrEqual(63);
+			expect(task.seeds).toEqual(
+				seeds.slice(task.seedOffset, task.seedOffset + task.seeds.length),
+			);
+		}
+		expect(tasks.reduce((sum, task) => sum + task.seeds.length, 0)).toBe(1000);
+	});
+
+	it("uses one seed per task when there are few seeds", () => {
+		const tasks = buildIngredientEvaluationTasks(
+			3,
+			[1, 2, 3, 4, 5, 6, 7, 8],
+			4,
+		);
+		expect(tasks).toHaveLength(8);
+		expect(tasks.every((task) => task.seeds.length === 1)).toBe(true);
+	});
+
+	it("returns nothing without stocks or seeds", () => {
+		expect(buildIngredientEvaluationTasks(0, [1], 2)).toEqual([]);
+		expect(buildIngredientEvaluationTasks(3, [], 2)).toEqual([]);
+	});
+});
+
 describe("QuickSimOptimizerWorkerPool", () => {
 	afterEach(() => {
 		FakeWorker.instances = [];
+	});
+
+	it("evaluates ingredient stocks like the in-thread evaluator and spreads seeds over workers", async () => {
+		const context = createContext();
+		const pool = await QuickSimOptimizerWorkerPool.create(context, 4);
+		const percents = [100, 100, 100, 100, 60, 40];
+		const stocks = [
+			initialIngredientsToStock({ apple: 90 }),
+			initialIngredientsToStock({ soy: 60, tomato: 60 }),
+			initialIngredientsToStock({}),
+		];
+		const seeds = Array.from({ length: 130 }, (_, index) => 200 + index);
+		const progress: [number, number][] = [];
+		const pooled = await pool.evaluateIngredients(
+			percents,
+			stocks,
+			seeds,
+			{ excludeSleepSwaps: false },
+			(completed, total) => progress.push([completed, total]),
+		);
+		const direct = await new QuickSimEvaluator(context).evaluateIngredients(
+			percents,
+			stocks,
+			seeds,
+			{ excludeSleepSwaps: false },
+		);
+		expect(pooled).toEqual(direct);
+		expect(pooled[0].epBySeed).toHaveLength(130);
+		expect(progress[progress.length - 1]).toEqual([130, 130]);
+		const requests = FakeWorker.instances.flatMap((worker) =>
+			worker.requests.filter(
+				(request) => request.type === "evaluateIngredients",
+			),
+		);
+		expect(requests).toHaveLength(8);
+		for (const request of requests) {
+			if (request.type === "evaluateIngredients") {
+				expect(request.stocks).toHaveLength(3);
+			}
+		}
+		expect(
+			FakeWorker.instances.filter((worker) =>
+				worker.requests.some(
+					(request) => request.type === "evaluateIngredients",
+				),
+			).length,
+		).toBeGreaterThan(1);
+		pool.terminate();
+	});
+
+	it("marks every stock excluded when the percents cannot be scheduled", async () => {
+		const context = createContext();
+		const pool = await QuickSimOptimizerWorkerPool.create(context, 2);
+		const pooled = await pool.evaluateIngredients(
+			[0, 0, 0, 0, 0, 0],
+			[initialIngredientsToStock({ apple: 90 })],
+			[1, 2],
+			{ excludeSleepSwaps: false },
+		);
+		expect(pooled).toEqual([
+			{
+				stock: initialIngredientsToStock({ apple: 90 }),
+				epBySeed: [],
+				excluded: true,
+			},
+		]);
+		pool.terminate();
 	});
 
 	it("returns the same results as the in-thread evaluator, in candidate order", async () => {

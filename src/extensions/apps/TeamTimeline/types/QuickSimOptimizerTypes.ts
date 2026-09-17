@@ -1,3 +1,4 @@
+import type { IngredientName } from "../../../../data/pokemons";
 import {
 	QUICK_SIM_MAX_USAGE_PERCENT,
 	QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
@@ -48,6 +49,79 @@ export const QUICK_SIM_OPTIMIZER_RESULT_COUNT = 10;
 /** 最終結果の試行数 */
 export const QUICK_SIM_OPTIMIZER_FINAL_TRIALS = 1000;
 
+/**
+ * 最適化の対象。
+ * - usage: 起用率だけを探索する（初期食材は設定のまま）
+ * - ingredients: 起用率は現在の設定のまま、初期食材の配分だけを探索する
+ * - both: 起用率を探索し、上位候補ごとに初期食材も探索して組み合わせを比べる
+ */
+export type QuickSimOptimizerTarget = "usage" | "ingredients" | "both";
+export const QUICK_SIM_OPTIMIZER_TARGETS: readonly QuickSimOptimizerTarget[] = [
+	"usage",
+	"ingredients",
+	"both",
+];
+export const DEFAULT_QUICK_SIM_OPTIMIZER_TARGET: QuickSimOptimizerTarget =
+	"usage";
+
+export function isQuickSimOptimizerTarget(
+	value: unknown,
+): value is QuickSimOptimizerTarget {
+	return QUICK_SIM_OPTIMIZER_TARGETS.includes(value as QuickSimOptimizerTarget);
+}
+
+export function optimizerTargetIncludesUsage(
+	target: QuickSimOptimizerTarget,
+): boolean {
+	return target === "usage" || target === "both";
+}
+
+export function optimizerTargetIncludesIngredients(
+	target: QuickSimOptimizerTarget,
+): boolean {
+	return target === "ingredients" || target === "both";
+}
+
+/** 初期食材の探索の刻み（個）。1 単位 = この個数 */
+export const QUICK_SIM_INGREDIENT_STEP_COUNT = 30;
+/** 初期食材の合計（上限）の既定値 */
+export const DEFAULT_QUICK_SIM_INGREDIENT_TOTAL_COUNT = 800;
+/** 食材ごとの上限の既定値。0 の食材は探索しない */
+export const DEFAULT_QUICK_SIM_INGREDIENT_MAX_COUNT = 0;
+/** 合計・上限として受け付ける最大値 */
+export const QUICK_SIM_INGREDIENT_COUNT_LIMIT = 9999;
+/** 初期食材の開始点を比べる racing の累積試行数 */
+export const QUICK_SIM_INGREDIENT_START_TRIALS: readonly number[] = [8, 32];
+/** 開始点の racing で次の段階に残す割合と最低数 */
+export const QUICK_SIM_INGREDIENT_START_KEEP_RATIO = 0.25;
+export const QUICK_SIM_INGREDIENT_START_MIN_KEEP = 5;
+/** 局所探索を始める開始点の数 */
+export const QUICK_SIM_INGREDIENT_LOCAL_SEARCH_STARTS = 3;
+/** 初期食材の近傍を 1 段目で評価する試行数 */
+export const QUICK_SIM_INGREDIENT_NEIGHBOR_TRIALS = 8;
+/** 初期食材の近傍のうち上位を 2 段目で評価する試行数 */
+export const QUICK_SIM_INGREDIENT_NEIGHBOR_CONFIRM_TRIALS = 32;
+/** 2 段目に残す割合と最低数 */
+export const QUICK_SIM_INGREDIENT_NEIGHBOR_KEEP_RATIO = 0.25;
+export const QUICK_SIM_INGREDIENT_NEIGHBOR_MIN_KEEP = 5;
+/** 両方を最適化するとき、初期食材を探索する起用率候補の数 */
+export const QUICK_SIM_OPTIMIZER_JOINT_USAGE_CANDIDATES = 5;
+
+/** 初期食材の探索設定（パネルで保存する） */
+export interface QuickSimIngredientSearchSettings {
+	/** 配分する合計の上限（個）。刻みの倍数に切り捨てて使う */
+	totalCount: number;
+	/** 食材ごとの上限（個）。未設定・0 の食材は探索しない */
+	maxCountByIngredient: Readonly<Partial<Record<IngredientName, number>>>;
+}
+
+export function createDefaultQuickSimIngredientSearchSettings(): QuickSimIngredientSearchSettings {
+	return {
+		totalCount: DEFAULT_QUICK_SIM_INGREDIENT_TOTAL_COUNT,
+		maxCountByIngredient: {},
+	};
+}
+
 /** 最適化のオプション */
 export interface QuickSimOptimizerOptions {
 	/** 就寝中の入れ替えが必要になる候補を除外する */
@@ -81,6 +155,8 @@ export type QuickSimOptimizerPhase =
 	| "screening"
 	| "racing"
 	| "localSearch"
+	| "ingredientStart"
+	| "ingredientSearch"
 	| "final";
 
 export interface QuickSimOptimizerProgress {
@@ -132,10 +208,38 @@ export interface QuickSimOptimizerEvaluator {
 	): Promise<QuickSimCandidateEvaluation[]>;
 }
 
+/** 初期食材の配分: IngredientNames 順の個数 */
+export type QuickSimIngredientStock = readonly number[];
+
+/** 初期食材の配分ごとの評価結果 */
+export interface QuickSimIngredientEvaluation {
+	stock: number[];
+	/** 要求したシードごとの EP（除外された配分は空） */
+	epBySeed: number[];
+	/** 除外されたか（起用率のスケジュールを作れない、または就寝中の入れ替えが必要） */
+	excluded: boolean;
+}
+
+/**
+ * 起用率を固定して初期食材の配分をシミュレーションする評価器。
+ * 同じシードのおてつだい結果を配分間で共有し、料理だけを再計算する。
+ */
+export interface QuickSimIngredientEvaluator {
+	evaluateIngredients(
+		percents: QuickSimOptimizerPercents,
+		stocks: readonly QuickSimIngredientStock[],
+		seeds: readonly number[],
+		options: QuickSimOptimizerEvaluateOptions,
+		onProgress?: (completed: number, total: number) => void,
+	): Promise<QuickSimIngredientEvaluation[]>;
+}
+
 /** 最終結果の 1 件 */
 export interface QuickSimOptimizerResultEntry {
 	/** メンバー順の起用率（%） */
 	percents: number[];
+	/** 初期食材の配分（初期食材を探索した対象のときだけ。19 種すべてのキーを持つ） */
+	initialIngredients?: Partial<Record<IngredientName, number>>;
 	/** 平均 EP */
 	meanEP: number;
 	trialCount: number;
@@ -145,7 +249,10 @@ export interface QuickSimOptimizerResultEntry {
 }
 
 export interface QuickSimOptimizerResult {
+	target: QuickSimOptimizerTarget;
 	members: QuickSimOptimizerMember[];
+	/** 初期食材を探索したときに実際に配分した合計（刻みと上限で切り詰めた後） */
+	ingredientTotalCount?: number;
 	/** 平均 EP の高い順 */
 	entries: QuickSimOptimizerResultEntry[];
 	/** 現在の起用率を同じシードで評価したもの（評価できないときは null） */

@@ -133,10 +133,14 @@ vi.mock("./QuickSimOptimizerPanel", () => ({
 		members,
 		hasSleepSlot,
 		onApply,
+		onApplyIngredients,
 	}: {
 		members: Array<{ pokemonId: number }>;
 		hasSleepSlot: boolean;
 		onApply: (percentByPokemonId: ReadonlyMap<number, number>) => void;
+		onApplyIngredients: (
+			initialIngredients: Partial<Record<string, number>>,
+		) => void;
 	}) => (
 		<div
 			data-testid="quick-sim-optimizer-panel"
@@ -158,6 +162,13 @@ vi.mock("./QuickSimOptimizerPanel", () => ({
 				}
 			>
 				apply
+			</button>
+			<button
+				type="button"
+				data-testid="quick-sim-optimizer-apply-ingredients-stub"
+				onClick={() => onApplyIngredients({ apple: 90, milk: 0, tomato: 60 })}
+			>
+				apply ingredients
 			</button>
 		</div>
 	),
@@ -345,6 +356,28 @@ describe("QuickSimTab", () => {
 		expect(localStorage.getItem(STORAGE_KEY_QUICK_SIM)).toContain(
 			'"usagePercent":60',
 		);
+	});
+
+	it("applies optimized initial ingredients by replacing only initialIngredients", () => {
+		const cookingSettings = {
+			...createDefaultCookingSettings(),
+			enabled: true,
+			category: "salad" as const,
+			basePotCapacity: 57,
+			initialIngredients: { honey: 15 },
+			disabledExtraIngredients: { tail: true },
+		};
+		const { onCookingSettingsChange } = renderTab({ cookingSettings });
+
+		fireEvent.click(
+			screen.getByTestId("quick-sim-optimizer-apply-ingredients-stub"),
+		);
+
+		expect(onCookingSettingsChange).toHaveBeenCalledTimes(1);
+		expect(onCookingSettingsChange).toHaveBeenCalledWith({
+			...cookingSettings,
+			initialIngredients: { apple: 90, milk: 0, tomato: 60 },
+		});
 	});
 
 	it("collapses the initial ingredients by default and opens the cooking settings", () => {

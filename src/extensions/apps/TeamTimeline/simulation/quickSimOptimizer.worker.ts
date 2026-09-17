@@ -62,26 +62,39 @@ self.addEventListener(
 		}
 		try {
 			let lastProgressAt = Date.now();
+			const reportProgress = (completed: number, total: number): void => {
+				const now = Date.now();
+				if (completed < total && now - lastProgressAt < PROGRESS_INTERVAL_MS) {
+					return;
+				}
+				lastProgressAt = now;
+				self.postMessage({
+					type: "progress",
+					requestId: request.requestId,
+					completed,
+					total,
+				});
+			};
+			if (request.type === "evaluateIngredients") {
+				const evaluations = evaluator.evaluateIngredientsSync(
+					request.percents,
+					request.stocks,
+					request.seeds,
+					request.options,
+					reportProgress,
+				);
+				self.postMessage({
+					type: "ingredientResult",
+					requestId: request.requestId,
+					evaluations,
+				});
+				return;
+			}
 			const evaluations = evaluator.evaluateSync(
 				request.candidates,
 				request.seeds,
 				request.options,
-				(completed, total) => {
-					const now = Date.now();
-					if (
-						completed < total &&
-						now - lastProgressAt < PROGRESS_INTERVAL_MS
-					) {
-						return;
-					}
-					lastProgressAt = now;
-					self.postMessage({
-						type: "progress",
-						requestId: request.requestId,
-						completed,
-						total,
-					});
-				},
+				reportProgress,
 			);
 			self.postMessage({
 				type: "result",

@@ -12,6 +12,7 @@ import {
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { IngredientName } from "../../../../data/pokemons";
 import type PokemonBox from "../../../../util/PokemonBox";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import { runSimulation } from "../simulation/TimelineSimulator";
@@ -386,6 +387,13 @@ export default function QuickSimTab({
 		[],
 	);
 
+	const handleOptimizerApplyIngredients = useCallback(
+		(initialIngredients: Partial<Record<IngredientName, number>>) => {
+			onCookingSettingsChange({ ...cookingSettings, initialIngredients });
+		},
+		[cookingSettings, onCookingSettingsChange],
+	);
+
 	const handleImportClick = useCallback(() => {
 		setImportConfirmOpen(true);
 	}, []);
@@ -710,6 +718,7 @@ export default function QuickSimTab({
 					scheduleResult.ok || scheduleResult.error !== "noSleepSlot"
 				}
 				onApply={handleOptimizerApply}
+				onApplyIngredients={handleOptimizerApplyIngredients}
 			/>
 
 			<Box sx={PANEL_SX} data-testid="quick-sim-initial-ingredients">
