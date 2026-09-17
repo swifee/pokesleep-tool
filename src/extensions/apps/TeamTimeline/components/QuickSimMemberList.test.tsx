@@ -172,7 +172,7 @@ describe("QuickSimMemberList", () => {
 		expect(input.value).toBe("50");
 	});
 
-	it("shows the usage mode dropdown only between 1% and 99% and changes the mode", () => {
+	it("always shows the usage mode dropdown, fades it at 0% and 100%, and changes the mode", () => {
 		const items = [pikachu, eevee, createItem("Bulbasaur", 3)];
 		const { onChange } = renderList(
 			[member(pikachu.id, 100), member(eevee.id, 40), member(3, 0)],
@@ -180,17 +180,28 @@ describe("QuickSimMemberList", () => {
 			new PokemonBox(items),
 		);
 
-		expect(screen.queryByTestId("quick-sim-member-mode-1")).toBeNull();
-		expect(screen.queryByTestId("quick-sim-member-mode-3")).toBeNull();
-		const select = screen.getByTestId("quick-sim-member-mode-2");
-		expect(select.textContent).toContain("均等");
+		const fullTime = screen.getByTestId("quick-sim-member-mode-1");
+		const partial = screen.getByTestId("quick-sim-member-mode-2");
+		const unused = screen.getByTestId("quick-sim-member-mode-3");
+		expect(fullTime.getAttribute("data-inactive")).toBe("true");
+		expect(partial.getAttribute("data-inactive")).toBe("false");
+		expect(unused.getAttribute("data-inactive")).toBe("true");
+		expect(partial.textContent).toContain("均等");
 
-		fireEvent.mouseDown(within(select).getByRole("combobox"));
+		fireEvent.mouseDown(within(partial).getByRole("combobox"));
 		fireEvent.click(screen.getByRole("option", { name: "睡眠" }));
-
 		expect(onChange).toHaveBeenLastCalledWith([
 			member(pikachu.id, 100),
 			member(eevee.id, 40, "sleep"),
+			member(3, 0),
+		]);
+
+		// The faded dropdown of a 100% member still accepts a new mode.
+		fireEvent.mouseDown(within(fullTime).getByRole("combobox"));
+		fireEvent.click(screen.getByRole("option", { name: "前半" }));
+		expect(onChange).toHaveBeenLastCalledWith([
+			member(pikachu.id, 100, "firstHalf"),
+			member(eevee.id, 40),
 			member(3, 0),
 		]);
 	});

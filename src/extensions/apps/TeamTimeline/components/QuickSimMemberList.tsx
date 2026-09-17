@@ -32,6 +32,7 @@ import {
 import {
 	clampQuickSimUsagePercent,
 	getQuickSimTotalUsagePercent,
+	isQuickSimUsageModeEffective,
 	usagePercentToMinutes,
 } from "../utils/QuickSimScheduler";
 import {
@@ -74,7 +75,10 @@ const USAGE_SLIDER_SX = {
 	mx: "6px",
 };
 const USAGE_MODE_FONT_SIZE = "11px";
-/** ▼を出さないコンパクトなプルダウン */
+/**
+ * ▼を出さないコンパクトなプルダウン。
+ * 起用率が 0% / 100% で起用方法が配置に影響しないときは薄く表示する（変更はできる）。
+ */
 const USAGE_MODE_SELECT_SX = {
 	flexShrink: 0,
 	fontSize: USAGE_MODE_FONT_SIZE,
@@ -86,6 +90,11 @@ const USAGE_MODE_SELECT_SX = {
 		p: "2px 4px",
 		pr: "4px !important",
 		minHeight: 0,
+	},
+	'&[data-inactive="true"]': {
+		color: "#9e9e9e",
+		borderColor: "#e0e0e0",
+		backgroundColor: "#fff",
 	},
 };
 const USAGE_MODE_MENU_ITEM_SX = {
@@ -420,36 +429,38 @@ const QuickSimMemberList = React.memo(
 											minWidth: 0,
 										}}
 									>
-										{member.usagePercent > QUICK_SIM_MIN_USAGE_PERCENT &&
-											member.usagePercent < QUICK_SIM_MAX_USAGE_PERCENT && (
-												<Select
-													value={member.usageMode}
-													onChange={(event) =>
-														handleUsageModeChange(member.pokemonId, event)
-													}
-													variant="standard"
-													disableUnderline
-													IconComponent={HiddenSelectIcon}
-													inputProps={{
-														"aria-label": t(
-															"TeamTimeline.quick usage mode",
-															"起用方法",
-														),
-													}}
-													sx={USAGE_MODE_SELECT_SX}
-													data-testid={`quick-sim-member-mode-${member.pokemonId}`}
+										<Select
+											value={member.usageMode}
+											onChange={(event) =>
+												handleUsageModeChange(member.pokemonId, event)
+											}
+											variant="standard"
+											disableUnderline
+											IconComponent={HiddenSelectIcon}
+											inputProps={{
+												"aria-label": t(
+													"TeamTimeline.quick usage mode",
+													"起用方法",
+												),
+											}}
+											sx={USAGE_MODE_SELECT_SX}
+											data-testid={`quick-sim-member-mode-${member.pokemonId}`}
+											data-inactive={
+												isQuickSimUsageModeEffective(member.usagePercent)
+													? "false"
+													: "true"
+											}
+										>
+											{QUICK_SIM_USAGE_MODES.map((mode) => (
+												<MenuItem
+													key={mode}
+													value={mode}
+													sx={USAGE_MODE_MENU_ITEM_SX}
 												>
-													{QUICK_SIM_USAGE_MODES.map((mode) => (
-														<MenuItem
-															key={mode}
-															value={mode}
-															sx={USAGE_MODE_MENU_ITEM_SX}
-														>
-															{usageModeLabel(mode)}
-														</MenuItem>
-													))}
-												</Select>
-											)}
+													{usageModeLabel(mode)}
+												</MenuItem>
+											))}
+										</Select>
 										<Slider
 											size="small"
 											value={member.usagePercent}
