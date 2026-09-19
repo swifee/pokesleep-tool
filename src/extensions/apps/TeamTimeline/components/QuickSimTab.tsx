@@ -1,14 +1,4 @@
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import SettingsIcon from "@mui/icons-material/Settings";
-import {
-	Box,
-	ButtonBase,
-	Collapse,
-	FormControlLabel,
-	IconButton,
-	Switch,
-	Typography,
-} from "@mui/material";
+import { Box, FormControlLabel, Switch, Typography } from "@mui/material";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,6 +10,7 @@ import { runMultiTrialSimulationParallel } from "../simulation/TrialBatchRunner"
 import type {
 	AverageCookingSummary,
 	CookingSimulationSettings,
+	InitialIngredientsSettings,
 } from "../types/CookingTypes";
 import type { TrialSummary } from "../types/MultiTrialTypes";
 import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
@@ -39,9 +30,9 @@ import type {
 	SimulationResult,
 	TeamSummary,
 	TimeSlot,
+	Weekday,
 } from "../types/TimeSlotTypes";
 import { collectTimelineDurationSummaryByPokemon } from "../utils/AdditionalAnalysisUtils";
-import { getInitialIngredientTotal } from "../utils/InitialIngredientsUtils";
 import {
 	buildQuickSimSchedule,
 	getQuickSimTotalUsagePercent,
@@ -59,7 +50,7 @@ import { buildSpecialPokemonExclusionMap } from "../utils/SpecialPokemonUtils";
 import type { SummaryValueMode } from "../utils/SummaryValueModeUtils";
 import BoxSelectDialog from "./BoxSelectDialog";
 import DailySummaryRow from "./DailySummaryRow";
-import InitialIngredientsEditor from "./InitialIngredientsEditor";
+import InitialIngredientsPanel from "./InitialIngredientsPanel";
 import QuickSimImportConfirmDialog from "./QuickSimImportConfirmDialog";
 import QuickSimMemberList from "./QuickSimMemberList";
 import QuickSimOptimizerPanel from "./QuickSimOptimizerPanel";
@@ -89,11 +80,15 @@ interface QuickSimTabProps {
 	timeSlots: TimeSlot[];
 	simulationConfig: SimulationConfig;
 	bonusSettings: TimelineBonusSettings;
+	/** 料理設定。初期食材の項目は自動シミュ用の値に差し替え済みのものを渡す */
 	cookingSettings: CookingSimulationSettings;
 	provisionalSettings: ProvisionalSettings;
 	seedMode: "random" | "fixed";
 	multiTrialCount: number;
-	onCookingSettingsChange: (settings: CookingSimulationSettings) => void;
+	/** 自動シミュ用の初期食材を変更する */
+	onInitialIngredientsChange: (settings: InitialIngredientsSettings) => void;
+	/** 自動シミュ用の初期食材を詳細シミュへ反映する */
+	onCopyInitialIngredientsToDetailedSim: () => void;
 	/** 料理設定タブへ移動する */
 	onOpenCookingSettings: () => void;
 	/** 実行に使ったシード値を通知する（詳細シミュと同じくシード固定の再現に使う） */
@@ -107,6 +102,8 @@ interface QuickSimRunResult {
 	timeline: QuickSimTimeline;
 	schedule: QuickSimSchedule;
 	simulationDays: number;
+	/** 実行時の開始曜日（結果の表示を実行時の展開にそろえる） */
+	startDayOfWeek: Weekday;
 	simulationResult: SimulationResult;
 	trials: TrialSummary[] | null;
 	selectedTrialIndex: number | null;
@@ -125,14 +122,6 @@ const SECTION_TITLE_SX = {
 	lineHeight: "18px",
 	letterSpacing: "0.4px",
 };
-const PANEL_SX = {
-	border: "1px solid #e1e1e1",
-	borderRadius: "8px",
-	p: "10px 12px",
-	mb: 2,
-	backgroundColor: "#fff",
-};
-const EXPAND_ICON_TRANSITION_MS = 200;
 const EMPTY_SIMULATION_RESULT: SimulationResult = {
 	slotResults: new Map(),
 	dailySummaries: [],
@@ -212,7 +201,8 @@ export default function QuickSimTab({
 	provisionalSettings,
 	seedMode,
 	multiTrialCount,
-	onCookingSettingsChange,
+	onInitialIngredientsChange,
+	onCopyInitialIngredientsToDetailedSim,
 	onOpenCookingSettings,
 	onSeedChange,
 	renderSimulationControls,
@@ -235,7 +225,6 @@ export default function QuickSimTab({
 	const [boxDialogOpen, setBoxDialogOpen] = useState(false);
 	/** 入れ替え対象のメンバー（null なら追加） */
 	const [swapTargetId, setSwapTargetId] = useState<number | null>(null);
-	const [ingredientsExpanded, setIngredientsExpanded] = useState(false);
 	const [importConfirmOpen, setImportConfirmOpen] = useState(false);
 	const [simulationLoading, setSimulationLoading] = useState(false);
 	const [simulationProgress, setSimulationProgress] = useState(0);
@@ -369,10 +358,6 @@ export default function QuickSimTab({
 		[swapTargetId],
 	);
 
-	const handleIngredientsToggle = useCallback(() => {
-		setIngredientsExpanded((previous) => !previous);
-	}, []);
-
 	const handleOptimizerApply = useCallback(
 		(percentByPokemonId: ReadonlyMap<number, number>) => {
 			setMembers((previous) =>
@@ -389,9 +374,12 @@ export default function QuickSimTab({
 
 	const handleOptimizerApplyIngredients = useCallback(
 		(initialIngredients: Partial<Record<IngredientName, number>>) => {
-			onCookingSettingsChange({ ...cookingSettings, initialIngredients });
+			onInitialIngredientsChange({
+				initialIngredients,
+				disabledExtraIngredients: cookingSettings.disabledExtraIngredients,
+			});
 		},
-		[cookingSettings, onCookingSettingsChange],
+		[cookingSettings.disabledExtraIngredients, onInitialIngredientsChange],
 	);
 
 	const handleImportClick = useCallback(() => {
@@ -453,6 +441,7 @@ export default function QuickSimTab({
 		): Promise<QuickSimRunResult> => {
 			const signature = inputSignature;
 			const simulationDays = simulationConfig.simulationDays;
+			const startDayOfWeek = simulationConfig.startDayOfWeek;
 			const throwIfAborted = (): void => {
 				if (abortSignal.aborted) {
 					throw createAbortError();
@@ -471,6 +460,7 @@ export default function QuickSimTab({
 					timeline,
 					schedule,
 					simulationDays,
+					startDayOfWeek,
 					simulationResult,
 					trials: null,
 					selectedTrialIndex: null,
@@ -516,6 +506,7 @@ export default function QuickSimTab({
 				timeline,
 				schedule,
 				simulationDays,
+				startDayOfWeek,
 				simulationResult,
 				trials: [...multiResult.trials],
 				selectedTrialIndex,
@@ -660,8 +651,6 @@ export default function QuickSimTab({
 			return item ? [item.filledNickname(t)] : [];
 		});
 	}, [scheduleResult, runtimeBox, t]);
-	const initialIngredientTotal = getInitialIngredientTotal(cookingSettings);
-
 	const resultTimeline = runResult?.timeline ?? null;
 	const resultDurationSummary = useMemo(() => {
 		if (runResult === null) {
@@ -721,70 +710,21 @@ export default function QuickSimTab({
 				onApplyIngredients={handleOptimizerApplyIngredients}
 			/>
 
-			<Box sx={PANEL_SX} data-testid="quick-sim-initial-ingredients">
-				<Box sx={{ display: "flex", alignItems: "center", gap: "4px" }}>
-					<ButtonBase
-						onClick={handleIngredientsToggle}
-						aria-expanded={ingredientsExpanded}
-						data-testid="quick-sim-initial-ingredients-toggle"
-						sx={{
-							display: "flex",
-							alignItems: "center",
-							gap: "2px",
-							mr: "auto",
-							borderRadius: "4px",
-							px: "2px",
-						}}
-					>
-						<Typography variant="subtitle2" component="span">
-							{t("TeamTimeline.cooking initial ingredients", "初期食材")}
-						</Typography>
-						<Typography
-							variant="caption"
-							component="span"
-							sx={{ color: "#666" }}
-							data-testid="quick-sim-initial-ingredients-summary"
-						>
-							{t("TeamTimeline.quick ingredients total", "（合計 {{total}}）", {
-								total: initialIngredientTotal.toLocaleString(),
-							})}
-						</Typography>
-						<ExpandMoreIcon
-							sx={{
-								fontSize: "18px",
-								color: "#666",
-								transform: ingredientsExpanded ? "rotate(180deg)" : "none",
-								transition: `transform ${EXPAND_ICON_TRANSITION_MS}ms`,
-							}}
-						/>
-					</ButtonBase>
-					<IconButton
-						size="small"
-						onClick={onOpenCookingSettings}
-						title={t(
-							"TeamTimeline.quick open cooking settings",
-							"料理設定を開く",
-						)}
-						aria-label={t(
-							"TeamTimeline.quick open cooking settings",
-							"料理設定を開く",
-						)}
-						data-testid="quick-sim-open-cooking-settings"
-						sx={{ p: "2px" }}
-					>
-						<SettingsIcon sx={{ fontSize: "16px" }} />
-					</IconButton>
-				</Box>
-				<Collapse in={ingredientsExpanded} unmountOnExit>
-					<Box sx={{ mt: 1 }}>
-						<InitialIngredientsEditor
-							settings={cookingSettings}
-							onChange={onCookingSettingsChange}
-							showTitle={false}
-						/>
-					</Box>
-				</Collapse>
-			</Box>
+			<InitialIngredientsPanel
+				settings={cookingSettings}
+				onChange={onInitialIngredientsChange}
+				onOpenCookingSettings={onOpenCookingSettings}
+				copyButtonLabel={t(
+					"TeamTimeline.quick copy ingredients to detailed",
+					"詳細シミュに反映",
+				)}
+				copyConfirmMessage={t(
+					"TeamTimeline.quick copy ingredients to detailed confirm",
+					"自動シミュの初期食材を詳細シミュに反映します。詳細シミュの初期食材は置き換えられます。よろしいですか？",
+				)}
+				onCopyToOtherSim={onCopyInitialIngredientsToDetailedSim}
+				testIdPrefix="quick-sim"
+			/>
 
 			{renderSimulationControls({
 				simulationLoading,
@@ -985,6 +925,7 @@ export default function QuickSimTab({
 							team={resultTimeline.team}
 							timeSlots={resultTimeline.timeSlots}
 							simulationDays={runResult.simulationDays}
+							startDayOfWeek={runResult.startDayOfWeek}
 							result={runResult.simulationResult}
 							swaps={resultTimeline.swaps}
 							noCollectCells={resultTimeline.noCollectCells}
@@ -1011,6 +952,7 @@ export default function QuickSimTab({
 								team={previewTimeline.team}
 								timeSlots={previewTimeline.timeSlots}
 								simulationDays={simulationConfig.simulationDays}
+								startDayOfWeek={simulationConfig.startDayOfWeek}
 								result={EMPTY_SIMULATION_RESULT}
 								swaps={previewTimeline.swaps}
 								noCollectCells={previewTimeline.noCollectCells}

@@ -32,7 +32,6 @@ import {
 	STEP_BUTTON_SX,
 	STEP_BUTTON_SYMBOL_SX,
 } from "./CookingSettingsStyles";
-import InitialIngredientsEditor from "./InitialIngredientsEditor";
 import TeamTimelineIcon from "./TimelineIcons";
 
 interface CookingSettingsPanelProps {
@@ -575,11 +574,6 @@ const CookingSettingsPanel = React.memo(
 							/>
 							：その料理を作成しないようにする
 						</Typography>
-
-						<Divider sx={{ my: 1.5 }} />
-
-						{/* 5. Initial ingredients section */}
-						<InitialIngredientsEditor settings={settings} onChange={onChange} />
 					</Box>
 				)}
 			</Box>

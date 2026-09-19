@@ -24,6 +24,7 @@ import {
 	saveTrialCountToStorage,
 	teamTimelineReducer,
 } from "./TeamTimelineState";
+import type { CookingSimulationSettings } from "./types/CookingTypes";
 import type { TeamSetState } from "./types/TeamTimelineTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
@@ -457,6 +458,31 @@ describe("team set actions", () => {
 			},
 		});
 		expect(withSaveDisabled.teamSets[0].savedCookingSettings).toBeNull();
+	});
+
+	it("setQuickSimInitialIngredients keeps the detailed sim results and cooking settings", () => {
+		const base = createStateWithSimulationData();
+		// 料理設定の全体を渡しても、初期食材の項目だけが保存される
+		const fullCookingSettings: CookingSimulationSettings = {
+			...base.cookingSettings,
+			enabled: true,
+			initialIngredients: { apple: 30 },
+			disabledExtraIngredients: { honey: true },
+		};
+		const updated = teamTimelineReducer(base, {
+			type: "setQuickSimInitialIngredients",
+			settings: fullCookingSettings,
+		});
+
+		// 自動シミュの初期食材は詳細シミュに影響しないので結果は残す
+		expect(updated.simulationResult).toBe(base.simulationResult);
+		expect(updated.multiTrialResults).toBe(base.multiTrialResults);
+		// 料理設定側は変わらず、保存するのは初期食材の項目だけ
+		expect(updated.cookingSettings).toBe(base.cookingSettings);
+		expect(updated.quickSimInitialIngredients).toEqual({
+			initialIngredients: { apple: 30 },
+			disabledExtraIngredients: { honey: true },
+		});
 	});
 
 	it("setBonusSettings updates team set saved value only when field save is enabled", () => {

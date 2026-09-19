@@ -3,6 +3,7 @@ import type {
 	AverageCookingSummary,
 	CookingCategory,
 	CookingSimulationSettings,
+	InitialIngredientsSettings,
 } from "./CookingTypes";
 import type { TrialSummary } from "./MultiTrialTypes";
 import type { ProvisionalSettings } from "./ProvisionalSettingsTypes";
@@ -111,8 +112,10 @@ export interface TeamTimelineState {
 	multiTrialAverageCookingSummary: AverageCookingSummary | null;
 	/** TeamTimeline 用ボーナス設定 */
 	bonusSettings: TimelineBonusSettings;
-	/** 料理シミュレーション設定 */
+	/** 料理シミュレーション設定（初期食材の項目は詳細シミュ用） */
 	cookingSettings: CookingSimulationSettings;
+	/** 自動シミュ用の初期食材。詳細シミュとは別に保持する */
+	quickSimInitialIngredients: InitialIngredientsSettings;
 	/** 仮設定（公式未公開パラメータ） */
 	provisionalSettings: ProvisionalSettings;
 	/** 個体値計算機設定との連動フラグ */
@@ -219,6 +222,14 @@ export type TeamTimelineAction =
 	| { type: "loadSyncWithIvParameter"; enabled: boolean }
 	| { type: "setCookingSettings"; settings: CookingSimulationSettings }
 	| { type: "loadCookingSettings"; settings: CookingSimulationSettings }
+	| {
+			type: "setQuickSimInitialIngredients";
+			settings: InitialIngredientsSettings;
+	  }
+	| {
+			type: "loadQuickSimInitialIngredients";
+			settings: InitialIngredientsSettings;
+	  }
 	| { type: "setProvisionalSettings"; settings: ProvisionalSettings }
 	| { type: "loadProvisionalSettings"; settings: ProvisionalSettings };
 

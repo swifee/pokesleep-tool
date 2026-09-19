@@ -7,7 +7,7 @@ import {
 	IngredientNames,
 } from "../../../../data/pokemons";
 import IngredientIcon from "../../../../ui/IvCalc/IngredientIcon";
-import type { CookingSimulationSettings } from "../types/CookingTypes";
+import type { InitialIngredientsSettings } from "../types/CookingTypes";
 import { getInitialIngredientTotal } from "../utils/InitialIngredientsUtils";
 import {
 	LOCK_ICON_OFF_COLOR,
@@ -20,8 +20,9 @@ import {
 import DraftNumberField from "./DraftNumberField";
 
 interface InitialIngredientsEditorProps {
-	settings: CookingSimulationSettings;
-	onChange: (settings: CookingSimulationSettings) => void;
+	settings: InitialIngredientsSettings;
+	/** 初期食材の項目だけを持つ新しい設定で呼ぶ */
+	onChange: (settings: InitialIngredientsSettings) => void;
 	/** 見出し「初期食材」を表示するか（呼び出し側が見出しを持つときは false） */
 	showTitle?: boolean;
 }
@@ -31,7 +32,7 @@ const INGREDIENT_INPUT_STEP = 5;
 /**
  * 料理シミュレーションの初期食材（ingredientName -> count）と
  * 「追加食材として使わない」設定を編集するエディタ。
- * 料理設定タブと簡易シミュタブの両方で使う。
+ * 自動シミュと詳細シミュのそれぞれの初期食材パネルで使う。
  */
 const InitialIngredientsEditor = React.memo(
 	({ settings, onChange, showTitle = true }: InitialIngredientsEditorProps) => {
@@ -41,11 +42,11 @@ const InitialIngredientsEditor = React.memo(
 			(ingredientName: IngredientName, count: number) => {
 				const clamped = Math.max(0, Math.floor(count));
 				onChange({
-					...settings,
 					initialIngredients: {
 						...settings.initialIngredients,
 						[ingredientName]: clamped,
 					},
+					disabledExtraIngredients: settings.disabledExtraIngredients,
 				});
 			},
 			[settings, onChange],
@@ -68,7 +69,7 @@ const InitialIngredientsEditor = React.memo(
 					),
 				};
 				onChange({
-					...settings,
+					initialIngredients: settings.initialIngredients,
 					disabledExtraIngredients: nextDisabledExtraIngredients,
 				});
 			},
