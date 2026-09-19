@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -433,39 +433,17 @@ describe("CookingSettingsPanel", () => {
 		);
 	});
 
-	it("steps initial ingredient count by 5 using minus/plus buttons", () => {
-		const onChange = vi.fn();
+	it("does not show the initial ingredients section (each sim tab owns its own)", () => {
 		render(
-			<CookingSettingsPanel settings={createSettings()} onChange={onChange} />,
+			<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />,
 		);
 
-		fireEvent.click(screen.getByTestId("ingredient-decrement-apple"));
-		expect(onChange).toHaveBeenCalledWith(
-			expect.objectContaining({
-				initialIngredients: expect.objectContaining({ apple: 25 }),
-			}),
-		);
-
-		fireEvent.click(screen.getByTestId("ingredient-increment-apple"));
-		expect(onChange).toHaveBeenCalledWith(
-			expect.objectContaining({
-				initialIngredients: expect.objectContaining({ apple: 35 }),
-			}),
-		);
-	});
-
-	it("toggles extra ingredient lock via lock icon button", () => {
-		const onChange = vi.fn();
-		render(
-			<CookingSettingsPanel settings={createSettings()} onChange={onChange} />,
-		);
-
-		fireEvent.click(screen.getByTestId("ingredient-extra-lock-toggle-apple"));
-		expect(onChange).toHaveBeenCalledWith(
-			expect.objectContaining({
-				disabledExtraIngredients: expect.objectContaining({ apple: true }),
-			}),
-		);
+		expect(screen.queryByText("初期食材")).toBeNull();
+		expect(screen.queryByTestId("cooking-initial-ingredients")).toBeNull();
+		expect(screen.queryByTestId("ingredient-input-apple")).toBeNull();
+		expect(
+			screen.queryByTestId("cooking-extra-ingredient-lock-note"),
+		).toBeNull();
 	});
 
 	it("uses the same text field style for batch level and recipe level input", () => {
@@ -521,15 +499,11 @@ describe("CookingSettingsPanel", () => {
 			screen
 				.getByTestId("recipe-level-input-megaStew")
 				.getAttribute("data-sx") ?? "";
-		const ingredientInputSx =
-			screen.getByTestId("ingredient-input-apple").getAttribute("data-sx") ??
-			"";
 
 		expect(batchInputSx).toContain('"textAlign":"center"');
 		expect(batchInputSx).toContain('"WebkitAppearance":"none"');
 		expect(batchInputSx).toContain('"MozAppearance":"textfield"');
 		expect(recipeInputSx).toContain('"textAlign":"center"');
-		expect(ingredientInputSx).toContain('"textAlign":"center"');
 	});
 
 	it("renders step buttons as contained circular gray style", () => {
@@ -550,7 +524,7 @@ describe("CookingSettingsPanel", () => {
 		expect(sxText).toContain('"borderRadius":"50%"');
 	});
 
-	it("shows recipe ingredient summary and total initial ingredient count", () => {
+	it("shows recipe ingredient summary", () => {
 		render(
 			<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />,
 		);
@@ -564,16 +538,9 @@ describe("CookingSettingsPanel", () => {
 		).toContain("[cooking]");
 		expect(summary.textContent).toContain("[apple]30");
 		expect(summary.textContent).toContain("[mushroom]30");
-
-		expect(
-			screen.getByTestId("cooking-initial-ingredients-total").textContent,
-		).toContain("入力値合計: 654");
-
-		const ingredientArea = screen.getByTestId("cooking-initial-ingredients");
-		expect(within(ingredientArea).queryByText("とくせんリンゴ")).toBeNull();
 	});
 
-	it("shows lock icon description notes under recipe list and initial ingredient total", () => {
+	it("shows the lock icon description note under the recipe list", () => {
 		render(
 			<CookingSettingsPanel settings={createSettings()} onChange={vi.fn()} />,
 		);
@@ -583,30 +550,13 @@ describe("CookingSettingsPanel", () => {
 		const recipeLockNoteIcon = screen.getByTestId(
 			"cooking-recipe-lock-note-icon",
 		);
-		const initialIngredientTotal = screen.getByTestId(
-			"cooking-initial-ingredients-total",
-		);
-		const extraIngredientLockNote = screen.getByTestId(
-			"cooking-extra-ingredient-lock-note",
-		);
-		const extraIngredientLockNoteIcon = screen.getByTestId(
-			"cooking-extra-ingredient-lock-note-icon",
-		);
 
 		expect(recipeLockNote.textContent).toContain(
 			"：その料理を作成しないようにする",
 		);
-		expect(extraIngredientLockNote.textContent).toContain(
-			"：追加食材として使用しないようにする",
-		);
 		expect(recipeLockNoteIcon.tagName.toLowerCase()).toBe("svg");
-		expect(extraIngredientLockNoteIcon.tagName.toLowerCase()).toBe("svg");
 		expect(
 			recipeList.compareDocumentPosition(recipeLockNote) &
-				Node.DOCUMENT_POSITION_FOLLOWING,
-		).not.toBe(0);
-		expect(
-			initialIngredientTotal.compareDocumentPosition(extraIngredientLockNote) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).not.toBe(0);
 	});

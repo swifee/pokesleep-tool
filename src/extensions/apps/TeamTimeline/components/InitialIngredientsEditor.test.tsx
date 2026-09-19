@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultCookingSettings } from "../types/CookingTypes";
+import {
+	createDefaultCookingSettings,
+	createDefaultInitialIngredientsSettings,
+} from "../types/CookingTypes";
 import InitialIngredientsEditor from "./InitialIngredientsEditor";
 
 vi.mock("react-i18next", () => ({
@@ -18,7 +21,7 @@ describe("InitialIngredientsEditor", () => {
 		render(
 			<InitialIngredientsEditor
 				settings={{
-					...createDefaultCookingSettings(),
+					...createDefaultInitialIngredientsSettings(),
 					initialIngredients: { apple: 30, honey: 12 },
 				}}
 				onChange={vi.fn()}
@@ -37,7 +40,7 @@ describe("InitialIngredientsEditor", () => {
 	it("steps counts by five and never below zero", () => {
 		const onChange = vi.fn();
 		const settings = {
-			...createDefaultCookingSettings(),
+			...createDefaultInitialIngredientsSettings(),
 			initialIngredients: { apple: 3 },
 		};
 		render(
@@ -59,7 +62,7 @@ describe("InitialIngredientsEditor", () => {
 
 	it("accepts typed counts and toggles the extra-ingredient lock", () => {
 		const onChange = vi.fn();
-		const settings = createDefaultCookingSettings();
+		const settings = createDefaultInitialIngredientsSettings();
 		render(
 			<InitialIngredientsEditor settings={settings} onChange={onChange} />,
 		);
@@ -86,7 +89,7 @@ describe("InitialIngredientsEditor", () => {
 	it("allows clearing a count while typing and treats it as 0", () => {
 		const onChange = vi.fn();
 		const settings = {
-			...createDefaultCookingSettings(),
+			...createDefaultInitialIngredientsSettings(),
 			initialIngredients: { honey: 66 },
 		};
 		render(
@@ -110,14 +113,64 @@ describe("InitialIngredientsEditor", () => {
 		expect(input.value).toBe("66");
 	});
 
+	it("emits only the initial ingredient fields when given full cooking settings", () => {
+		const onChange = vi.fn();
+		const settings = {
+			...createDefaultCookingSettings(),
+			enabled: true,
+			basePotCapacity: 57,
+			initialIngredients: { apple: 3 },
+			disabledExtraIngredients: { honey: true },
+		};
+		render(
+			<InitialIngredientsEditor settings={settings} onChange={onChange} />,
+		);
+
+		fireEvent.click(screen.getByTestId("ingredient-increment-apple"));
+		expect(onChange).toHaveBeenLastCalledWith({
+			initialIngredients: { apple: 8 },
+			disabledExtraIngredients: { honey: true },
+		});
+
+		fireEvent.click(screen.getByTestId("ingredient-extra-lock-toggle-honey"));
+		expect(onChange).toHaveBeenLastCalledWith({
+			initialIngredients: { apple: 3 },
+			disabledExtraIngredients: { honey: false },
+		});
+	});
+
 	it("hides the title when asked", () => {
 		render(
 			<InitialIngredientsEditor
-				settings={createDefaultCookingSettings()}
+				settings={createDefaultInitialIngredientsSettings()}
 				onChange={vi.fn()}
 				showTitle={false}
 			/>,
 		);
 		expect(screen.queryByText("初期食材")).toBeNull();
+	});
+
+	it("centers the count input and shows the lock note under the total", () => {
+		render(
+			<InitialIngredientsEditor
+				settings={createDefaultInitialIngredientsSettings()}
+				onChange={vi.fn()}
+			/>,
+		);
+
+		const total = screen.getByTestId("cooking-initial-ingredients-total");
+		const lockNote = screen.getByTestId("cooking-extra-ingredient-lock-note");
+		expect(lockNote.textContent).toContain(
+			"：追加食材として使用しないようにする",
+		);
+		expect(
+			screen
+				.getByTestId("cooking-extra-ingredient-lock-note-icon")
+				.tagName.toLowerCase(),
+		).toBe("svg");
+		expect(
+			total.compareDocumentPosition(lockNote) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).not.toBe(0);
 	});
 });

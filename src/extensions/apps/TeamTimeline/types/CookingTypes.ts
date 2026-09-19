@@ -19,8 +19,27 @@ export interface RecipeDefinition {
 	readonly recipeBonus: number;
 }
 
-/** 料理シミュレーション設定(ユーザー設定、永続化対象) */
-export interface CookingSimulationSettings {
+/**
+ * 初期食材まわりの設定。
+ * 自動シミュと詳細シミュで別々に保持し、料理設定（レシピ等）とは独立して編集する。
+ */
+export interface InitialIngredientsSettings {
+	/** ユーザー設定の初期食材: ingredientName -> count */
+	readonly initialIngredients: Readonly<
+		Partial<Record<IngredientName, number>>
+	>;
+	/** 鍋の追加食材として使わない食材: ingredientName -> disabled */
+	readonly disabledExtraIngredients: Readonly<
+		Partial<Record<IngredientName, boolean>>
+	>;
+}
+
+/**
+ * 料理シミュレーション設定(ユーザー設定、永続化対象)。
+ * シミュレーターにはこの型をそのまま渡す。
+ * 初期食材の項目は詳細シミュ用の値で、自動シミュ用は別に保持して実行時に差し替える。
+ */
+export interface CookingSimulationSettings extends InitialIngredientsSettings {
 	/** 料理シミュレーション有効/無効 */
 	readonly enabled: boolean;
 	/** 今週の料理カテゴリ */
@@ -29,16 +48,8 @@ export interface CookingSimulationSettings {
 	readonly recipeLevels: Readonly<Record<string, number>>;
 	/** 鍋の基礎容量 */
 	readonly basePotCapacity: number;
-	/** ユーザー設定の初期食材: ingredientName -> count */
-	readonly initialIngredients: Readonly<
-		Partial<Record<IngredientName, number>>
-	>;
 	/** 作成しないレシピ: recipeName -> disabled */
 	readonly disabledRecipes: Readonly<Record<string, boolean>>;
-	/** 鍋の追加食材として使わない食材: ingredientName -> disabled */
-	readonly disabledExtraIngredients: Readonly<
-		Partial<Record<IngredientName, boolean>>
-	>;
 }
 
 /** バッグ内の食材エントリ(シミュレーション中のランタイム状態) */
@@ -223,6 +234,35 @@ export const MIN_RECIPE_LEVEL = 1;
  */
 export const MAX_RECIPE_LEVEL = 70;
 
+/** デフォルトの初期食材設定を生成 */
+export function createDefaultInitialIngredientsSettings(): InitialIngredientsSettings {
+	return {
+		initialIngredients: {},
+		disabledExtraIngredients: {},
+	};
+}
+
+/** 料理設定などから初期食材の項目だけを取り出す */
+export function pickInitialIngredientsSettings(
+	settings: InitialIngredientsSettings,
+): InitialIngredientsSettings {
+	return {
+		initialIngredients: settings.initialIngredients,
+		disabledExtraIngredients: settings.disabledExtraIngredients,
+	};
+}
+
+/** 料理設定の初期食材の項目を差し替える */
+export function withInitialIngredientsSettings(
+	cookingSettings: CookingSimulationSettings,
+	initialIngredientsSettings: InitialIngredientsSettings,
+): CookingSimulationSettings {
+	return {
+		...cookingSettings,
+		...pickInitialIngredientsSettings(initialIngredientsSettings),
+	};
+}
+
 /** デフォルトの料理シミュレーション設定を生成 */
 export function createDefaultCookingSettings(): CookingSimulationSettings {
 	return {
@@ -230,8 +270,7 @@ export function createDefaultCookingSettings(): CookingSimulationSettings {
 		category: "curry",
 		recipeLevels: {},
 		basePotCapacity: DEFAULT_POT_CAPACITY,
-		initialIngredients: {},
 		disabledRecipes: {},
-		disabledExtraIngredients: {},
+		...createDefaultInitialIngredientsSettings(),
 	};
 }

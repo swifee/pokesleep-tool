@@ -6,11 +6,16 @@ import {
 	type CookingCategory,
 	type CookingSimulationSettings,
 	createDefaultCookingSettings,
+	type InitialIngredientsSettings,
 	MAX_RECIPE_LEVEL,
 	MIN_RECIPE_LEVEL,
+	pickInitialIngredientsSettings,
 } from "../types/CookingTypes";
 
 export const STORAGE_KEY_COOKING_SETTINGS = "PstTeamTimelineCookingSettings";
+/** 自動シミュ用の初期食材。料理設定に含まれる初期食材は詳細シミュ用 */
+export const STORAGE_KEY_QUICK_SIM_INITIAL_INGREDIENTS =
+	"PstTeamTimelineQuickSimInitialIngredients";
 
 const VALID_CATEGORIES: readonly CookingCategory[] = [
 	"curry",
@@ -96,25 +101,8 @@ function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
 			? normalizePotCapacity(obj.basePotCapacity)
 			: defaults.basePotCapacity;
 
-	// Validate initialIngredients is object with non-negative number values
-	const initialIngredients: Partial<Record<IngredientName, number>> = {};
-	if (
-		typeof obj.initialIngredients === "object" &&
-		obj.initialIngredients !== null &&
-		!Array.isArray(obj.initialIngredients)
-	) {
-		const ings = obj.initialIngredients as Record<string, unknown>;
-		for (const [key, value] of Object.entries(ings)) {
-			if (
-				IngredientNames.includes(key as IngredientName) &&
-				typeof value === "number" &&
-				Number.isFinite(value) &&
-				value >= 0
-			) {
-				initialIngredients[key as IngredientName] = value;
-			}
-		}
-	}
+	const { initialIngredients, disabledExtraIngredients } =
+		normalizeInitialIngredientsSettings(obj);
 
 	// Validate disabledRecipes is object with boolean values
 	const disabledRecipes: Record<string, boolean> = {};
@@ -131,27 +119,6 @@ function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
 		}
 	}
 
-	// Validate disabledExtraIngredients is object with ingredientName->boolean values
-	const disabledExtraIngredients: Partial<Record<IngredientName, boolean>> = {};
-	if (
-		typeof obj.disabledExtraIngredients === "object" &&
-		obj.disabledExtraIngredients !== null &&
-		!Array.isArray(obj.disabledExtraIngredients)
-	) {
-		const ingredientLocks = obj.disabledExtraIngredients as Record<
-			string,
-			unknown
-		>;
-		for (const [key, value] of Object.entries(ingredientLocks)) {
-			if (
-				IngredientNames.includes(key as IngredientName) &&
-				typeof value === "boolean"
-			) {
-				disabledExtraIngredients[key as IngredientName] = value;
-			}
-		}
-	}
-
 	return {
 		enabled,
 		category,
@@ -161,4 +128,74 @@ function normalizeCookingSettings(parsed: unknown): CookingSimulationSettings {
 		disabledRecipes,
 		disabledExtraIngredients,
 	};
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** 初期食材まわりの不正な値を正規化。未知の食材名や不正な値は捨てる */
+export function normalizeInitialIngredientsSettings(
+	parsed: unknown,
+): InitialIngredientsSettings {
+	const obj = isPlainObject(parsed) ? parsed : {};
+
+	// Validate initialIngredients is object with non-negative number values
+	const initialIngredients: Partial<Record<IngredientName, number>> = {};
+	if (isPlainObject(obj.initialIngredients)) {
+		for (const [key, value] of Object.entries(obj.initialIngredients)) {
+			if (
+				IngredientNames.includes(key as IngredientName) &&
+				typeof value === "number" &&
+				Number.isFinite(value) &&
+				value >= 0
+			) {
+				initialIngredients[key as IngredientName] = value;
+			}
+		}
+	}
+
+	// Validate disabledExtraIngredients is object with ingredientName->boolean values
+	const disabledExtraIngredients: Partial<Record<IngredientName, boolean>> = {};
+	if (isPlainObject(obj.disabledExtraIngredients)) {
+		for (const [key, value] of Object.entries(obj.disabledExtraIngredients)) {
+			if (
+				IngredientNames.includes(key as IngredientName) &&
+				typeof value === "boolean"
+			) {
+				disabledExtraIngredients[key as IngredientName] = value;
+			}
+		}
+	}
+
+	return { initialIngredients, disabledExtraIngredients };
+}
+
+/** 自動シミュ用の初期食材をlocalStorageに保存 */
+export function saveQuickSimInitialIngredientsToStorage(
+	settings: InitialIngredientsSettings,
+): void {
+	localStorage.setItem(
+		STORAGE_KEY_QUICK_SIM_INITIAL_INGREDIENTS,
+		JSON.stringify(pickInitialIngredientsSettings(settings)),
+	);
+}
+
+/**
+ * 自動シミュ用の初期食材をlocalStorageから読み込み。
+ * 未保存なら fallback（料理設定に保存されていた詳細シミュ用の値）をそのまま使い、
+ * 分離前と同じ値で自動シミュを始められるようにする。
+ */
+export function loadQuickSimInitialIngredientsFromStorage(
+	fallback: InitialIngredientsSettings,
+): InitialIngredientsSettings {
+	const raw = localStorage.getItem(STORAGE_KEY_QUICK_SIM_INITIAL_INGREDIENTS);
+	if (raw === null) {
+		return pickInitialIngredientsSettings(fallback);
+	}
+	try {
+		return normalizeInitialIngredientsSettings(JSON.parse(raw));
+	} catch {
+		return pickInitialIngredientsSettings(fallback);
+	}
 }

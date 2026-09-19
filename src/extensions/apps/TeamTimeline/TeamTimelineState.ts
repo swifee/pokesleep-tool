@@ -3,6 +3,8 @@ import { PokemonBoxItem } from "../../../util/PokemonBox";
 import {
 	type CookingCategory,
 	createDefaultCookingSettings,
+	createDefaultInitialIngredientsSettings,
+	pickInitialIngredientsSettings,
 } from "./types/CookingTypes";
 import { TRIAL_COUNT_OPTIONS } from "./types/MultiTrialTypes";
 import { createDefaultProvisionalSettings } from "./types/ProvisionalSettingsTypes";
@@ -314,6 +316,7 @@ export function createInitialState(): TeamTimelineState {
 		bonusSettings: createDefaultTimelineBonusSettings(),
 		syncWithIvParameter: true,
 		cookingSettings: createDefaultCookingSettings(),
+		quickSimInitialIngredients: createDefaultInitialIngredientsSettings(),
 		provisionalSettings: createDefaultProvisionalSettings(),
 	};
 }
@@ -1036,6 +1039,15 @@ export function teamTimelineReducer(
 			return {
 				...state,
 				cookingSettings: action.settings,
+			};
+		// 自動シミュの初期食材は詳細シミュの結果に影響しないので、結果は消さない
+		case "setQuickSimInitialIngredients":
+		case "loadQuickSimInitialIngredients":
+			return {
+				...state,
+				quickSimInitialIngredients: pickInitialIngredientsSettings(
+					action.settings,
+				),
 			};
 		case "setProvisionalSettings":
 			return {

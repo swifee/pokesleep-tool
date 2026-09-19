@@ -24,6 +24,7 @@ import AdditionalAnalysisPanel from "./components/AdditionalAnalysisPanel";
 import BoxSelectDialog from "./components/BoxSelectDialog";
 import CookingSettingsPanel from "./components/CookingSettingsPanel";
 import DailySummaryRow from "./components/DailySummaryRow";
+import InitialIngredientsPanel from "./components/InitialIngredientsPanel";
 import NoCollectSupplementBar from "./components/NoCollectSupplementBar";
 import ProvisionalSettingsPanel from "./components/ProvisionalSettingsPanel";
 import QuickSimTab from "./components/QuickSimTab";
@@ -85,9 +86,12 @@ import type {
 	EnergySkillTeamContributionResult,
 	HelpingBonusContributionResult,
 } from "./types/AdditionalAnalysisTypes";
-import type {
-	AverageCookingSummary,
-	CookingSimulationSettings,
+import {
+	type AverageCookingSummary,
+	type CookingSimulationSettings,
+	type InitialIngredientsSettings,
+	pickInitialIngredientsSettings,
+	withInitialIngredientsSettings,
 } from "./types/CookingTypes";
 import type { TrialSummary } from "./types/MultiTrialTypes";
 import type { ProvisionalSettings } from "./types/ProvisionalSettingsTypes";
@@ -123,7 +127,9 @@ import {
 import { resolveDistinctBoxItems } from "./utils/BoxItemMatchingUtils";
 import {
 	loadCookingSettingsFromStorage,
+	loadQuickSimInitialIngredientsFromStorage,
 	saveCookingSettingsToStorage,
+	saveQuickSimInitialIngredientsToStorage,
 } from "./utils/CookingSettingsStorage";
 import {
 	applyFirstAccessPresetIfNeeded,
@@ -632,6 +638,11 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 
 		const cookingSettings = loadCookingSettingsFromStorage();
 		dispatch({ type: "loadCookingSettings", settings: cookingSettings });
+		// 自動シミュ用の初期食材が未保存なら、詳細シミュ用（料理設定）の値から始める
+		dispatch({
+			type: "loadQuickSimInitialIngredients",
+			settings: loadQuickSimInitialIngredientsFromStorage(cookingSettings),
+		});
 
 		dispatch({
 			type: "loadProvisionalSettings",
@@ -678,6 +689,12 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 		if (!isInitialized) return;
 		saveCookingSettingsToStorage(state.cookingSettings);
 	}, [state.cookingSettings, isInitialized]);
+
+	// 自動シミュ用の初期食材の永続化（初期化完了後のみ）
+	useEffect(() => {
+		if (!isInitialized) return;
+		saveQuickSimInitialIngredientsToStorage(state.quickSimInitialIngredients);
+	}, [state.quickSimInitialIngredients, isInitialized]);
 
 	// 仮設定の永続化（初期化完了後のみ）
 	useEffect(() => {
@@ -1553,6 +1570,46 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 		},
 		[],
 	);
+
+	// 自動シミュに渡す料理設定: 初期食材の項目だけ自動シミュ用の値に差し替える
+	const quickSimCookingSettings = useMemo(
+		() =>
+			withInitialIngredientsSettings(
+				state.cookingSettings,
+				state.quickSimInitialIngredients,
+			),
+		[state.cookingSettings, state.quickSimInitialIngredients],
+	);
+
+	const handleQuickSimInitialIngredientsChange = useCallback(
+		(settings: InitialIngredientsSettings) => {
+			dispatch({ type: "setQuickSimInitialIngredients", settings });
+		},
+		[],
+	);
+
+	// 詳細シミュ用の初期食材は料理設定の一部として保持している
+	const handleDetailedSimInitialIngredientsChange = useCallback(
+		(settings: InitialIngredientsSettings) => {
+			handleCookingSettingsChange(
+				withInitialIngredientsSettings(state.cookingSettings, settings),
+			);
+		},
+		[handleCookingSettingsChange, state.cookingSettings],
+	);
+
+	const handleCopyInitialIngredientsToDetailedSim = useCallback(() => {
+		handleDetailedSimInitialIngredientsChange(state.quickSimInitialIngredients);
+	}, [
+		handleDetailedSimInitialIngredientsChange,
+		state.quickSimInitialIngredients,
+	]);
+
+	const handleCopyInitialIngredientsToQuickSim = useCallback(() => {
+		handleQuickSimInitialIngredientsChange(
+			pickInitialIngredientsSettings(state.cookingSettings),
+		);
+	}, [handleQuickSimInitialIngredientsChange, state.cookingSettings]);
 
 	const handleProvisionalSettingsChange = useCallback(
 		(settings: ProvisionalSettings) => {
@@ -3120,11 +3177,16 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 							timeSlots={state.timeSlots}
 							simulationConfig={state.simulationConfig}
 							bonusSettings={state.bonusSettings}
-							cookingSettings={state.cookingSettings}
+							cookingSettings={quickSimCookingSettings}
 							provisionalSettings={state.provisionalSettings}
 							seedMode={state.seedMode}
 							multiTrialCount={state.multiTrialCount}
-							onCookingSettingsChange={handleCookingSettingsChange}
+							onInitialIngredientsChange={
+								handleQuickSimInitialIngredientsChange
+							}
+							onCopyInitialIngredientsToDetailedSim={
+								handleCopyInitialIngredientsToDetailedSim
+							}
 							onOpenCookingSettings={handleOpenCookingTab}
 							onSeedChange={handleSeedChange}
 							renderSimulationControls={(quickSim) => (
@@ -3204,6 +3266,23 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 						/>
 						<SpecialPokemonConflictBar
 							entries={specialPokemonConflictEntries}
+						/>
+
+						{/* 初期食材（詳細シミュ用。自動シミュとは別に保持する） */}
+						<InitialIngredientsPanel
+							settings={state.cookingSettings}
+							onChange={handleDetailedSimInitialIngredientsChange}
+							onOpenCookingSettings={handleOpenCookingTab}
+							copyButtonLabel={t(
+								"TeamTimeline.detailed copy ingredients to quick",
+								"自動シミュに反映",
+							)}
+							copyConfirmMessage={t(
+								"TeamTimeline.detailed copy ingredients to quick confirm",
+								"詳細シミュの初期食材を自動シミュに反映します。自動シミュの初期食材は置き換えられます。よろしいですか？",
+							)}
+							onCopyToOtherSim={handleCopyInitialIngredientsToQuickSim}
+							testIdPrefix="detailed-sim"
 						/>
 
 						{/* シミュレーション実行コントロール */}

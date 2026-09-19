@@ -77,9 +77,11 @@ vi.mock("./TimelineTable", () => ({
 		noCollectCells,
 		readOnly,
 		compactEmptyCells,
+		startDayOfWeek,
 	}: {
 		team: Array<{ id: number } | null>;
 		timeSlots: TimeSlot[];
+		startDayOfWeek?: number;
 		swaps: Array<{
 			dayIndex: number;
 			slotId: string;
@@ -94,6 +96,7 @@ vi.mock("./TimelineTable", () => ({
 			data-testid="timeline-table"
 			data-read-only={readOnly ? "true" : "false"}
 			data-compact={compactEmptyCells ? "true" : "false"}
+			data-start-day-of-week={String(startDayOfWeek ?? "")}
 			data-team={team.map((member) => member?.id ?? "null").join("|")}
 			data-slot-ids={timeSlots.map((slot) => slot.id).join("|")}
 			data-swaps={swaps
@@ -238,7 +241,8 @@ function renderTab(
 	overrides: Partial<React.ComponentProps<typeof QuickSimTab>> = {},
 ) {
 	const onSeedChange = vi.fn();
-	const onCookingSettingsChange = vi.fn();
+	const onInitialIngredientsChange = vi.fn();
+	const onCopyInitialIngredientsToDetailedSim = vi.fn();
 	const onOpenCookingSettings = vi.fn();
 	const renderSimulationControls = ({
 		simulationLoading,
@@ -270,14 +274,22 @@ function renderTab(
 			provisionalSettings={createDefaultProvisionalSettings()}
 			seedMode="random"
 			multiTrialCount={3}
-			onCookingSettingsChange={onCookingSettingsChange}
+			onInitialIngredientsChange={onInitialIngredientsChange}
+			onCopyInitialIngredientsToDetailedSim={
+				onCopyInitialIngredientsToDetailedSim
+			}
 			onOpenCookingSettings={onOpenCookingSettings}
 			onSeedChange={onSeedChange}
 			renderSimulationControls={renderSimulationControls}
 			{...overrides}
 		/>,
 	);
-	return { onSeedChange, onCookingSettingsChange, onOpenCookingSettings };
+	return {
+		onSeedChange,
+		onInitialIngredientsChange,
+		onCopyInitialIngredientsToDetailedSim,
+		onOpenCookingSettings,
+	};
 }
 
 describe("QuickSimTab", () => {
@@ -358,7 +370,7 @@ describe("QuickSimTab", () => {
 		);
 	});
 
-	it("applies optimized initial ingredients by replacing only initialIngredients", () => {
+	it("applies optimized initial ingredients while keeping the extra-ingredient locks", () => {
 		const cookingSettings = {
 			...createDefaultCookingSettings(),
 			enabled: true,
@@ -367,32 +379,60 @@ describe("QuickSimTab", () => {
 			initialIngredients: { honey: 15 },
 			disabledExtraIngredients: { tail: true },
 		};
-		const { onCookingSettingsChange } = renderTab({ cookingSettings });
+		const { onInitialIngredientsChange } = renderTab({ cookingSettings });
 
 		fireEvent.click(
 			screen.getByTestId("quick-sim-optimizer-apply-ingredients-stub"),
 		);
 
-		expect(onCookingSettingsChange).toHaveBeenCalledTimes(1);
-		expect(onCookingSettingsChange).toHaveBeenCalledWith({
-			...cookingSettings,
+		expect(onInitialIngredientsChange).toHaveBeenCalledTimes(1);
+		expect(onInitialIngredientsChange).toHaveBeenCalledWith({
 			initialIngredients: { apple: 90, milk: 0, tomato: 60 },
+			disabledExtraIngredients: { tail: true },
 		});
 	});
 
 	it("collapses the initial ingredients by default and opens the cooking settings", () => {
-		const { onOpenCookingSettings } = renderTab();
+		const { onOpenCookingSettings } = renderTab({
+			cookingSettings: {
+				...createDefaultCookingSettings(),
+				initialIngredients: { apple: 30, honey: 12 },
+			},
+		});
 
 		expect(screen.queryByTestId("initial-ingredients-editor")).toBeNull();
 		expect(
 			screen.getByTestId("quick-sim-initial-ingredients-summary").textContent,
-		).toBe("（合計 0）");
+		).toBe("（合計 42）");
 
 		fireEvent.click(screen.getByTestId("quick-sim-initial-ingredients-toggle"));
 		expect(screen.getByTestId("initial-ingredients-editor")).toBeDefined();
 
 		fireEvent.click(screen.getByTestId("quick-sim-open-cooking-settings"));
 		expect(onOpenCookingSettings).toHaveBeenCalledTimes(1);
+	});
+
+	it("copies the initial ingredients to the detailed sim only after confirmation", () => {
+		const { onCopyInitialIngredientsToDetailedSim } = renderTab();
+
+		expect(
+			screen.queryByTestId("quick-sim-initial-ingredients-copy"),
+		).toBeNull();
+		fireEvent.click(screen.getByTestId("quick-sim-initial-ingredients-toggle"));
+		const copyButton = screen.getByTestId("quick-sim-initial-ingredients-copy");
+		expect(copyButton.textContent).toBe("詳細シミュに反映");
+
+		fireEvent.click(copyButton);
+		fireEvent.click(
+			screen.getByTestId("quick-sim-initial-ingredients-copy-cancel"),
+		);
+		expect(onCopyInitialIngredientsToDetailedSim).not.toHaveBeenCalled();
+
+		fireEvent.click(copyButton);
+		fireEvent.click(
+			screen.getByTestId("quick-sim-initial-ingredients-copy-confirm"),
+		);
+		expect(onCopyInitialIngredientsToDetailedSim).toHaveBeenCalledTimes(1);
 	});
 
 	it("restores the stored usage mode", () => {
@@ -564,6 +604,10 @@ describe("QuickSimTab", () => {
 		const table = screen.getByTestId("timeline-table");
 		expect(table.getAttribute("data-read-only")).toBe("true");
 		expect(table.getAttribute("data-compact")).toBe("true");
+		// 日曜の最後の食事の就寝直前への移動を表示にも反映するため開始曜日を渡す
+		expect(table.getAttribute("data-start-day-of-week")).toBe(
+			String(DEFAULT_SIMULATION_CONFIG.startDayOfWeek),
+		);
 		expect(table.getAttribute("data-team")).toBe("1|2|null|null|null");
 		// Eevee (1008min) leaves at 23:00 + 1008min = 15:48, where Bulbasaur enters.
 		const insertedSlotId = `${QUICK_SIM_SLOT_ID_PREFIX}1548`;
@@ -660,6 +704,11 @@ describe("QuickSimTab", () => {
 		expect(
 			screen.getByTestId("timeline-table").getAttribute("data-compact"),
 		).toBe("false");
+		expect(
+			screen
+				.getByTestId("timeline-table")
+				.getAttribute("data-start-day-of-week"),
+		).toBe(String(DEFAULT_SIMULATION_CONFIG.startDayOfWeek));
 		expect(screen.queryByTestId("quick-sim-stale-notice")).toBeNull();
 		expect(screen.getByTestId("run-button").getAttribute("data-loading")).toBe(
 			"false",
