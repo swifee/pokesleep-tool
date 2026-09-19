@@ -337,8 +337,9 @@ describe("TimelineTable", () => {
 			},
 			filledNickname: () => "テスト",
 		} as unknown as PokemonBoxItem;
-		// The day 2 band sits after the last slot before AM 4:00 (night-snack at 03:30),
-		// so only results collected up to that slot count toward "day 1 end".
+		// The day 2 band sits after the day 1 sleep-end slot, so every day 1 result
+		// (including night-snack at 03:30) counts toward "day 1 end" while day 2
+		// results do not.
 		const slotResults = new Map<string, TimeSlotResult[]>();
 		slotResults.set("night-snack__day0", [
 			createTimeSlotResult({
@@ -352,6 +353,15 @@ describe("TimelineTable", () => {
 		slotResults.set("wake__day0", [
 			createTimeSlotResult({
 				slotId: "wake__day0",
+				pokemonId: 1,
+				teamIndex: 0,
+				berryCount: 3,
+				directSkillEP: 16,
+			}),
+		]);
+		slotResults.set("wake__day1", [
+			createTimeSlotResult({
+				slotId: "wake__day1",
 				pokemonId: 1,
 				teamIndex: 0,
 				berryCount: 3,
@@ -375,8 +385,48 @@ describe("TimelineTable", () => {
 		);
 
 		expect(screen.getByTestId("timeline-day-band-2").textContent).toContain(
-			"1日目終了時: 100 EP",
+			"1日目終了時: 200 EP",
 		);
+	});
+
+	it("places each day band after the sleep-end row even when a slot falls between bedtime and wake", () => {
+		// The quick sim inserts swap slots during sleep (e.g. 03:30); those rows
+		// belong to the day that started at bedtime, so the next day's band must
+		// come after that day's sleep-end row, not right after the night slot.
+		render(
+			<TimelineTable
+				team={[null, null, null, null, null]}
+				timeSlots={BASE_TIME_SLOTS}
+				simulationDays={3}
+				result={EMPTY_RESULT}
+				swaps={[]}
+				box={new PokemonBox([])}
+			/>,
+		);
+
+		// The mocked TimelineRow renders one `swap-<dayIndex>-<slotId>` button per row.
+		const container = screen.getByTestId("timeline-table-container");
+		const order = Array.from(
+			container.querySelectorAll(
+				'[data-testid^="timeline-day-band-"], [data-testid^="swap-"]:not([data-testid^="swap-longpress-"]):not([data-testid^="swap-remove-"])',
+			),
+		).map((element) => element.getAttribute("data-testid"));
+
+		expect(order).toEqual([
+			"timeline-day-band-1",
+			"swap-0-sleep",
+			"swap-0-night-snack",
+			"swap-0-wake",
+			"swap-0-sleep-end",
+			"timeline-day-band-2",
+			"swap-1-night-snack",
+			"swap-1-wake",
+			"swap-1-sleep-end",
+			"timeline-day-band-3",
+			"swap-2-night-snack",
+			"swap-2-wake",
+			"swap-2-sleep-end",
+		]);
 	});
 
 	it("does not show day 1 band when simulation days is 1", () => {

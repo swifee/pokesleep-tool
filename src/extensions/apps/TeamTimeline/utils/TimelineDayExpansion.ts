@@ -3,9 +3,7 @@ import {
 	getDisplayLabel,
 	type TimeSlot,
 } from "../types/TimeSlotTypes";
-import { parseTime, sortTimeSlots } from "./TimeSlotUtils";
-
-const DAY_BOUNDARY_MINUTES = 4 * 60;
+import { sortTimeSlots } from "./TimeSlotUtils";
 
 export interface ExpandedTimelineSlot {
 	slot: TimeSlot;
@@ -46,16 +44,6 @@ function buildBaseDaySlots(timeSlots: TimeSlot[]): TimeSlot[] {
 		id: `${sleepSlot.id}-end`,
 	};
 	return [...normalizedSlots, endSlot];
-}
-
-function findDayBandAnchorIndex(baseDaySlots: TimeSlot[]): number {
-	let anchorIndex = -1;
-	for (let i = 0; i < baseDaySlots.length; i++) {
-		if (parseTime(baseDaySlots[i].time) < DAY_BOUNDARY_MINUTES) {
-			anchorIndex = i;
-		}
-	}
-	return anchorIndex >= 0 ? anchorIndex : Math.max(baseDaySlots.length - 1, 0);
 }
 
 export function buildExpandedTimeline(
@@ -108,10 +96,11 @@ export function buildExpandedTimeline(
 		}
 		slotsByDay.push(daySlots);
 
+		// 日付帯はその日の最後のセル（就寝の終わり）の直後に置く。
+		// 就寝〜起床の間に追加されたセルは前の日に属するので、区切りにはしない。
 		if (dayIndex < days - 1) {
-			const anchorIndex = findDayBandAnchorIndex(daySlots);
 			dayBands.push({
-				afterDisplaySlotId: daySlots[anchorIndex].id,
+				afterDisplaySlotId: daySlots[daySlots.length - 1].id,
 				dayNumber: dayIndex + 2,
 			});
 		}
