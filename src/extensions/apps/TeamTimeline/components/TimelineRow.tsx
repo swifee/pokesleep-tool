@@ -128,11 +128,20 @@ const TimelineRow = React.memo(
 				);
 			}
 			if (slot.sleepState === "sleep") {
+				// 日曜の最後の食事が就寝スロットへ移ったときは料理アイコンも並べる
 				return (
-					<TeamTimelineIcon
-						name="sleep"
-						data-testid="timeline-row-label-sleep"
-					/>
+					<span className="label-icons">
+						<TeamTimelineIcon
+							name="sleep"
+							data-testid="timeline-row-label-sleep"
+						/>
+						{slot.hasMeal && (
+							<TeamTimelineIcon
+								name="cooking"
+								data-testid="timeline-row-label-cooking"
+							/>
+						)}
+					</span>
 				);
 			}
 			if (slot.hasMeal) {

@@ -1,15 +1,27 @@
 import {
 	clampSimulationDays,
 	getDisplayLabel,
+	getMealType,
 	type TimeSlot,
+	type Weekday,
 } from "../types/TimeSlotTypes";
 import { sortTimeSlots } from "./TimeSlotUtils";
+import { isSundayForDayIndex } from "./WeekdayUtils";
 
 export interface ExpandedTimelineSlot {
 	slot: TimeSlot;
 	originalSlotId: string;
 	dayIndex: number;
 	slotIndexInDay: number;
+}
+
+/**
+ * 日曜の最後の食事を就寝スロット（その日の末尾）へ移す指示。
+ * `fromIndex` の食事を外し、`toIndex`（就寝の終わり）で食事する。
+ */
+interface MealRelocation {
+	fromIndex: number;
+	toIndex: number;
 }
 
 export interface DayBandMarker {
@@ -46,9 +58,76 @@ function buildBaseDaySlots(timeSlots: TimeSlot[]): TimeSlot[] {
 	return [...normalizedSlots, endSlot];
 }
 
+/**
+ * 日曜の最後の食事を就寝直前へ移す位置を求める。
+ *
+ * ゲームでは日曜の最後の料理（鍋2倍）を就寝直前まで遅らせて、
+ * それまでの回収分をすべて鍋に入れるのが定石なので、日曜にあたる日は
+ * その日の最後の食事スロットの料理を就寝スロット（その日の末尾）で行う。
+ * 就寝時の回収（チェック）→料理の順になる。
+ *
+ * 移さない場合（`null`）:
+ * - 日の末尾が就寝スロットではない（就寝の設定がない）
+ * - 就寝スロット自体が食事スロット（すでに就寝直前に料理している）
+ * - その日に食事スロットがない
+ * - 最後の食事と就寝時刻の食事区分（朝食/昼食/夕食）が異なる
+ *   （例: 昼食を就寝時刻の 23:00 には作れない）
+ */
+function findSundayMealRelocation(daySlots: TimeSlot[]): MealRelocation | null {
+	const toIndex = daySlots.length - 1;
+	const bedtimeSlot = daySlots[toIndex];
+	if (bedtimeSlot === undefined || getDisplayLabel(bedtimeSlot) !== "sleep") {
+		return null;
+	}
+	if (bedtimeSlot.hasMeal) {
+		return null;
+	}
+
+	let fromIndex = -1;
+	for (let i = toIndex - 1; i >= 0; i--) {
+		if (daySlots[i].hasMeal) {
+			fromIndex = i;
+			break;
+		}
+	}
+	if (fromIndex < 0) {
+		return null;
+	}
+	if (getMealType(daySlots[fromIndex].time) !== getMealType(bedtimeSlot.time)) {
+		return null;
+	}
+	return { fromIndex, toIndex };
+}
+
+function resolveExpandedHasMeal(
+	originalSlot: TimeSlot,
+	slotIndexInDay: number,
+	relocation: MealRelocation | null,
+): boolean {
+	if (relocation === null) {
+		return originalSlot.hasMeal;
+	}
+	if (slotIndexInDay === relocation.fromIndex) {
+		return false;
+	}
+	if (slotIndexInDay === relocation.toIndex) {
+		return true;
+	}
+	return originalSlot.hasMeal;
+}
+
+/**
+ * 時間帯設定を日数分に展開する。
+ *
+ * `startDayOfWeek` を渡すと、日曜にあたる日はその日の最後の食事を
+ * 就寝スロットへ移す（`findSundayMealRelocation`）。展開後スロットの
+ * `hasMeal` はこの移動を反映した「その日にその時間帯で食事するか」を表す。
+ * 省略時は時間帯設定の `hasMeal` をそのまま使う。
+ */
 export function buildExpandedTimeline(
 	timeSlots: TimeSlot[],
 	simulationDays: number,
+	startDayOfWeek?: Weekday,
 ): ExpandedTimeline {
 	const days = clampSimulationDays(simulationDays);
 	const baseDaySlots = buildBaseDaySlots(timeSlots);
@@ -74,6 +153,11 @@ export function buildExpandedTimeline(
 	for (let dayIndex = 0; dayIndex < days; dayIndex++) {
 		const sourceSlots =
 			dayIndex > 0 && hasSleepStartCopy ? baseDaySlots.slice(1) : baseDaySlots;
+		const mealRelocation =
+			startDayOfWeek !== undefined &&
+			isSundayForDayIndex(startDayOfWeek, dayIndex)
+				? findSundayMealRelocation(sourceSlots)
+				: null;
 		const daySlots: TimeSlot[] = [];
 		for (
 			let slotIndexInDay = 0;
@@ -85,6 +169,11 @@ export function buildExpandedTimeline(
 			const slot: TimeSlot = {
 				...originalSlot,
 				id: displaySlotId,
+				hasMeal: resolveExpandedHasMeal(
+					originalSlot,
+					slotIndexInDay,
+					mealRelocation,
+				),
 			};
 			daySlots.push(slot);
 			expandedSlots.push({
