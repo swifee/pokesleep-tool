@@ -22,12 +22,13 @@ import {
 	type DailySummaryBonusContext,
 } from "../simulation/EnergyPointCalculator";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
-import type {
-	NoCollectCellSetting,
-	PokemonSwap,
-	SimulationResult,
-	TimeSlot,
-	Weekday,
+import {
+	type NoCollectCellSetting,
+	type PokemonSwap,
+	resolveStartDayOfWeek,
+	type SimulationResult,
+	type TimeSlot,
+	type Weekday,
 } from "../types/TimeSlotTypes";
 import { collectTimelineSpecialPokemonConflicts } from "../utils/SpecialPokemonUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
@@ -163,9 +164,19 @@ const TimelineTable = React.memo(
 				} as React.CSSProperties)
 			: undefined;
 
+		// シミュレーションと同じ展開にそろえる（日曜の最後の食事は就寝スロットへ移る）
+		const resolvedStartDayOfWeek =
+			startDayOfWeek === undefined
+				? undefined
+				: resolveStartDayOfWeek(simulationDays, startDayOfWeek);
 		const expandedTimeline = useMemo(
-			() => buildExpandedTimeline(timeSlots, simulationDays),
-			[timeSlots, simulationDays],
+			() =>
+				buildExpandedTimeline(
+					timeSlots,
+					simulationDays,
+					resolvedStartDayOfWeek,
+				),
+			[timeSlots, simulationDays, resolvedStartDayOfWeek],
 		);
 		const slotOrderById = useMemo(() => {
 			const entries = expandedTimeline.baseDaySlots.map(
@@ -647,10 +658,13 @@ const TimelineTable = React.memo(
 		};
 
 		const renderDayBandWeekday = (dayNumber: number): React.ReactNode => {
-			if (startDayOfWeek === undefined) {
+			if (resolvedStartDayOfWeek === undefined) {
 				return null;
 			}
-			const weekday = getWeekdayForDayIndex(startDayOfWeek, dayNumber - 1);
+			const weekday = getWeekdayForDayIndex(
+				resolvedStartDayOfWeek,
+				dayNumber - 1,
+			);
 			return (
 				<span
 					className="day-weekday"
@@ -778,8 +792,9 @@ const TimelineTable = React.memo(
 									)}
 								/>
 								{result.cookingResult &&
-									expandedSlot.slot.hasMeal &&
 									(() => {
+										// 料理行は料理イベントの mealSlotId で引く（就寝スロットへ移った
+										// 日曜の料理も、その就寝行の直後に表示する）
 										const cookingEvent = result.cookingResult?.events.find(
 											(e) => e.mealSlotId === expandedSlot.slot.id,
 										);

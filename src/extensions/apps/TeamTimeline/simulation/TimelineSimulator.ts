@@ -583,7 +583,10 @@ function applyExtraIngredientsToBaselineEvents(
  *
  * スロット結果を時系列で走査し、食材をバッグに蓄積しながら
  * 各食事タイミングで最適な料理を選択・作成する。
+ * 各時間帯では「その時間帯の回収（チェック）→料理」の順で処理する。
  * 日曜にあたる日は鍋容量2倍・大成功率30%・大成功EP3倍の料理ルールを適用する。
+ * 日曜の最後の食事は展開時に就寝スロットへ移されている
+ * （`buildExpandedTimeline`）ので、就寝時の回収分も鍋に入る。
  */
 function runCookingPostProcess(
 	expandedSlots: { slot: TimeSlot; dayIndex: number }[],
@@ -822,9 +825,15 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 	};
 
 	// 2. 時間帯を日数分展開（AM 4:00 基準 + 就寝スロット終端複製）
+	// 日曜の最後の食事は就寝スロットへ移る（展開後の hasMeal に反映済み）
+	const startDayOfWeek = resolveStartDayOfWeek(
+		config.simulationDays,
+		config.startDayOfWeek,
+	);
 	const expandedTimeline = buildExpandedTimeline(
 		timeSlots,
 		config.simulationDays,
+		startDayOfWeek,
 	);
 	const expandedSlots = expandedTimeline.expandedSlots;
 
@@ -1637,7 +1646,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			input.cookingSettings,
 			bonusSettings,
 			config.seed,
-			resolveStartDayOfWeek(config.simulationDays, config.startDayOfWeek),
+			startDayOfWeek,
 		);
 	}
 
@@ -1722,20 +1731,23 @@ export function runHelpingSimulation(
 		? { ...input.cookingSettings, enabled: false }
 		: undefined;
 	const result = runSimulation({ ...input, cookingSettings });
+	const startDayOfWeek = resolveStartDayOfWeek(
+		input.config.simulationDays,
+		input.config.startDayOfWeek,
+	);
 	return {
+		// runSimulation と同じ展開（日曜の食事移動を含む）にそろえる
 		expandedSlots: buildExpandedTimeline(
 			input.timeSlots,
 			input.config.simulationDays,
+			startDayOfWeek,
 		).expandedSlots,
 		slotResults: result.slotResults,
 		totalBerryEP: result.teamSummary.totalBerryEP,
 		totalSkillEP: result.teamSummary.totalSkillEP,
 		grandTotalEPWithoutCooking: result.teamSummary.grandTotalEP,
 		seed: input.config.seed,
-		startDayOfWeek: resolveStartDayOfWeek(
-			input.config.simulationDays,
-			input.config.startDayOfWeek,
-		),
+		startDayOfWeek,
 		bonusSettings: input.bonusSettings,
 		isEmpty: result.slotResults.size === 0,
 	};

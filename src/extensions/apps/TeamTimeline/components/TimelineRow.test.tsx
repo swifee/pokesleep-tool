@@ -100,6 +100,19 @@ describe("TimelineRow label rendering", () => {
 		});
 
 		expect(screen.getByTestId("timeline-row-label-sleep")).toBeDefined();
+		expect(screen.queryByTestId("timeline-row-label-cooking")).toBeNull();
+	});
+
+	it("shows sleep and meal icons when the Sunday dinner moved to bedtime", () => {
+		renderRow({
+			id: "sleep-end",
+			time: "23:00",
+			sleepState: "sleep",
+			hasMeal: true,
+		});
+
+		expect(screen.getByTestId("timeline-row-label-sleep")).toBeDefined();
+		expect(screen.getByTestId("timeline-row-label-cooking")).toBeDefined();
 	});
 
 	it("does not render a right border on the time cell", () => {

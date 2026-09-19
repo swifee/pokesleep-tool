@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
+import type { CookingEventResult } from "../types/CookingTypes";
 import type {
 	NoCollectCellSetting,
 	SimulationResult,
@@ -30,6 +31,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("./TimelineRow", () => ({
 	default: ({
+		slot,
 		dayIndex,
 		originalSlotId,
 		onSwapClick,
@@ -44,6 +46,7 @@ vi.mock("./TimelineRow", () => ({
 		fitToViewport,
 		specialConflictTeamIndexes,
 	}: {
+		slot: TimeSlot;
 		dayIndex: number;
 		originalSlotId: string;
 		onSwapClick?: (slotId: string, teamIndex: number, dayIndex: number) => void;
@@ -83,6 +86,7 @@ vi.mock("./TimelineRow", () => ({
 			<button
 				type="button"
 				data-testid={`swap-${dayIndex}-${originalSlotId}`}
+				data-has-meal={slot.hasMeal ? "true" : "false"}
 				data-special-conflict-team-indexes={(
 					specialConflictTeamIndexes ?? []
 				).join(",")}
@@ -890,5 +894,118 @@ describe("TimelineTable special Pokémon conflict", () => {
 					.getAttribute("data-special-conflict-team-indexes"),
 			).toBe("");
 		}
+	});
+});
+
+describe("TimelineTable 日曜の最後の食事の就寝直前への移動", () => {
+	const MEAL_TIME_SLOTS: TimeSlot[] = [
+		{ id: "sleep", time: "23:00", sleepState: "sleep", hasMeal: false },
+		{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: true },
+		{ id: "dinner", time: "18:00", sleepState: "none", hasMeal: true },
+	];
+
+	function createCookingEvent(
+		mealSlotId: string,
+		mealType: CookingEventResult["mealType"],
+	): CookingEventResult {
+		return {
+			mealSlotId,
+			mealType,
+			recipeName: "specialAppleCurry",
+			isGreatSuccess: false,
+			greatSuccessMultiplier: 2,
+			cookingEP: 1000,
+			eBase: 0,
+			eDisplay: 0,
+			eFinal: 0,
+			ingredientsUsed: [],
+			extraIngredientsUsed: [],
+			remainingPotCapacity: 0,
+			effectivePotCapacity: 15,
+			tastyChancePercent: 10,
+			cookingPowerUpBonusUsed: 0,
+			bagIngredientsBeforeCooking: [],
+		};
+	}
+
+	function renderWithSundayOnDay2(): void {
+		// 土曜開始の2日間 → 2日目が日曜。シミュレーション結果は日曜の夕食を就寝スロットに置く
+		const events = [
+			createCookingEvent("dinner__day0", "dinner"),
+			createCookingEvent("sleep-end__day1", "dinner"),
+		];
+		const result: SimulationResult = {
+			...EMPTY_RESULT,
+			cookingResult: {
+				events,
+				dailySummaries: [],
+				pokemonAttributions: [],
+				leftoverIngredients: {
+					byPokemon: new Map(),
+					initialRemaining: {},
+					total: {},
+				},
+				totalCookingEP: 2000,
+				totalInitialIngredientEP: 0,
+			},
+		};
+		render(
+			<TimelineTable
+				team={[null, null, null, null, null]}
+				timeSlots={MEAL_TIME_SLOTS}
+				simulationDays={2}
+				startDayOfWeek={6}
+				result={result}
+				swaps={[]}
+				box={new PokemonBox([])}
+			/>,
+		);
+	}
+
+	it("日曜の夕食行は食事なし、就寝行が食事ありになる", () => {
+		renderWithSundayOnDay2();
+
+		expect(screen.getByTestId("swap-0-dinner").dataset.hasMeal).toBe("true");
+		expect(screen.getByTestId("swap-0-sleep-end").dataset.hasMeal).toBe(
+			"false",
+		);
+		expect(screen.getByTestId("swap-1-dinner").dataset.hasMeal).toBe("false");
+		expect(screen.getByTestId("swap-1-sleep-end").dataset.hasMeal).toBe("true");
+	});
+
+	it("日曜の料理行は就寝行の直後に表示される", () => {
+		renderWithSundayOnDay2();
+
+		const cookingRow = screen.getByTestId("cooking-result-row-sleep-end__day1");
+		const bedtimeRow = screen.getByTestId("swap-1-sleep-end");
+		const sundayDinnerRow = screen.getByTestId("swap-1-dinner");
+		expect(
+			bedtimeRow.compareDocumentPosition(cookingRow) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(
+			sundayDinnerRow.compareDocumentPosition(cookingRow) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		// 土曜の料理行は夕食行の直後（従来どおり）
+		expect(screen.getByTestId("cooking-result-row-dinner__day0")).toBeDefined();
+	});
+
+	it("開始曜日がないときは食事の位置を変えない", () => {
+		render(
+			<TimelineTable
+				team={[null, null, null, null, null]}
+				timeSlots={MEAL_TIME_SLOTS}
+				simulationDays={2}
+				result={EMPTY_RESULT}
+				swaps={[]}
+				box={new PokemonBox([])}
+			/>,
+		);
+
+		expect(screen.getByTestId("swap-1-dinner").dataset.hasMeal).toBe("true");
+		expect(screen.getByTestId("swap-1-sleep-end").dataset.hasMeal).toBe(
+			"false",
+		);
 	});
 });
