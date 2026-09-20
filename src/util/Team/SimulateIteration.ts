@@ -2,6 +2,7 @@ import { CookEvent } from "./Event/CookEvent";
 import { SleepRecoverEvent } from "./Event/SleepRecoverEvent";
 import { PhaseAwareTapEvent } from "./Event/TapEvent";
 import { applyPendingExtraHelp } from "./Help/PendingExtraHelp";
+import { pickSkillMetrics } from "./SkillMetrics";
 import type { IterationResult, SimulationEvent, TeamContext } from "./Types";
 
 /**
@@ -37,19 +38,11 @@ export function runIteration(sim: TeamContext): IterationResult[] {
 	}
 
 	return sim.members.map(({ progress }) => ({
-		berryTotalStrength: progress.berryTotalStrength,
+		berryStrength: progress.berryStrength,
+		bigBerryHelpCount: progress.bigBerryHelpCount,
+		bigBerryCount: progress.bigBerryCount,
 		ingCounts: progress.ingCounts,
-		skillCount: progress.skillCount,
-		skillStrength: progress.skillStrength,
-		skillExtraHelp: progress.skillExtraHelp,
-		skillHelperBoost: progress.skillHelperBoost,
-		skillEnergizingCheer: progress.skillEnergizingCheer,
-		skillEnergyForEveryone: progress.skillEnergyForEveryone,
-		skillDreamShards: progress.skillDreamShards,
-		skillPotExtended: progress.skillPotExtended,
-		skillExtraTastyRate: progress.skillExtraTastyRate,
-		skillCandy: progress.skillCandy,
-		skillBerryZone: progress.skillBerryZone,
+		...pickSkillMetrics(progress),
 	}));
 }
 

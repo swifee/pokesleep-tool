@@ -27,7 +27,7 @@ describe("runIteration", () => {
 		const result = runIteration(sim);
 
 		expect(result).toHaveLength(1);
-		expect(result[0].berryTotalStrength).toBeGreaterThan(0);
+		expect(result[0].berryStrength).toBeGreaterThan(0);
 	});
 
 	test("isEnergyAlwaysFull member always taps at the full-energy frequency over a 24h period", () => {
@@ -51,7 +51,7 @@ describe("runIteration", () => {
 		const result = runIteration(sim);
 
 		expect(result).toHaveLength(1);
-		expect(result[0].berryTotalStrength).toBeGreaterThan(0);
+		expect(result[0].berryStrength).toBeGreaterThan(0);
 	});
 
 	test("still taps at every sleep/wake transition when both frequencies are NoTap", () => {
@@ -95,14 +95,14 @@ describe("runIteration", () => {
 		const result = runIteration(sim);
 
 		expect(result).toHaveLength(1);
-		expect(result[0].berryTotalStrength).toBeGreaterThan(0);
+		expect(result[0].berryStrength).toBeGreaterThan(0);
 	});
 
 	test("runs a team including Mew (Versatile) and Mr. Mime (Skill Copy)", () => {
 		const mewIv = new PokemonIv({
 			pokemonName: "Mew",
 			level: 30,
-			versatileSkill: "Charge Strength S",
+			versatileSkill: "Charge Strength M",
 		});
 		const profiles = [
 			createTestProfile({ index: 0, iv: mewIv, skillRate: 1 }),
