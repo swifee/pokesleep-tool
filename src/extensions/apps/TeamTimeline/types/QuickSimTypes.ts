@@ -7,13 +7,16 @@ import { MAX_TEAM_SIZE } from "./TeamTimelineTypes";
  * - secondHalf: 集計期間の末尾に向けて、起用時間の合計に達するまで連続して起用する
  * - sleep: 毎日、就寝中を優先して起用する
  * - daytime: 毎日、起床後を優先して起用する
+ * - remainder: 決まった時間帯を持たず、他の起用方法のメンバーをすべて配置した後に
+ *   残った空きへ入れる
  */
 export type QuickSimUsageMode =
 	| "even"
 	| "firstHalf"
 	| "secondHalf"
 	| "sleep"
-	| "daytime";
+	| "daytime"
+	| "remainder";
 
 /** 起用方法の一覧（プルダウンの表示順） */
 export const QUICK_SIM_USAGE_MODES: readonly QuickSimUsageMode[] = [
@@ -22,6 +25,7 @@ export const QUICK_SIM_USAGE_MODES: readonly QuickSimUsageMode[] = [
 	"secondHalf",
 	"sleep",
 	"daytime",
+	"remainder",
 ];
 
 /** 既定の起用方法 */
@@ -29,7 +33,8 @@ export const DEFAULT_QUICK_SIM_USAGE_MODE: QuickSimUsageMode = "even";
 
 /**
  * 起用方法ごとの配置の優先順位（小さいほど先に配置する）。
- * 前半 → 後半 → 就寝 → 日中 の順に固定配置し、均等は残った空きに詰める。
+ * 前半 → 後半 → 就寝 → 日中 の順に固定配置し、均等は残った空きに詰め、
+ * 残りは均等も含めて全員を置いた後の空きに詰める。
  */
 export const QUICK_SIM_USAGE_MODE_PRIORITY: Readonly<
 	Record<QuickSimUsageMode, number>
@@ -39,7 +44,17 @@ export const QUICK_SIM_USAGE_MODE_PRIORITY: Readonly<
 	sleep: 2,
 	daytime: 3,
 	even: 4,
+	remainder: 5,
 };
+
+/**
+ * 決まった時間帯を持たず、固定配置のメンバーの後に空きへ詰める起用方法（配置の順）。
+ * 先のものから順に、そのときの空きへ日ごとに配置する。
+ */
+export const QUICK_SIM_FILL_USAGE_MODES: readonly QuickSimUsageMode[] = [
+	"even",
+	"remainder",
+];
 
 export function isQuickSimUsageMode(
 	value: unknown,
