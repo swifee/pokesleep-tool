@@ -47,7 +47,7 @@ describe("QuickSimStorage", () => {
 			{
 				members: [
 					{ pokemonId: pikachu.id, usagePercent: 100, usageMode: "even" },
-					{ pokemonId: eevee.id, usagePercent: 35.6, usageMode: "sleep" },
+					{ pokemonId: eevee.id, usagePercent: 35.6, usageMode: "remainder" },
 					{ pokemonId: 999, usagePercent: 50, usageMode: "even" },
 				],
 			},
@@ -62,7 +62,7 @@ describe("QuickSimStorage", () => {
 		expect(loadQuickSimSettingsFromStorage(reloadedBox)).toEqual({
 			members: [
 				{ pokemonId: 10, usagePercent: 100, usageMode: "even" },
-				{ pokemonId: 20, usagePercent: 36, usageMode: "sleep" },
+				{ pokemonId: 20, usagePercent: 36, usageMode: "remainder" },
 			],
 		});
 	});

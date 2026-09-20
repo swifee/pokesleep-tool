@@ -21,7 +21,9 @@
  *      1つの枠に入る「自然な」配置を試し、収まらなければ枠順に詰める
  *      （McNaughton の巻き付け法）。
  *    それでも満たせないときだけ、就寝中の入れ替えを許す（Phase 2）。
- * 3. 最後に枠の割り当てを引き直す（rethreadLanes）。上の手順は「誰がいつ編成に
+ * 3. 残りのメンバーは、均等まで全員を置いた後の空きへ、均等と同じ手順で詰める。
+ *    決まった時間帯を持たないので、他のメンバーが取らなかった時間だけを使う。
+ * 4. 最後に枠の割り当てを引き直す（rethreadLanes）。上の手順は「誰がいつ編成に
  *    入っているか」だけを決めるものとみなし、続投するメンバーは同じ枠に居続け、
  *    入れ替わるメンバーは抜けたメンバーの枠に入るように枠を付け替える。
  *    これで続投中のポケモンの列が変わることはなくなる。
@@ -35,6 +37,7 @@ import {
 	DEFAULT_QUICK_SIM_USAGE_MODE,
 	EMPTY_QUICK_SIM_EXCLUSION_MAP,
 	MINUTES_PER_DAY,
+	QUICK_SIM_FILL_USAGE_MODES,
 	QUICK_SIM_MAX_USAGE_PERCENT,
 	QUICK_SIM_MIN_USAGE_PERCENT,
 	QUICK_SIM_TOTAL_USAGE_LIMIT_PERCENT,
@@ -650,6 +653,10 @@ function compareFixedJobs(left: ScheduleJob, right: ScheduleJob): number {
 	return right.minutes - left.minutes;
 }
 
+function isFillMode(mode: QuickSimUsageMode): boolean {
+	return QUICK_SIM_FILL_USAGE_MODES.includes(mode);
+}
+
 /**
  * 起用方法が固定のメンバーを、優先順位の順に配置する。
  */
@@ -660,7 +667,7 @@ function placeFixedJobs(
 ): void {
 	const dayCount = grid.days.length;
 	const sorted = jobs
-		.filter((job) => job.mode !== "even")
+		.filter((job) => !isFillMode(job.mode))
 		.sort(compareFixedJobs);
 	for (const job of sorted) {
 		switch (job.mode) {
@@ -704,7 +711,7 @@ function placeFixedJobs(
 }
 
 /**
- * 均等メンバーの日ごとの起用時間を決める。
+ * 空きに詰めるメンバー（均等・残り）の日ごとの起用時間を決める。
  * 基本は毎日同じ時間。空きが足りない日は起用時間の多いメンバーから順に空きを割り当て
  * （多いメンバーほど他の日で取り返しにくい）、足りなかった分を空きのある日へ
  * 均等に振り分ける。1日の上限は「どこかの枠が空いている分数」。
@@ -1060,20 +1067,19 @@ function scheduleDayWithSleepSwaps(
 }
 
 /**
- * 均等メンバーを、固定配置の後の空きへ日ごとに詰める。
+ * 空きに詰めるメンバーを、そのときの空きへ日ごとに詰める。
  */
-function placeEvenJobs(
+function placeFillJobsOfMode(
 	grid: PeriodGrid,
-	jobs: readonly ScheduleJob[],
+	fillJobs: readonly ScheduleJob[],
 	sleepMinutes: number,
 ): void {
-	const evenJobs = jobs.filter((job) => job.mode === "even");
-	if (evenJobs.length === 0) {
+	if (fillJobs.length === 0) {
 		return;
 	}
-	const allocation = allocateEvenMinutesPerDay(grid, evenJobs);
+	const allocation = allocateEvenMinutesPerDay(grid, fillJobs);
 	grid.days.forEach((day, dayIndex) => {
-		const dayJobs: DayJob[] = evenJobs
+		const dayJobs: DayJob[] = fillJobs
 			.map((job, index) => ({
 				pokemonId: job.pokemonId,
 				minutes: allocation[index][dayIndex],
@@ -1089,6 +1095,24 @@ function placeEvenJobs(
 			day.lanes[laneIndex].set(lane);
 		});
 	});
+}
+
+/**
+ * 空きに詰めるメンバーを、起用方法の順（均等 → 残り）に配置する。
+ * 均等は固定配置の後の空きへ、残りは均等まで全員を置いた後の空きへ入る。
+ */
+function placeFillJobs(
+	grid: PeriodGrid,
+	jobs: readonly ScheduleJob[],
+	sleepMinutes: number,
+): void {
+	for (const mode of QUICK_SIM_FILL_USAGE_MODES) {
+		placeFillJobsOfMode(
+			grid,
+			jobs.filter((job) => job.mode === mode),
+			sleepMinutes,
+		);
+	}
 }
 
 function hasSwapDuringSleep(
@@ -1321,7 +1345,7 @@ export function buildQuickSimSchedule(
 	const dayCount = clampSimulationDays(simulationDays);
 	const grid = new PeriodGrid(dayCount, exclusions);
 	placeFixedJobs(grid, jobs, structure.sleepMinutes);
-	placeEvenJobs(grid, jobs, structure.sleepMinutes);
+	placeFillJobs(grid, jobs, structure.sleepMinutes);
 	grid.rethreadLanes();
 
 	const actualById = grid.countMinutesById();

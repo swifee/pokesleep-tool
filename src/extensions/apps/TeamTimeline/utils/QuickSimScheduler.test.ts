@@ -723,6 +723,63 @@ describe("buildQuickSimSchedule with usage modes", () => {
 		expect(errors).toEqual(["pokemon 205: 1440 minutes, expected 1728"]);
 	});
 
+	it("repeats the single-day schedule when remainder members join daily modes", () => {
+		const list = modeMembers([40, "sleep"], [60, "even"], [50, "remainder"]);
+		const days = 3;
+		const schedule = buildMultiOrThrow(list, days);
+		expectMultiValid(schedule, list, days);
+		for (const lanes of schedule.dayLanes) {
+			expect(lanes).toEqual(schedule.dayLanes[0]);
+		}
+	});
+
+	it("lets an even member take the night before a remainder member, whatever the order", () => {
+		// Only lane 4 is free. Two even members would give the night to the longer
+		// one (60%); as a remainder member it waits until the even member (40%)
+		// has taken bedtime and then fills the rest of the day.
+		const list = modeMembers(
+			[60, "remainder"],
+			[40, "even"],
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+		);
+		const schedule = buildMultiOrThrow(list, 1);
+		expectMultiValid(schedule, list, 1);
+		expect(segmentsOf(schedule, 0, 201)).toEqual([
+			expect.objectContaining({ startMinute: 0, endMinute: 576 }),
+		]);
+		expect(segmentsOf(schedule, 0, 200)).toEqual([
+			expect.objectContaining({ startMinute: 576, endMinute: MINUTES_PER_DAY }),
+		]);
+	});
+
+	it("shorts the remainder member, not the even member, when the space runs out", () => {
+		// Four first-half members fill lanes 0-3 for the first 1.2 days. Lane 4 on
+		// day 0 goes to the even member (80% = 1152min/day); the remainder member
+		// only gets the leftovers even though it is listed first.
+		const list = modeMembers(
+			[80, "remainder"],
+			[80, "even"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+			[50, "firstHalf"],
+		);
+		const days = 2;
+		const schedule = buildMultiOrThrow(list, days);
+		expect(schedule.unmetPokemonIds).toEqual([200]);
+		const errors = validateQuickSimMultiDaySchedule(
+			schedule,
+			getQuickSimTotalTargetMinutesById(list, days),
+		);
+		expect(errors).toEqual(["pokemon 200: 1728 minutes, expected 2304"]);
+		expect(segmentsOf(schedule, 0, 201)).toEqual([
+			expect.objectContaining({ startMinute: 0, endMinute: 1152 }),
+		]);
+	});
+
 	it("keeps every member within a single lane at any time across random mode mixes", {
 		timeout: 20_000,
 	}, () => {

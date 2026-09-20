@@ -196,6 +196,10 @@ const USAGE_MODE_LABELS: Readonly<
 		key: "TeamTimeline.quick usage mode daytime",
 		defaultValue: "日中",
 	},
+	remainder: {
+		key: "TeamTimeline.quick usage mode remainder",
+		defaultValue: "空き",
+	},
 };
 
 /**
@@ -586,7 +590,7 @@ const QuickSimMemberList = React.memo(
 							),
 							t(
 								"TeamTimeline.quick usage mode note",
-								"起用方法（1〜99%のとき）: 均等=毎日同じ時間を空き枠に配置 / 前半=期間の先頭から連続 / 後半=期間の末尾まで連続 / 睡眠=就寝中を優先 / 日中=起床後を優先。前半・後半・睡眠・日中の順に先に配置し、均等は残りに入れます。",
+								"起用方法（1〜99%のとき）: 均等=毎日同じ時間を空き枠に配置 / 前半=期間の先頭から連続 / 後半=期間の末尾まで連続 / 睡眠=就寝中を優先 / 日中=起床後を優先 / 空き=他のメンバーを全員配置した後の空きに入れる。前半・後半・睡眠・日中の順に先に配置し、均等はその残りに、空きは最後に入れます。",
 							),
 						].join("\n")}
 						ariaLabel={t(
