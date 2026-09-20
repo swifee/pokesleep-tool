@@ -23,7 +23,7 @@ import {
 } from "./QuickSimTimelineBuilder";
 import { createDefaultTimelineBonusSettings } from "./TimelineBonusSettingsBridge";
 import { buildExpandedTimeline } from "./TimelineDayExpansion";
-import { calculateDuration } from "./TimeSlotUtils";
+import { calculateDuration, parseTime } from "./TimeSlotUtils";
 
 function createItem(pokemonName: string, id: number): PokemonBoxItem {
 	return new PokemonBoxItem(new PokemonIv({ pokemonName }), "", id);
@@ -147,6 +147,7 @@ describe("buildQuickSimTimeline", () => {
 			time: "09:00",
 			sleepState: "none",
 			hasMeal: false,
+			dayIndexes: [0, 1],
 		});
 
 		// The boundary repeats every day, and the lane returns to Pikachu at bedtime.
@@ -174,7 +175,7 @@ describe("buildQuickSimTimeline", () => {
 			},
 		]);
 
-		// Every lane on every day skips collection at the inserted slot; the simulator
+		// Every lane skips collection at the inserted slot on the days it exists; the simulator
 		// ignores the entries on cells that carry a swap, so the outgoing Pokemon is settled.
 		expect(timeline.noCollectCells).toHaveLength(2 * 5);
 		expect(timeline.noCollectCells).toContainEqual({
@@ -236,8 +237,352 @@ describe("buildQuickSimTimeline", () => {
 		expect(summary.activeMinutesByPokemonId.get(pikachu.id)).toBe(
 			days * MINUTES_PER_DAY,
 		);
-		expect(summary.activeMinutesByPokemonId.get(eevee.id)).toBe(days * 1008);
-		expect(summary.activeMinutesByPokemonId.get(bulbasaur.id)).toBe(days * 432);
+		// Eevee (1008min) hands over to Bulbasaur at 23:00 + 1008min = 15:48, which is
+		// rounded to 15:50 because no configured slot is within 30 minutes.
+		expect(summary.activeMinutesByPokemonId.get(eevee.id)).toBe(days * 1010);
+		expect(summary.activeMinutesByPokemonId.get(bulbasaur.id)).toBe(days * 430);
+	});
+
+	it("keeps the usage within 5% of the request after snapping boundaries", () => {
+		const members: QuickSimMember[] = [
+			{ pokemonId: pikachu.id, usagePercent: 55, usageMode: "even" },
+			{ pokemonId: eevee.id, usagePercent: 35, usageMode: "even" },
+			{ pokemonId: bulbasaur.id, usagePercent: 15, usageMode: "even" },
+		];
+		const days = 7;
+		const result = buildQuickSimSchedule(members, DEFAULT_TIME_SLOTS, days);
+		if (!result.ok) {
+			throw new Error(result.error);
+		}
+		const timeline = buildQuickSimTimeline(
+			result.schedule,
+			DEFAULT_TIME_SLOTS,
+			days,
+			box,
+		);
+
+		const summary = collectTimelineDurationSummaryByPokemon(
+			timeline.team,
+			timeline.timeSlots,
+			days,
+			timeline.swaps,
+			box,
+		);
+		for (const member of members) {
+			const actualPercent =
+				((summary.activeMinutesByPokemonId.get(member.pokemonId) ?? 0) /
+					(days * MINUTES_PER_DAY)) *
+				100;
+			expect(Math.abs(actualPercent - member.usagePercent)).toBeLessThan(5);
+		}
+		for (const slot of timeline.timeSlots) {
+			expect(parseTime(slot.time) % 10).toBe(0);
+		}
+	});
+
+	it("swaps at a configured slot within 30 minutes instead of inserting one", () => {
+		// 23:00 + 500min = 07:20 (wake slot at 07:00 is 20min away),
+		// 23:00 + 755min = 11:35 (lunch slot at 12:00 is 25min away).
+		const schedule = createSchedule([
+			[
+				{ pokemonId: pikachu.id, startMinute: 0, endMinute: 500 },
+				{ pokemonId: eevee.id, startMinute: 500, endMinute: 755 },
+				{
+					pokemonId: bulbasaur.id,
+					startMinute: 755,
+					endMinute: MINUTES_PER_DAY,
+				},
+			],
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+		]);
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			1,
+			box,
+		);
+
+		expect(timeline.insertedSlotIds).toEqual([]);
+		expect(timeline.noCollectCells).toEqual([]);
+		expect(timeline.swaps.map((swap) => swap.slotId)).toEqual([
+			"slot-1",
+			"slot-2",
+		]);
+	});
+
+	it("rounds inserted slot times to 10-minute multiples", () => {
+		// 23:00 + 571min = 08:31 (31min after wake) -> 08:30,
+		// 23:00 + 815min = 12:35 (35min after lunch) -> 12:40.
+		const schedule = createSchedule([
+			[
+				{ pokemonId: pikachu.id, startMinute: 0, endMinute: 571 },
+				{ pokemonId: eevee.id, startMinute: 571, endMinute: 815 },
+				{
+					pokemonId: bulbasaur.id,
+					startMinute: 815,
+					endMinute: MINUTES_PER_DAY,
+				},
+			],
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+		]);
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			1,
+			box,
+		);
+
+		expect(timeline.insertedSlotIds).toEqual([
+			`${QUICK_SIM_SLOT_ID_PREFIX}0830`,
+			`${QUICK_SIM_SLOT_ID_PREFIX}1240`,
+		]);
+		expect(timeline.timeSlots.slice(DEFAULT_TIME_SLOTS.length)).toEqual([
+			{
+				id: `${QUICK_SIM_SLOT_ID_PREFIX}0830`,
+				time: "08:30",
+				sleepState: "none",
+				hasMeal: false,
+				dayIndexes: [0],
+			},
+			{
+				id: `${QUICK_SIM_SLOT_ID_PREFIX}1240`,
+				time: "12:40",
+				sleepState: "none",
+				hasMeal: false,
+				dayIndexes: [0],
+			},
+		]);
+	});
+
+	it("inserts a slot only on the days that swap at that time", () => {
+		// Day 1 alone hands lane 0 over at 23:00 + 600min = 09:00.
+		const schedule = createSchedule([], {
+			dayLanes: [
+				[
+					fullLane(pikachu.id),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+				[
+					[
+						{ pokemonId: pikachu.id, startMinute: 0, endMinute: 600 },
+						{
+							pokemonId: eevee.id,
+							startMinute: 600,
+							endMinute: MINUTES_PER_DAY,
+						},
+					],
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+				[
+					fullLane(pikachu.id),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+			],
+		});
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			3,
+			box,
+		);
+
+		const insertedId = `${QUICK_SIM_SLOT_ID_PREFIX}0900`;
+		expect(timeline.timeSlots[DEFAULT_TIME_SLOTS.length]).toMatchObject({
+			id: insertedId,
+			dayIndexes: [1],
+		});
+		expect(timeline.swaps).toEqual([
+			{
+				dayIndex: 1,
+				slotId: insertedId,
+				teamSlotIndex: 0,
+				newPokemonId: eevee.id,
+				initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+			},
+			{
+				dayIndex: 1,
+				slotId: "slot-5-end",
+				teamSlotIndex: 0,
+				newPokemonId: pikachu.id,
+				initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+			},
+		]);
+		expect(timeline.noCollectCells).toHaveLength(5);
+		expect(timeline.noCollectCells.every((cell) => cell.dayIndex === 1)).toBe(
+			true,
+		);
+
+		// The inserted slot only appears on day 1 of the expanded timeline.
+		const expanded = buildExpandedTimeline(timeline.timeSlots, 3);
+		const insertedDays = expanded.expandedSlots
+			.filter((slot) => slot.originalSlotId === insertedId)
+			.map((slot) => slot.dayIndex);
+		expect(insertedDays).toEqual([1]);
+	});
+
+	it("moves boundaries near bedtime onto the bedtime slot", () => {
+		// Day 0 lane 0 ends with Eevee from 22:40 (1420min); day 1 lane 1 starts
+		// with Bulbasaur until 23:20 (20min) and then Pikachu.
+		const schedule = createSchedule([], {
+			dayLanes: [
+				[
+					[
+						{ pokemonId: pikachu.id, startMinute: 0, endMinute: 1420 },
+						{
+							pokemonId: eevee.id,
+							startMinute: 1420,
+							endMinute: MINUTES_PER_DAY,
+						},
+					],
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+				[
+					fullLane(eevee.id),
+					[
+						{ pokemonId: bulbasaur.id, startMinute: 0, endMinute: 20 },
+						{
+							pokemonId: pikachu.id,
+							startMinute: 20,
+							endMinute: MINUTES_PER_DAY,
+						},
+					],
+					fullLane(null),
+					fullLane(null),
+					fullLane(null),
+				],
+			],
+		});
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			2,
+			box,
+		);
+
+		expect(timeline.insertedSlotIds).toEqual([]);
+		expect(timeline.swaps).toEqual([
+			{
+				dayIndex: 0,
+				slotId: "slot-5-end",
+				teamSlotIndex: 0,
+				newPokemonId: eevee.id,
+				initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+			},
+			{
+				dayIndex: 0,
+				slotId: "slot-5-end",
+				teamSlotIndex: 1,
+				newPokemonId: pikachu.id,
+				initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+			},
+		]);
+	});
+
+	it("drops a segment that collapses when its boundaries snap to the same time", () => {
+		// Eevee is scheduled for 13:05-13:12; both boundaries round to 13:10,
+		// so Bulbasaur takes over directly from Pikachu.
+		const schedule = createSchedule([
+			[
+				{ pokemonId: pikachu.id, startMinute: 0, endMinute: 845 },
+				{ pokemonId: eevee.id, startMinute: 845, endMinute: 852 },
+				{
+					pokemonId: bulbasaur.id,
+					startMinute: 852,
+					endMinute: MINUTES_PER_DAY,
+				},
+			],
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+		]);
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			1,
+			box,
+		);
+
+		expect(timeline.swaps).toEqual([
+			{
+				dayIndex: 0,
+				slotId: `${QUICK_SIM_SLOT_ID_PREFIX}1310`,
+				teamSlotIndex: 0,
+				newPokemonId: bulbasaur.id,
+				initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+			},
+		]);
+	});
+
+	it("replaces the initial team when the first boundary snaps to the period start", () => {
+		// Pikachu only holds the lane for 20 minutes after bedtime, so Eevee starts the day.
+		const schedule = createSchedule([
+			[
+				{ pokemonId: pikachu.id, startMinute: 0, endMinute: 20 },
+				{ pokemonId: eevee.id, startMinute: 20, endMinute: MINUTES_PER_DAY },
+			],
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+		]);
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			1,
+			box,
+		);
+
+		expect(timeline.team).toEqual([eevee, null, null, null, null]);
+		expect(timeline.swaps).toEqual([]);
+		expect(timeline.insertedSlotIds).toEqual([]);
+	});
+
+	it("ignores a boundary that snaps to the end of the period", () => {
+		const schedule = createSchedule([
+			[
+				{ pokemonId: pikachu.id, startMinute: 0, endMinute: 1425 },
+				{ pokemonId: eevee.id, startMinute: 1425, endMinute: MINUTES_PER_DAY },
+			],
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+			fullLane(null),
+		]);
+
+		const timeline = buildQuickSimTimeline(
+			schedule,
+			DEFAULT_TIME_SLOTS,
+			1,
+			box,
+		);
+
+		expect(timeline.swaps).toEqual([]);
+		expect(timeline.insertedSlotIds).toEqual([]);
 	});
 
 	it("swaps at the previous bedtime when the next day starts with another member", () => {

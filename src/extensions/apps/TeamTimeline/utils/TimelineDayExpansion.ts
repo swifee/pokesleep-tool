@@ -2,6 +2,7 @@ import {
 	clampSimulationDays,
 	getDisplayLabel,
 	getMealType,
+	isTimeSlotOnDay,
 	type TimeSlot,
 	type Weekday,
 } from "../types/TimeSlotTypes";
@@ -123,6 +124,9 @@ function resolveExpandedHasMeal(
  * 就寝スロットへ移す（`findSundayMealRelocation`）。展開後スロットの
  * `hasMeal` はこの移動を反映した「その日にその時間帯で食事するか」を表す。
  * 省略時は時間帯設定の `hasMeal` をそのまま使う。
+ *
+ * `dayIndexes` を持つ時間帯（自動シミュが特定の日だけに追加する入れ替え用の
+ * 時間帯）は、その日にだけ展開する。`baseDaySlots` には毎日の並びとして含める。
  */
 export function buildExpandedTimeline(
 	timeSlots: TimeSlot[],
@@ -151,8 +155,13 @@ export function buildExpandedTimeline(
 		baseDaySlots.some((slot) => slot.id === `${firstSlot.id}-end`);
 
 	for (let dayIndex = 0; dayIndex < days; dayIndex++) {
-		const sourceSlots =
-			dayIndex > 0 && hasSleepStartCopy ? baseDaySlots.slice(1) : baseDaySlots;
+		const sourceSlots = (
+			dayIndex > 0 && hasSleepStartCopy ? baseDaySlots.slice(1) : baseDaySlots
+		).filter((slot) => isTimeSlotOnDay(slot, dayIndex));
+		if (sourceSlots.length === 0) {
+			slotsByDay.push([]);
+			continue;
+		}
 		const mealRelocation =
 			startDayOfWeek !== undefined &&
 			isSundayForDayIndex(startDayOfWeek, dayIndex)
