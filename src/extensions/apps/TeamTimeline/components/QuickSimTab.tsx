@@ -694,22 +694,6 @@ export default function QuickSimTab({
 				onSwapClick={handleSwapClick}
 			/>
 
-			<QuickSimOptimizerPanel
-				members={members}
-				box={runtimeBox}
-				timeSlots={timeSlots}
-				simulationConfig={simulationConfig}
-				bonusSettings={bonusSettings}
-				cookingSettings={cookingSettings}
-				provisionalSettings={provisionalSettings}
-				seedMode={seedMode}
-				hasSleepSlot={
-					scheduleResult.ok || scheduleResult.error !== "noSleepSlot"
-				}
-				onApply={handleOptimizerApply}
-				onApplyIngredients={handleOptimizerApplyIngredients}
-			/>
-
 			<InitialIngredientsPanel
 				settings={cookingSettings}
 				onChange={onInitialIngredientsChange}
@@ -724,6 +708,22 @@ export default function QuickSimTab({
 				)}
 				onCopyToOtherSim={onCopyInitialIngredientsToDetailedSim}
 				testIdPrefix="quick-sim"
+			/>
+
+			<QuickSimOptimizerPanel
+				members={members}
+				box={runtimeBox}
+				timeSlots={timeSlots}
+				simulationConfig={simulationConfig}
+				bonusSettings={bonusSettings}
+				cookingSettings={cookingSettings}
+				provisionalSettings={provisionalSettings}
+				seedMode={seedMode}
+				hasSleepSlot={
+					scheduleResult.ok || scheduleResult.error !== "noSleepSlot"
+				}
+				onApply={handleOptimizerApply}
+				onApplyIngredients={handleOptimizerApplyIngredients}
 			/>
 
 			{renderSimulationControls({

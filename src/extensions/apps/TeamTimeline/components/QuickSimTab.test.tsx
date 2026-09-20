@@ -392,6 +392,17 @@ describe("QuickSimTab", () => {
 		});
 	});
 
+	it("renders the initial ingredients panel above the optimizer panel", () => {
+		renderTab();
+
+		const ingredients = screen.getByTestId("quick-sim-initial-ingredients");
+		const optimizer = screen.getByTestId("quick-sim-optimizer-panel");
+		expect(
+			ingredients.compareDocumentPosition(optimizer) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
 	it("collapses the initial ingredients by default and opens the cooking settings", () => {
 		const { onOpenCookingSettings } = renderTab({
 			cookingSettings: {
