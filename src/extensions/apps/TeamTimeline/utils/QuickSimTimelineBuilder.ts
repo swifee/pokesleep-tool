@@ -25,6 +25,15 @@ import { formatTime, parseTime } from "./TimeSlotUtils";
 /** 自動入れ替えのために追加する時間帯スロットIDの接頭辞 */
 export const QUICK_SIM_SLOT_ID_PREFIX = "quick-swap-";
 
+/**
+ * 区間の切り替わり時刻の前後この分数以内に既存の時間帯（チェック）があれば、
+ * 時間帯を追加せずにその時間帯で入れ替える。
+ */
+export const QUICK_SIM_SWAP_SNAP_MINUTES = 30;
+
+/** 追加する時間帯の時刻の刻み（分）。切り替わり時刻はこの倍数に丸める */
+export const QUICK_SIM_SWAP_TIME_STEP_MINUTES = 10;
+
 /** シミュレーターへの入力に変換した簡易シミュのタイムライン */
 export interface QuickSimTimeline {
 	/** 日の起点（就寝時）のチーム */
@@ -37,6 +46,21 @@ export interface QuickSimTimeline {
 	noCollectCells: NoCollectCellSetting[];
 	/** 追加した時間帯スロットID */
 	insertedSlotIds: string[];
+}
+
+/**
+ * 枠の占有者が切り替わる点。時刻は期間の先頭（初日の就寝時刻）からの経過分。
+ */
+interface LaneBoundary {
+	minute: number;
+	pokemonId: number | null;
+}
+
+/** 追加した時間帯と、それがある日 */
+interface InsertedSlot {
+	id: string;
+	time: string;
+	dayIndexes: Set<number>;
 }
 
 function toSwapPokemonId(pokemonId: number | null, box: PokemonBox): number {
@@ -62,13 +86,109 @@ function resolveDayLanes(
 }
 
 /**
+ * 期間全体の既存のチェック時刻（期間の先頭からの経過分、昇順）。
+ * ユーザーの時間帯を毎日分並べ、期間の末尾（最終日の就寝）も含める。
+ */
+function collectExistingCheckMinutes(
+	timeSlots: readonly TimeSlot[],
+	originMinutes: number,
+	days: number,
+): number[] {
+	const offsets = timeSlots.map(
+		(slot) =>
+			(parseTime(slot.time) - originMinutes + MINUTES_PER_DAY) %
+			MINUTES_PER_DAY,
+	);
+	const minutes = new Set<number>([days * MINUTES_PER_DAY]);
+	for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+		for (const offset of offsets) {
+			minutes.add(dayIndex * MINUTES_PER_DAY + offset);
+		}
+	}
+	return [...minutes].sort((a, b) => a - b);
+}
+
+/**
+ * 切り替わり時刻を、入れ替えを行う時刻へ寄せる。
+ * 前後 `QUICK_SIM_SWAP_SNAP_MINUTES` 以内に既存のチェックがあれば最も近いもの
+ * （同距離なら早い方）へ、なければ `QUICK_SIM_SWAP_TIME_STEP_MINUTES` の倍数へ丸める。
+ *
+ * この写像は単調（早い切り替わりが遅い切り替わりを追い越さない）なので、
+ * 寄せた後も枠内・枠間の順序は保たれる。
+ */
+function snapBoundaryMinute(
+	minute: number,
+	existingCheckMinutes: readonly number[],
+): number {
+	let nearest: number | null = null;
+	for (const check of existingCheckMinutes) {
+		if (
+			nearest === null ||
+			Math.abs(check - minute) < Math.abs(nearest - minute)
+		) {
+			nearest = check;
+		}
+	}
+	if (
+		nearest !== null &&
+		Math.abs(nearest - minute) <= QUICK_SIM_SWAP_SNAP_MINUTES
+	) {
+		return nearest;
+	}
+	return (
+		Math.round(minute / QUICK_SIM_SWAP_TIME_STEP_MINUTES) *
+		QUICK_SIM_SWAP_TIME_STEP_MINUTES
+	);
+}
+
+/**
+ * 1つの枠の切り替わり点を期間全体で集め、時刻を寄せたうえで整理する。
+ * 同じ時刻に重なった切り替わりは後のものだけを残し（前の区間は長さ 0 になる）、
+ * 前と同じポケモンが続く切り替わりは取り除く。先頭は必ず期間の先頭（0 分）になる。
+ */
+function buildLaneBoundaries(
+	schedule: QuickSimSchedule,
+	laneIndex: number,
+	days: number,
+	existingCheckMinutes: readonly number[],
+): LaneBoundary[] {
+	const boundaries: LaneBoundary[] = [];
+	for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+		const lane = resolveDayLanes(schedule, dayIndex)[laneIndex];
+		const segments =
+			lane.length > 0
+				? lane
+				: [{ pokemonId: null, startMinute: 0, endMinute: MINUTES_PER_DAY }];
+		for (const segment of segments) {
+			const minute = snapBoundaryMinute(
+				dayIndex * MINUTES_PER_DAY + segment.startMinute,
+				existingCheckMinutes,
+			);
+			while (
+				boundaries.length > 0 &&
+				boundaries[boundaries.length - 1].minute >= minute
+			) {
+				boundaries.pop();
+			}
+			const previous = boundaries[boundaries.length - 1];
+			if (previous !== undefined && previous.pokemonId === segment.pokemonId) {
+				continue;
+			}
+			boundaries.push({ minute, pokemonId: segment.pokemonId });
+		}
+	}
+	return boundaries;
+}
+
+/**
  * スケジュールをシミュレーター入力へ変換する。
  *
- * - 初日の各枠の最初の区間の占有者が初期チームになる。
- * - 区間の切り替わり時刻に既存の時間帯があればそこで入れ替え、なければ
- *   その時刻に時間帯を追加して入れ替える。追加した時間帯では入れ替え対象の
- *   ポケモンだけを回収し（清算）、他のポケモンは回収しない設定にする。
- * - 翌日の先頭区間が前日の最終区間と異なるときは、前日の就寝スロットで入れ替える。
+ * - 各枠の期間先頭の占有者が初期チームになる。
+ * - 区間の切り替わり時刻の前後 30 分以内に既存の時間帯があればそこで入れ替え、
+ *   なければ 10 分の倍数に丸めた時刻に時間帯を追加して入れ替える。追加した時間帯は
+ *   入れ替えのある日にだけ置き、入れ替え対象のポケモンだけを回収し（清算）、
+ *   他のポケモンは回収しない設定にする。
+ * - 日の境（就寝時刻）で切り替わる枠は、前日の就寝スロットで入れ替える。
  */
 export function buildQuickSimTimeline(
 	schedule: QuickSimSchedule,
@@ -78,77 +198,107 @@ export function buildQuickSimTimeline(
 ): QuickSimTimeline {
 	const days = clampSimulationDays(simulationDays);
 	const originMinutes = parseTime(schedule.sleepTime);
+	const existingCheckMinutes = collectExistingCheckMinutes(
+		timeSlots,
+		originMinutes,
+		days,
+	);
 	const slotIdByTime = new Map<string, string>();
 	for (const slot of timeSlots) {
 		if (!slotIdByTime.has(slot.time)) {
 			slotIdByTime.set(slot.time, slot.id);
 		}
 	}
-	const insertedSlots: TimeSlot[] = [];
-	const resolveSlotId = (time: string): string => {
+	const insertedSlotByTime = new Map<string, InsertedSlot>();
+	const resolveSlotId = (time: string, dayIndex: number): string => {
 		const existing = slotIdByTime.get(time);
 		if (existing !== undefined) {
 			return existing;
 		}
-		const id = `${QUICK_SIM_SLOT_ID_PREFIX}${time.replace(":", "")}`;
-		insertedSlots.push({ id, time, sleepState: "none", hasMeal: false });
-		slotIdByTime.set(time, id);
-		return id;
+		let inserted = insertedSlotByTime.get(time);
+		if (inserted === undefined) {
+			inserted = {
+				id: `${QUICK_SIM_SLOT_ID_PREFIX}${time.replace(":", "")}`,
+				time,
+				dayIndexes: new Set<number>(),
+			};
+			insertedSlotByTime.set(time, inserted);
+		}
+		inserted.dayIndexes.add(dayIndex);
+		return inserted.id;
 	};
 
-	const team = resolveDayLanes(schedule, 0).map((lane) => {
-		const pokemonId = lane[0]?.pokemonId ?? null;
-		return pokemonId === null ? null : box.getById(pokemonId);
-	});
+	const team: (PokemonBoxItem | null)[] = [];
+	const timedSwaps: { minute: number; swap: PokemonSwap }[] = [];
+	for (let teamSlotIndex = 0; teamSlotIndex < MAX_TEAM_SIZE; teamSlotIndex++) {
+		const boundaries = buildLaneBoundaries(
+			schedule,
+			teamSlotIndex,
+			days,
+			existingCheckMinutes,
+		);
+		const initialPokemonId = boundaries[0]?.pokemonId ?? null;
+		team.push(initialPokemonId === null ? null : box.getById(initialPokemonId));
 
-	const swaps: PokemonSwap[] = [];
-	for (let dayIndex = 0; dayIndex < days; dayIndex++) {
-		const lanes = resolveDayLanes(schedule, dayIndex);
-		const previousLanes =
-			dayIndex === 0 ? null : resolveDayLanes(schedule, dayIndex - 1);
-		lanes.forEach((lane, teamSlotIndex) => {
-			lane.forEach((segment, segmentIndex) => {
-				if (segmentIndex === 0) {
-					if (previousLanes === null) {
-						return;
-					}
-					const previousLane = previousLanes[teamSlotIndex];
-					const previousSegment = previousLane[previousLane.length - 1];
-					if (previousSegment?.pokemonId === segment.pokemonId) {
-						return;
-					}
-					swaps.push({
-						dayIndex: dayIndex - 1,
+		for (const boundary of boundaries.slice(1)) {
+			if (boundary.minute >= days * MINUTES_PER_DAY) {
+				// 期間の末尾に寄った切り替わりは何も変えない
+				continue;
+			}
+			const newPokemonId = toSwapPokemonId(boundary.pokemonId, box);
+			const offset = boundary.minute % MINUTES_PER_DAY;
+			if (offset === 0) {
+				// 日の境（就寝時刻）の切り替わりは前日の就寝スロットで入れ替える
+				timedSwaps.push({
+					minute: boundary.minute,
+					swap: {
+						dayIndex: boundary.minute / MINUTES_PER_DAY - 1,
 						slotId: `${schedule.sleepSlotId}-end`,
 						teamSlotIndex,
-						newPokemonId: toSwapPokemonId(segment.pokemonId, box),
+						newPokemonId,
 						initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
-					});
-					return;
-				}
-				const time = formatTime(
-					(originMinutes + segment.startMinute) % MINUTES_PER_DAY,
-				);
-				swaps.push({
-					dayIndex,
-					slotId: resolveSlotId(time),
-					teamSlotIndex,
-					newPokemonId: toSwapPokemonId(segment.pokemonId, box),
-					initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+					},
 				});
+				continue;
+			}
+			const dayIndex = Math.floor(boundary.minute / MINUTES_PER_DAY);
+			const time = formatTime((originMinutes + offset) % MINUTES_PER_DAY);
+			timedSwaps.push({
+				minute: boundary.minute,
+				swap: {
+					dayIndex,
+					slotId: resolveSlotId(time, dayIndex),
+					teamSlotIndex,
+					newPokemonId,
+					initialEnergy: QUICK_SIM_SWAP_INITIAL_ENERGY,
+				},
 			});
-		});
+		}
 	}
+	timedSwaps.sort(
+		(a, b) =>
+			a.minute - b.minute || a.swap.teamSlotIndex - b.swap.teamSlotIndex,
+	);
+	const swaps = timedSwaps.map((entry) => entry.swap);
 
+	const insertedSlots: TimeSlot[] = [];
 	const noCollectCells: NoCollectCellSetting[] = [];
-	for (const slot of insertedSlots) {
-		for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+	for (const inserted of insertedSlotByTime.values()) {
+		const dayIndexes = [...inserted.dayIndexes].sort((a, b) => a - b);
+		insertedSlots.push({
+			id: inserted.id,
+			time: inserted.time,
+			sleepState: "none",
+			hasMeal: false,
+			dayIndexes,
+		});
+		for (const dayIndex of dayIndexes) {
 			for (
 				let teamSlotIndex = 0;
 				teamSlotIndex < MAX_TEAM_SIZE;
 				teamSlotIndex++
 			) {
-				noCollectCells.push({ dayIndex, slotId: slot.id, teamSlotIndex });
+				noCollectCells.push({ dayIndex, slotId: inserted.id, teamSlotIndex });
 			}
 		}
 	}

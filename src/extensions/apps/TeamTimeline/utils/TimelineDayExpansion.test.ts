@@ -103,6 +103,51 @@ describe("buildExpandedTimeline", () => {
 		]);
 	});
 
+	it("dayIndexes を持つ時間帯はその日にだけ展開する", () => {
+		// 自動シミュが 2 日目だけに追加する入れ替え用のセルを想定
+		const timeSlots: TimeSlot[] = [
+			{ id: "sleep", time: "23:00", sleepState: "sleep", hasMeal: false },
+			{ id: "wake", time: "07:00", sleepState: "wake", hasMeal: false },
+			{
+				id: "quick-swap-0900",
+				time: "09:00",
+				sleepState: "none",
+				hasMeal: false,
+				dayIndexes: [1],
+			},
+		];
+
+		const expanded = buildExpandedTimeline(timeSlots, 3);
+		const ids = expanded.expandedSlots.map((slot) => slot.slot.id);
+		expect(ids).toEqual([
+			"sleep__day0",
+			"wake__day0",
+			"sleep-end__day0",
+			"wake__day1",
+			"quick-swap-0900__day1",
+			"sleep-end__day1",
+			"wake__day2",
+			"sleep-end__day2",
+		]);
+		// 毎日の並び（枠の順序）には含める
+		expect(expanded.baseDaySlots.map((slot) => slot.id)).toEqual([
+			"sleep",
+			"wake",
+			"quick-swap-0900",
+			"sleep-end",
+		]);
+		expect(expanded.slotsByDay.map((slots) => slots.length)).toEqual([3, 3, 2]);
+		// 日内の位置は、その日に実際にあるセルの並びで数える
+		const daySlot = expanded.expandedSlots.find(
+			(slot) => slot.slot.id === "sleep-end__day1",
+		);
+		expect(daySlot?.slotIndexInDay).toBe(2);
+		expect(expanded.dayBands).toEqual([
+			{ afterDisplaySlotId: "sleep-end__day0", dayNumber: 2 },
+			{ afterDisplaySlotId: "sleep-end__day1", dayNumber: 3 },
+		]);
+	});
+
 	it("集計期間が1日のときは日付帯を作らない", () => {
 		const timeSlots: TimeSlot[] = [
 			{ id: "sleep", time: "23:00", sleepState: "sleep", hasMeal: false },

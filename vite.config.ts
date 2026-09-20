@@ -94,7 +94,8 @@ export default defineConfig({
 	test: {
 		globals: true,
 		environment: "jsdom",
-		exclude: [...configDefaults.exclude],
+		// .claude/ holds local worktrees of this repo; never test their copies from the root
+		exclude: [...configDefaults.exclude, "**/.claude/**"],
 	},
 });
 

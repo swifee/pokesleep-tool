@@ -39,12 +39,24 @@ export interface TimeSlot {
 	sleepState: SleepStateLabel;
 	/** 食事フラグ */
 	hasMeal: boolean;
+	/**
+	 * この時間帯がある日（0始まり）。省略時は毎日。
+	 * 自動シミュが特定の日だけに入れ替え用の時間帯を追加するときに使う。
+	 */
+	dayIndexes?: readonly number[];
 
 	// 後方互換性のため残す（オプション）
 	/** @deprecated 旧形式のラベル */
 	label?: TimeSlotLabel;
 	/** @deprecated カスタムラベル */
 	customLabel?: string;
+}
+
+/**
+ * 時間帯が指定した日（0始まり）にあるかどうか。`dayIndexes` のない時間帯は毎日ある。
+ */
+export function isTimeSlotOnDay(slot: TimeSlot, dayIndex: number): boolean {
+	return slot.dayIndexes === undefined || slot.dayIndexes.includes(dayIndex);
 }
 
 /**

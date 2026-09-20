@@ -620,8 +620,8 @@ describe("QuickSimTab", () => {
 			String(DEFAULT_SIMULATION_CONFIG.startDayOfWeek),
 		);
 		expect(table.getAttribute("data-team")).toBe("1|2|null|null|null");
-		// Eevee (1008min) leaves at 23:00 + 1008min = 15:48, where Bulbasaur enters.
-		const insertedSlotId = `${QUICK_SIM_SLOT_ID_PREFIX}1548`;
+		// Eevee (1008min) leaves at 23:00 + 1008min = 15:48, rounded to 15:50, where Bulbasaur enters.
+		const insertedSlotId = `${QUICK_SIM_SLOT_ID_PREFIX}1550`;
 		expect(table.getAttribute("data-slot-ids")).toContain(insertedSlotId);
 		expect(table.getAttribute("data-swaps")).toBe(`0:${insertedSlotId}:1:3`);
 		expect(table.getAttribute("data-no-collect-count")).toBe("5");
@@ -682,7 +682,7 @@ describe("QuickSimTab", () => {
 		expect(multiInput.swaps).toEqual([
 			{
 				dayIndex: 0,
-				slotId: `${QUICK_SIM_SLOT_ID_PREFIX}1548`,
+				slotId: `${QUICK_SIM_SLOT_ID_PREFIX}1550`,
 				teamSlotIndex: 1,
 				newPokemonId: 3,
 				initialEnergy: 100,
@@ -690,7 +690,7 @@ describe("QuickSimTab", () => {
 		]);
 		expect(multiInput.noCollectCells).toHaveLength(5);
 		expect(multiInput.timeSlots.map((slot) => slot.id)).toContain(
-			`${QUICK_SIM_SLOT_ID_PREFIX}1548`,
+			`${QUICK_SIM_SLOT_ID_PREFIX}1550`,
 		);
 
 		// The median trial is re-run in full and the base seed is reported.

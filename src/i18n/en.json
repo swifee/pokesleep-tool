@@ -270,7 +270,7 @@
 			"quick usage exceeded": "The total exceeds {{limit}}%.",
 			"quick usage note": "100% = one slot all day ({{hours}}h). The total can be at most {{limit}}% (5 slots).",
 			"quick schedule title": "Auto swap schedule",
-			"quick schedule note": "Swaps are generated to match the usage. No swaps happen while asleep unless the usage cannot be met otherwise. A swap at a time not in the time slot settings adds a slot at that time, where only the outgoing Pokémon is collected.",
+			"quick schedule note": "Swaps are generated to match the usage. No swaps happen while asleep unless the usage cannot be met otherwise. A swap within 30 minutes of a configured time slot happens at that slot; otherwise a slot is added for that day only at a 10-minute mark, where only the outgoing Pokémon is collected.",
 			"quick sleep swap notice": "Includes swaps during sleep to meet the usage settings.",
 			"quick no sleep slot": "Set both a sleep and a wake slot in the time slot settings.",
 			"quick no members": "Add a member with usage above 0%.",
