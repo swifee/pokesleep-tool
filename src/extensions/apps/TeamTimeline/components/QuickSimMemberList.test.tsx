@@ -191,7 +191,7 @@ describe("QuickSimMemberList", () => {
 		fireEvent.mouseDown(within(partial).getByRole("combobox"));
 		expect(
 			screen.getAllByRole("option").map((option) => option.textContent),
-		).toEqual(["均等", "前半", "後半", "睡眠", "日中", "空き"]);
+		).toEqual(["均等", "前半", "後半", "睡眠", "日中", "残り"]);
 		fireEvent.click(screen.getByRole("option", { name: "睡眠" }));
 		expect(onChange).toHaveBeenLastCalledWith([
 			member(pikachu.id, 100),
@@ -201,7 +201,7 @@ describe("QuickSimMemberList", () => {
 
 		// The remainder mode is selectable like any other.
 		fireEvent.mouseDown(within(partial).getByRole("combobox"));
-		fireEvent.click(screen.getByRole("option", { name: "空き" }));
+		fireEvent.click(screen.getByRole("option", { name: "残り" }));
 		expect(onChange).toHaveBeenLastCalledWith([
 			member(pikachu.id, 100),
 			member(eevee.id, 40, "remainder"),
