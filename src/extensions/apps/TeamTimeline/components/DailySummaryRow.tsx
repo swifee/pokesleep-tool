@@ -38,6 +38,8 @@ interface DailySummaryRowProps {
 }
 
 const SUMMARY_CARD_WIDTH = 96;
+/** きのみゾーンEPの行を表示する最小値（1未満は表示しない） */
+const MIN_VISIBLE_BERRY_ZONE_EP = 1;
 
 interface SkillIngredientPopoverTriggerProps {
 	countLabel: string;
@@ -207,6 +209,9 @@ const DailySummaryRow = React.memo(
 						);
 						const skillEP = convertByMode(summary.skillEP);
 						const berryEP = convertByMode(summary.berryEP);
+						const berryZoneEP = convertByMode(summary.berryZoneEP ?? 0);
+						const shouldShowBerryZoneEP =
+							berryZoneEP >= MIN_VISIBLE_BERRY_ZONE_EP;
 						const ingredientEP = convertByMode(summary.ingredientEP);
 						const totalEP = convertByMode(summary.totalEP);
 						const totalSkillOverflowCount = convertByMode(
@@ -298,6 +303,18 @@ const DailySummaryRow = React.memo(
 												data-testid={`daily-summary-ep-icon-ingredient-${summary.pokemonId}`}
 											/>
 											<EpValue value={formatSummaryEp(ingredientEP)} />
+										</EPLine>
+									)}
+									{shouldShowBerryZoneEP && (
+										<EPLine
+											data-testid={`daily-summary-ep-berry-zone-${summary.pokemonId}`}
+											title="きのみゾーン"
+										>
+											<TeamTimelineIcon
+												name="berry_zone"
+												data-testid={`daily-summary-ep-icon-berry-zone-${summary.pokemonId}`}
+											/>
+											<EpValue value={formatSummaryEp(berryZoneEP)} />
 										</EPLine>
 									)}
 									<Divider />

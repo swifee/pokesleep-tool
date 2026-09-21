@@ -115,6 +115,7 @@ type DailyAccumulator = {
 	berryEP: number;
 	ingredientEP: number;
 	skillEP: number;
+	berryZoneEP: number;
 	totalEP: number;
 	totalDirectSkillEP: number;
 	totalPresentCandyCount: number;
@@ -146,6 +147,7 @@ export type AggregationState = {
 		totalHugeMagoBerryEP: number;
 		totalIngredientEP: number;
 		totalSkillEP: number;
+		totalBerryZoneEP: number;
 		grandTotalEP: number;
 		totalPresentCandyCount: number;
 		totalCookingPotCapacityIncrease: number;
@@ -175,6 +177,7 @@ export function createAggregationState(): AggregationState {
 			totalHugeMagoBerryEP: 0,
 			totalIngredientEP: 0,
 			totalSkillEP: 0,
+			totalBerryZoneEP: 0,
 			grandTotalEP: 0,
 			totalPresentCandyCount: 0,
 			totalCookingPotCapacityIncrease: 0,
@@ -235,6 +238,7 @@ function accumulateDailySummary(
 			berryEP: 0,
 			ingredientEP: 0,
 			skillEP: 0,
+			berryZoneEP: 0,
 			totalEP: 0,
 			totalDirectSkillEP: 0,
 			totalPresentCandyCount: 0,
@@ -255,6 +259,7 @@ function accumulateDailySummary(
 	acc.berryEP += dailySummary.berryEP;
 	acc.ingredientEP += dailySummary.ingredientEP;
 	acc.skillEP += dailySummary.skillEP;
+	acc.berryZoneEP += dailySummary.berryZoneEP ?? 0;
 	acc.totalEP += dailySummary.totalEP;
 	acc.totalDirectSkillEP += dailySummary.totalDirectSkillEP;
 	acc.totalPresentCandyCount += dailySummary.totalPresentCandyCount;
@@ -285,6 +290,7 @@ function accumulateTeamSummary(
 	state.teamAcc.totalHugeMagoBerryEP += teamSummary.totalHugeMagoBerryEP ?? 0;
 	state.teamAcc.totalIngredientEP += teamSummary.totalIngredientEP;
 	state.teamAcc.totalSkillEP += teamSummary.totalSkillEP;
+	state.teamAcc.totalBerryZoneEP += teamSummary.totalBerryZoneEP ?? 0;
 	state.teamAcc.grandTotalEP += teamSummary.grandTotalEP;
 	state.teamAcc.totalPresentCandyCount += teamSummary.totalPresentCandyCount;
 	state.teamAcc.totalCookingPotCapacityIncrease +=
@@ -400,6 +406,7 @@ function mergeDailyAccumulator(
 	target.berryEP += source.berryEP;
 	target.ingredientEP += source.ingredientEP;
 	target.skillEP += source.skillEP;
+	target.berryZoneEP += source.berryZoneEP;
 	target.totalEP += source.totalEP;
 	target.totalDirectSkillEP += source.totalDirectSkillEP;
 	target.totalPresentCandyCount += source.totalPresentCandyCount;
@@ -449,6 +456,7 @@ export function mergeAggregationStates(
 	teamTarget.totalHugeMagoBerryEP += teamSource.totalHugeMagoBerryEP;
 	teamTarget.totalIngredientEP += teamSource.totalIngredientEP;
 	teamTarget.totalSkillEP += teamSource.totalSkillEP;
+	teamTarget.totalBerryZoneEP += teamSource.totalBerryZoneEP;
 	teamTarget.grandTotalEP += teamSource.grandTotalEP;
 	teamTarget.totalPresentCandyCount += teamSource.totalPresentCandyCount;
 	teamTarget.totalCookingPotCapacityIncrease +=
@@ -637,6 +645,7 @@ function finalizeAverages(
 			berryEP: Math.round(acc.berryEP / n),
 			ingredientEP: Math.round(acc.ingredientEP / n),
 			skillEP: Math.round(acc.skillEP / n),
+			berryZoneEP: Math.round(acc.berryZoneEP / n),
 			totalEP: Math.round(acc.totalEP / n),
 			totalDirectSkillEP: Math.round(acc.totalDirectSkillEP / n),
 			totalPresentCandyCount: roundToSingleDecimal(
@@ -666,6 +675,7 @@ function finalizeAverages(
 		totalHugeMagoBerryEP: Math.round(state.teamAcc.totalHugeMagoBerryEP / n),
 		totalIngredientEP: Math.round(state.teamAcc.totalIngredientEP / n),
 		totalSkillEP: Math.round(state.teamAcc.totalSkillEP / n),
+		totalBerryZoneEP: Math.round(state.teamAcc.totalBerryZoneEP / n),
 		grandTotalEP: Math.round(state.teamAcc.grandTotalEP / n),
 		totalPresentCandyCount: roundToSingleDecimal(
 			state.teamAcc.totalPresentCandyCount / n,

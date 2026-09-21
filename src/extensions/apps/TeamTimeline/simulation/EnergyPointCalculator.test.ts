@@ -1100,6 +1100,83 @@ describe("きのみゾーンのきのみEP", () => {
 
 		expect(summary.berryEP).toBe(calculateBerryEP(pokemon, 20, bonusContext));
 	});
+
+	it("きのみゾーンで上がった分はきのみEP・スキルEPから差し引かれる", () => {
+		const iv = new PokemonIv({ pokemonName: "Natu", level: 1 });
+		const pokemon = new PokemonBoxItem(iv);
+		const baseStrength = calculateBerryStrength(
+			pokemon.iv.pokemon.type,
+			pokemon.iv.level,
+		);
+		const boostedEP = Math.ceil(baseStrength * 1.5) * 10;
+		const berryBonusEP = boostedEP - baseStrength * 10;
+		const results = [
+			createSlotResult({
+				slotId: "slot-1",
+				berryCount: 10,
+				berryZoneMultiplier: 1.5,
+				berryZoneBerryBonusEP: berryBonusEP,
+				directSkillEP: 1000,
+				berryZoneSkillBonusEP: 120,
+			}),
+		];
+
+		const summary = calculateDailySummary(1, pokemon, results, bonusContext);
+
+		expect(summary.berryEP).toBe(baseStrength * 10);
+		expect(summary.skillEP).toBe(880);
+		expect(summary.totalDirectSkillEP).toBe(1000);
+		expect(summary.berryZoneEP).toBe(0);
+		expect(summary.totalEP).toBe(baseStrength * 10 + 880);
+	});
+
+	it("付け替えられたきのみゾーンEPは合計EPに加算される", () => {
+		const iv = new PokemonIv({ pokemonName: "Mewtwo", level: 1 });
+		const pokemon = new PokemonBoxItem(iv);
+		const results = [
+			createSlotResult({ slotId: "slot-1", directSkillEP: 1408 }),
+		];
+
+		const summary = calculateDailySummary(
+			1,
+			pokemon,
+			results,
+			bonusContext,
+			345,
+		);
+
+		expect(summary.berryZoneEP).toBe(345);
+		expect(summary.skillEP).toBe(1408);
+		expect(summary.totalEP).toBe(1408 + 345);
+	});
+
+	it("チーム合計にきのみゾーンEPを集計して総合計へ含める", () => {
+		const iv = new PokemonIv({ pokemonName: "Mewtwo", level: 1 });
+		const pokemon = new PokemonBoxItem(iv);
+		const mewtwo = calculateDailySummary(
+			1,
+			pokemon,
+			[createSlotResult({ slotId: "slot-1", directSkillEP: 1408 })],
+			bonusContext,
+			345,
+		);
+		const natu = calculateDailySummary(
+			2,
+			new PokemonBoxItem(new PokemonIv({ pokemonName: "Natu", level: 1 })),
+			[createSlotResult({ slotId: "slot-1", pokemonId: 2, berryCount: 5 })],
+			bonusContext,
+		);
+
+		const teamSummary = calculateTeamSummary([mewtwo, natu]);
+
+		expect(teamSummary.totalBerryZoneEP).toBe(345);
+		expect(teamSummary.grandTotalEP).toBe(
+			teamSummary.totalBerryEP +
+				teamSummary.totalIngredientEP +
+				teamSummary.totalSkillEP +
+				345,
+		);
+	});
 });
 
 describe("とてもおおきなマゴのみのEP", () => {

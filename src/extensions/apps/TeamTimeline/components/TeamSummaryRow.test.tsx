@@ -262,6 +262,41 @@ describe("TeamSummaryRow", () => {
 		).not.toBe(0);
 	});
 
+	it("shows the berry zone EP item after cooking only when it is 1 or more", () => {
+		const { rerender } = render(
+			<TeamSummaryRow
+				teamSummary={{
+					...TEAM_SUMMARY_WITH_COOKING,
+					totalBerryZoneEP: 850,
+					grandTotalEP: 7250,
+				}}
+				layoutMode="details"
+			/>,
+		);
+
+		const zoneItem = screen.getByTestId("team-summary-ep-item-berry-zone");
+		expect(zoneItem.textContent).toContain("850");
+		expect(screen.getByTestId("team-summary-ep-icon-berry-zone")).toBeDefined();
+		const cookingItem = screen.getByTestId("team-summary-ep-item-cooking");
+		expect(
+			cookingItem.compareDocumentPosition(zoneItem) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).not.toBe(0);
+
+		rerender(
+			<TeamSummaryRow
+				teamSummary={{ ...TEAM_SUMMARY, totalBerryZoneEP: 0.6 }}
+				layoutMode="details"
+			/>,
+		);
+		expect(screen.queryByTestId("team-summary-ep-item-berry-zone")).toBeNull();
+
+		rerender(
+			<TeamSummaryRow teamSummary={TEAM_SUMMARY} layoutMode="details" />,
+		);
+		expect(screen.queryByTestId("team-summary-ep-item-berry-zone")).toBeNull();
+	});
+
 	it("always keeps top 3 ingredients visible and groups only low ingredients after 4th item", () => {
 		render(
 			<TeamSummaryRow

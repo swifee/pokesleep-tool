@@ -147,7 +147,7 @@ describe("TimelineSimulator きのみゾーン（サイコブレイク）", () =
 		);
 	});
 
-	it("展開中はマゴのみのきのみEPが上がり、他タイプは変わらない", () => {
+	it("展開中はマゴのみのきのみEPが上がり、上がった分はミュウツーのきのみゾーンEPになる", () => {
 		const natu = createNatu();
 		const pikachu = createPikachu();
 		const withoutZone = simulate([null, natu, pikachu, null, null]);
@@ -165,17 +165,80 @@ describe("TimelineSimulator きのみゾーン（サイコブレイク）", () =
 		const pikachuAfter = withZone.dailySummaries.find(
 			(summary) => summary.pokemonId === PIKACHU_ID,
 		);
+		const mewtwo = withZone.dailySummaries.find(
+			(summary) => summary.pokemonId === MEWTWO_ID,
+		);
 
 		// 乱数列はポケモンごとに固定なので、きのみの個数は同じ
 		expect(natuAfter?.totalBerryCount).toBe(natuBefore?.totalBerryCount);
 		expect(pikachuAfter?.totalBerryCount).toBe(pikachuBefore?.totalBerryCount);
 		expect(natuBefore?.berryEP).toBeGreaterThan(0);
-		expect(natuAfter?.berryEP).toBeGreaterThan(natuBefore?.berryEP ?? 0);
+
+		// 上がった分はネイティのきのみEPには残らず、ミュウツーのきのみゾーンEPに付け替わる
+		const natuSlots = collectResults(withZone.slotResults, NATU_ID);
+		const natuBonusEP = sum(
+			natuSlots,
+			(slot) => slot.berryZoneBerryBonusEP ?? 0,
+		);
+		expect(natuBonusEP).toBeGreaterThan(0);
+		expect(natuAfter?.berryEP).toBe(natuBefore?.berryEP);
+		expect(natuAfter?.totalEP).toBe(natuBefore?.totalEP);
 		expect(pikachuAfter?.berryEP).toBe(pikachuBefore?.berryEP);
 		expect(
 			collectResults(withZone.slotResults, PIKACHU_ID).every(
-				(slot) => slot.berryZoneMultiplier === 1,
+				(slot) =>
+					slot.berryZoneMultiplier === 1 &&
+					(slot.berryZoneBerryBonusEP ?? 0) === 0,
 			),
+		).toBe(true);
+
+		// ミュウツー自身のマゴのみの上昇分も含めて、チーム全体の上昇分がミュウツーに集まる
+		const teamBonusEP = [...withZone.slotResults.values()]
+			.flat()
+			.reduce(
+				(total, slot) =>
+					total +
+					(slot.berryZoneBerryBonusEP ?? 0) +
+					(slot.berryZoneSkillBonusEP ?? 0),
+				0,
+			);
+		expect(mewtwo?.berryZoneEP).toBeCloseTo(teamBonusEP, 6);
+		expect(mewtwo?.berryZoneEP).toBeGreaterThanOrEqual(natuBonusEP);
+		expect(mewtwo?.totalEP).toBeCloseTo(
+			(mewtwo?.berryEP ?? 0) +
+				(mewtwo?.ingredientEP ?? 0) +
+				(mewtwo?.skillEP ?? 0) +
+				(mewtwo?.berryZoneEP ?? 0),
+			6,
+		);
+
+		// チーム合計にもきのみゾーンEPが入り、総合計と整合する
+		const teamSummary = withZone.teamSummary;
+		expect(teamSummary.totalBerryZoneEP).toBeCloseTo(teamBonusEP, 6);
+		expect(teamSummary.grandTotalEP).toBeCloseTo(
+			teamSummary.totalBerryEP +
+				teamSummary.totalIngredientEP +
+				teamSummary.totalSkillEP +
+				(teamSummary.totalBerryZoneEP ?? 0),
+			6,
+		);
+	});
+
+	it("きのみゾーンが展開されないときはきのみゾーンEPが 0 になる", () => {
+		const result = simulate([null, createNatu(), createPikachu(), null, null]);
+
+		for (const summary of result.dailySummaries) {
+			expect(summary.berryZoneEP).toBe(0);
+		}
+		expect(result.teamSummary.totalBerryZoneEP).toBe(0);
+		expect(
+			[...result.slotResults.values()]
+				.flat()
+				.every(
+					(slot) =>
+						(slot.berryZoneBerryBonusEP ?? 0) === 0 &&
+						(slot.berryZoneSkillBonusEP ?? 0) === 0,
+				),
 		).toBe(true);
 	});
 
@@ -209,5 +272,26 @@ describe("TimelineSimulator きのみゾーン（サイコブレイク）", () =
 		expect(
 			natuResults[natuResults.length - 1]?.berryZoneMultiplier,
 		).toBeCloseTo(1 + lastRate / 100, 10);
+
+		// 入れ替え後に上がった分も、ゾーンを展開したミュウツーのきのみゾーンEPになる
+		const teamBonusEP = [...result.slotResults.values()]
+			.flat()
+			.reduce(
+				(total, slot) =>
+					total +
+					(slot.berryZoneBerryBonusEP ?? 0) +
+					(slot.berryZoneSkillBonusEP ?? 0),
+				0,
+			);
+		const mewtwoSummary = result.dailySummaries.find(
+			(summary) => summary.pokemonId === MEWTWO_ID,
+		);
+		expect(teamBonusEP).toBeGreaterThan(0);
+		expect(mewtwoSummary?.berryZoneEP).toBeCloseTo(teamBonusEP, 6);
+		expect(
+			result.dailySummaries
+				.filter((summary) => summary.pokemonId !== MEWTWO_ID)
+				.every((summary) => summary.berryZoneEP === 0),
+		).toBe(true);
 	});
 });

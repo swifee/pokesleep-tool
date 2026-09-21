@@ -5,6 +5,7 @@ export type TeamTimelineIconName =
 	| "bag"
 	| "berry"
 	| "berry_huge"
+	| "berry_zone"
 	| "change"
 	| "cooking"
 	| "dream"
@@ -62,6 +63,28 @@ export const BerryHugeIcon = React.memo((props: SvgIconProps) => (
 			fill="#E5559E"
 		/>
 		<circle cx="66" cy="108" r="18" fill="#FFB3D9" />
+	</SvgIcon>
+));
+
+/**
+ * きのみゾーン（サイコブレイク）のアイコン。
+ * ゾーン（楕円）の上に、辺の内側にカーブしたひし形（きのみエナジーの上昇）を置く。
+ */
+export const BerryZoneIcon = React.memo((props: SvgIconProps) => (
+	<SvgIcon {...props} viewBox="0 0 200 200">
+		<ellipse
+			cx="100"
+			cy="152"
+			rx="80"
+			ry="28"
+			fill="none"
+			stroke="#FF7F00"
+			strokeWidth="18"
+		/>
+		<path
+			d="M100 8 Q112 76 156 88 Q112 100 100 152 Q88 100 44 88 Q88 76 100 8 Z"
+			fill="#FF7F00"
+		/>
 	</SvgIcon>
 ));
 
@@ -228,6 +251,8 @@ const TeamTimelineIcon = React.memo(
 				return <BerryIcon {...props} />;
 			case "berry_huge":
 				return <BerryHugeIcon {...props} />;
+			case "berry_zone":
+				return <BerryZoneIcon {...props} />;
 			case "change":
 				return <ChangeIcon {...props} />;
 			case "cooking":

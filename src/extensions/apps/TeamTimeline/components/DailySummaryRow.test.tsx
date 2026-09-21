@@ -412,6 +412,79 @@ describe("DailySummaryRow", () => {
 		).not.toBe(0);
 	});
 
+	it("shows the berry zone EP line below berry/skill/cooking only when it is 1 or more", () => {
+		const items = [
+			createPokemon("Mewtwo", 50, "ZoneMon"),
+			createPokemon("Natu", 30, "NoZoneMon"),
+			createPokemon("Pikachu", 30, "TinyZoneMon"),
+		];
+		const box = new PokemonBox(items);
+		const summaries = [
+			{ ...createDailySummary(items[0].id, 1), berryZoneEP: 1234 },
+			{ ...createDailySummary(items[1].id, 1), berryZoneEP: 0 },
+			{ ...createDailySummary(items[2].id, 1), berryZoneEP: 0.4 },
+		];
+
+		render(
+			<DailySummaryRow
+				dailySummaries={summaries}
+				box={box}
+				layoutMode="details"
+			/>,
+		);
+
+		const zoneLine = screen.getByTestId(
+			`daily-summary-ep-berry-zone-${items[0].id}`,
+		);
+		expect(zoneLine.textContent).toContain("1,234");
+		expect(
+			screen.getByTestId(`daily-summary-ep-icon-berry-zone-${items[0].id}`),
+		).toBeDefined();
+		const cookingLine = screen.getByTestId(
+			`daily-summary-ep-ingredient-${items[0].id}`,
+		);
+		expect(
+			cookingLine.compareDocumentPosition(zoneLine) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).not.toBe(0);
+		expect(
+			screen.queryByTestId(`daily-summary-ep-berry-zone-${items[1].id}`),
+		).toBeNull();
+		expect(
+			screen.queryByTestId(`daily-summary-ep-berry-zone-${items[2].id}`),
+		).toBeNull();
+	});
+
+	it("converts berry zone EP by dailyAverage and hides it when the converted value drops below 1", () => {
+		const items = [
+			createPokemon("Mewtwo", 50, "AvgZone"),
+			createPokemon("Natu", 30, "AvgTiny"),
+		];
+		const box = new PokemonBox(items);
+		const summaries = [
+			{ ...createDailySummary(items[0].id, 1), berryZoneEP: 700 },
+			{ ...createDailySummary(items[1].id, 1), berryZoneEP: 3 },
+		];
+
+		render(
+			<DailySummaryRow
+				dailySummaries={summaries}
+				box={box}
+				layoutMode="details"
+				simulationDays={7}
+				valueMode="dailyAverage"
+			/>,
+		);
+
+		expect(
+			screen.getByTestId(`daily-summary-ep-berry-zone-${items[0].id}`)
+				.textContent,
+		).toContain("100");
+		expect(
+			screen.queryByTestId(`daily-summary-ep-berry-zone-${items[1].id}`),
+		).toBeNull();
+	});
+
 	it("renders skill_none overflow icon with same size as skill icon and keeps overflow count text style", () => {
 		const items = [createPokemon("Pikachu", 20, "OverflowSkillMon")];
 		const box = new PokemonBox(items);

@@ -34,6 +34,8 @@ import SummaryValueModeToggle from "./SummaryValueModeToggle";
 import TeamTimelineIcon from "./TimelineIcons";
 
 const MEALS_PER_DAY = 3;
+/** きのみゾーンEPの項目を表示する最小値（1未満は表示しない） */
+const MIN_VISIBLE_BERRY_ZONE_EP = 1;
 
 function buildCookingDayKey(
 	daySummary: NonNullable<CookingSimulationResult["dailySummaries"][number]>,
@@ -155,6 +157,8 @@ const TeamSummaryRow = React.memo(
 		const totalBerryEP = convertByMode(teamSummary.totalBerryEP);
 		const totalIngredientEP = convertByMode(teamSummary.totalIngredientEP);
 		const totalSkillEP = convertByMode(teamSummary.totalSkillEP);
+		const totalBerryZoneEP = convertByMode(teamSummary.totalBerryZoneEP ?? 0);
+		const shouldShowBerryZoneEP = totalBerryZoneEP >= MIN_VISIBLE_BERRY_ZONE_EP;
 		const grandTotalEP = convertByMode(teamSummary.grandTotalEP);
 		const totalPresentCandyCount = convertByMode(
 			teamSummary.totalPresentCandyCount,
@@ -260,6 +264,18 @@ const TeamSummaryRow = React.memo(
 								/>
 								<EpValue value={summaryEpValue} />
 							</EPItem>
+							{shouldShowBerryZoneEP && (
+								<EPItem
+									data-testid="team-summary-ep-item-berry-zone"
+									title="きのみゾーン"
+								>
+									<TeamTimelineIcon
+										name="berry_zone"
+										data-testid="team-summary-ep-icon-berry-zone"
+									/>
+									<EpValue value={formatSummaryEp(totalBerryZoneEP)} />
+								</EPItem>
+							)}
 						</EPLine>
 						<TotalLine>
 							total <EpValue value={formatSummaryEp(grandTotalEP)} />
