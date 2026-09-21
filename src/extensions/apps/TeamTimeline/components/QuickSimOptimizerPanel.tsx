@@ -26,7 +26,6 @@ import {
 	type QuickSimOptimizerEvaluatorHandle,
 } from "../simulation/QuickSimOptimizerWorkerPool";
 import type { CookingSimulationSettings } from "../types/CookingTypes";
-import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import {
 	DEFAULT_QUICK_SIM_OPTIMIZER_TARGET,
 	isQuickSimOptimizerMemberCountSupported,
@@ -80,7 +79,6 @@ interface QuickSimOptimizerPanelProps {
 	simulationConfig: SimulationConfig;
 	bonusSettings: TimelineBonusSettings;
 	cookingSettings: CookingSimulationSettings;
-	provisionalSettings: ProvisionalSettings;
 	seedMode: "random" | "fixed";
 	/** 時間帯設定に就寝と起床があり、スケジュールを作れるか */
 	hasSleepSlot: boolean;
@@ -244,7 +242,6 @@ function buildOptimizerSignature(input: {
 	simulationConfig: SimulationConfig;
 	bonusSettings: TimelineBonusSettings;
 	cookingSettings: CookingSimulationSettings;
-	provisionalSettings: ProvisionalSettings;
 	ingredientSettings: QuickSimIngredientSearchSettings;
 }): string {
 	const includesIngredients = optimizerTargetIncludesIngredients(input.target);
@@ -257,7 +254,6 @@ function buildOptimizerSignature(input: {
 		cookingSettings: includesIngredients
 			? { ...input.cookingSettings, initialIngredients: {} }
 			: input.cookingSettings,
-		provisionalSettings: input.provisionalSettings,
 		ingredientSettings: includesIngredients ? input.ingredientSettings : null,
 	});
 }
@@ -316,7 +312,6 @@ export default function QuickSimOptimizerPanel({
 	simulationConfig,
 	bonusSettings,
 	cookingSettings,
-	provisionalSettings,
 	seedMode,
 	hasSleepSlot,
 	onApply,
@@ -377,7 +372,6 @@ export default function QuickSimOptimizerPanel({
 				simulationConfig,
 				bonusSettings,
 				cookingSettings,
-				provisionalSettings,
 				ingredientSettings,
 			}),
 		[
@@ -387,7 +381,6 @@ export default function QuickSimOptimizerPanel({
 			simulationConfig,
 			bonusSettings,
 			cookingSettings,
-			provisionalSettings,
 			ingredientSettings,
 		],
 	);
@@ -521,7 +514,6 @@ export default function QuickSimOptimizerPanel({
 			simulationConfig,
 			bonusSettings,
 			cookingSettings,
-			provisionalSettings,
 			strengthParameter:
 				buildStrengthParameterFromTimelineBonusSettings(bonusSettings),
 		};
@@ -610,7 +602,6 @@ export default function QuickSimOptimizerPanel({
 		simulationConfig,
 		bonusSettings,
 		cookingSettings,
-		provisionalSettings,
 		exclusiveGroups,
 		seedMode,
 		ingredientSettings,

@@ -18,7 +18,6 @@
 import type PokemonBox from "../../../../util/PokemonBox";
 import type { StrengthParameter } from "../../../../util/PokemonStrength";
 import type { CookingSimulationSettings } from "../types/CookingTypes";
-import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type {
 	QuickSimCandidateEvaluation,
 	QuickSimIngredientEvaluation,
@@ -64,7 +63,6 @@ export interface QuickSimEvaluatorContext {
 	simulationConfig: SimulationConfig;
 	bonusSettings: TimelineBonusSettings;
 	cookingSettings: CookingSimulationSettings;
-	provisionalSettings: ProvisionalSettings;
 	/**
 	 * ボーナス設定から構築済みの StrengthParameter。
 	 * Web Worker では localStorage を読めないので、メインスレッドで作って渡す。
@@ -224,7 +222,6 @@ export class QuickSimEvaluator
 			noCollectCells: timeline.noCollectCells,
 			box: this.context.box,
 			cookingSettings,
-			provisionalSettings: this.context.provisionalSettings,
 			strengthParameter: this.context.strengthParameter,
 			analysisOptions: { perPokemonRandomStreams: true },
 		};

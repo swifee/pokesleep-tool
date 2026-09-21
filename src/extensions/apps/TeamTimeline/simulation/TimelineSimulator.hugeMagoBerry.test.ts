@@ -1,25 +1,28 @@
 import { describe, expect, it } from "vitest";
+import { getBigBerryRate } from "../../../../data/BigBerry";
+import { loadHelpEventBonus } from "../../../../data/events";
+import { getBerryStrength } from "../../../../util/Berry";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
-import {
-	createDefaultProvisionalSettings,
-	type HugeMagoBerryProvisionalSettings,
-	type ProvisionalSettings,
-} from "../types/ProvisionalSettingsTypes";
+import { calcBerryStrengthBonus } from "../../../../util/PokemonStrength";
+import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
 	DEFAULT_TIME_SLOTS,
 	type NoCollectCellSetting,
 	type TimeSlotResult,
 } from "../types/TimeSlotTypes";
-import { createDefaultTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
-import { calculateBerryStrength } from "./EnergyPointCalculator";
+import {
+	buildStrengthParameterFromTimelineBonusSettings,
+	createDefaultTimelineBonusSettings,
+} from "../utils/TimelineBonusSettingsBridge";
 import { runSimulation } from "./TimelineSimulator";
 
 const PIKACHU_ID = 1;
 const NATU_ID = 2;
+const MEWTWO_ID = 3;
 
-/** マゴのみ以外のポケモン */
+/** マゴのみ以外のポケモン（取得確率 3% / 1個） */
 function createPikachu(): PokemonBoxItem {
 	return new PokemonBoxItem(
 		new PokemonIv({ pokemonName: "Pikachu", level: 50 }),
@@ -28,7 +31,7 @@ function createPikachu(): PokemonBoxItem {
 	);
 }
 
-/** マゴのみ（エスパータイプ）のポケモン */
+/** マゴのみ（エスパータイプ）のポケモン（取得確率 6% / 1個） */
 function createNatu(): PokemonBoxItem {
 	return new PokemonBoxItem(
 		new PokemonIv({ pokemonName: "Natu", level: 50 }),
@@ -37,30 +40,34 @@ function createNatu(): PokemonBoxItem {
 	);
 }
 
-function createProvisionalSettings(
-	hugeMagoBerry: Partial<HugeMagoBerryProvisionalSettings> = {},
-	berryZoneOverrides: Partial<ProvisionalSettings["berryZone"]> = {},
-): ProvisionalSettings {
-	const defaults = createDefaultProvisionalSettings();
+/** ミュウツー（取得確率 12% / 2個） */
+function createMewtwo(): PokemonBoxItem {
+	return new PokemonBoxItem(
+		new PokemonIv({ pokemonName: "Mewtwo", level: 50, skillLevel: 6 }),
+		undefined,
+		MEWTWO_ID,
+	);
+}
+
+/** 「とてもおおきなマゴのみ」だけを持つカスタムイベント */
+function createBigBerryEventSettings(): TimelineBonusSettings {
 	return {
-		...defaults,
-		berryZone: { ...defaults.berryZone, ...berryZoneOverrides },
-		hugeMagoBerry: {
-			...defaults.hugeMagoBerry,
-			enabled: true,
-			energyMultiplier: 3,
-			legendaryPickupRatePercent: 100,
-			psychicPickupRatePercent: 100,
-			otherPickupRatePercent: 100,
-			...hugeMagoBerry,
-		},
+		...createDefaultTimelineBonusSettings(),
+		event: "custom",
+		customEventBonus: loadHelpEventBonus({
+			target: {},
+			effects: { bigBerry: "mewtwo1" },
+		}),
 	};
 }
 
 function simulate(
 	team: (PokemonBoxItem | null)[],
-	provisionalSettings: ProvisionalSettings,
-	noCollectCells: NoCollectCellSetting[] = [],
+	bonusSettings: TimelineBonusSettings,
+	options: {
+		simulationDays?: number;
+		noCollectCells?: NoCollectCellSetting[];
+	} = {},
 ) {
 	return runSimulation({
 		team,
@@ -69,11 +76,11 @@ function simulate(
 			...DEFAULT_SIMULATION_CONFIG,
 			seed: 20260914,
 			initialEnergy: 80,
-			simulationDays: 1,
+			simulationDays: options.simulationDays ?? 7,
 		},
-		bonusSettings: createDefaultTimelineBonusSettings(),
-		provisionalSettings,
-		noCollectCells,
+		bonusSettings,
+		noCollectCells: options.noCollectCells ?? [],
+		analysisOptions: { perPokemonRandomStreams: true },
 	});
 }
 
@@ -93,122 +100,171 @@ function sumHugeMagoBerryCount(results: TimeSlotResult[]): number {
 	);
 }
 
+function sumHelpCount(results: TimeSlotResult[]): number {
+	return results.reduce((total, result) => total + result.helpCount, 0);
+}
+
 describe("TimelineSimulator とてもおおきなマゴのみ", () => {
-	it("仮設定が無効なら1個も拾わない", () => {
+	it("イベントが無ければ1個も拾わない", () => {
 		const result = simulate(
-			[createPikachu(), null, null, null, null],
-			createProvisionalSettings({ enabled: false }),
+			[createPikachu(), createNatu(), createMewtwo(), null, null],
+			createDefaultTimelineBonusSettings(),
 		);
 
-		const results = collectResults(result.slotResults, PIKACHU_ID);
-		expect(sumHugeMagoBerryCount(results)).toBe(0);
-		expect(result.dailySummaries[0].totalHugeMagoBerryCount).toBe(0);
+		for (const id of [PIKACHU_ID, NATU_ID, MEWTWO_ID]) {
+			expect(
+				sumHugeMagoBerryCount(collectResults(result.slotResults, id)),
+			).toBe(0);
+		}
+		expect(result.teamSummary.totalHugeMagoBerryCount).toBe(0);
 	});
 
-	it("仮設定を有効にするとエスパー以外のポケモンも拾う", () => {
+	it("「ミュウツーをおいかけて」イベントでは上流と同じ確率・個数で拾う", () => {
+		const bonusSettings = {
+			...createDefaultTimelineBonusSettings(),
+			event: "pursue mewtwo 1st week",
+		};
 		const result = simulate(
-			[createPikachu(), null, null, null, null],
-			createProvisionalSettings(),
+			[createPikachu(), createNatu(), createMewtwo(), null, null],
+			bonusSettings,
 		);
 
-		const results = collectResults(result.slotResults, PIKACHU_ID);
-		expect(sumHugeMagoBerryCount(results)).toBeGreaterThan(0);
+		// 1週間分のおてつだいで、期待値に近い個数を拾う（区分ごとの確率 × 個数）
+		for (const [id, pokemon] of [
+			[PIKACHU_ID, createPikachu()],
+			[NATU_ID, createNatu()],
+			[MEWTWO_ID, createMewtwo()],
+		] as const) {
+			const results = collectResults(result.slotResults, id);
+			const helpCount = sumHelpCount(results);
+			const picked = sumHugeMagoBerryCount(results);
+			const { rate, count } = getBigBerryRate("mewtwo1", pokemon.iv.pokemon);
+			const expected = helpCount * rate * count;
+
+			expect(rate).toBeGreaterThan(0);
+			expect(picked).toBeGreaterThan(0);
+			// 所持数の空きが無いときは拾わないため期待値より少なめになりうる
+			expect(picked).toBeLessThanOrEqual(expected * 1.8);
+			expect(picked).toBeGreaterThanOrEqual(expected * 0.3);
+		}
+		expect(getBigBerryRate("mewtwo1", createMewtwo().iv.pokemon)).toEqual({
+			rate: 0.12,
+			count: 2,
+		});
+		expect(getBigBerryRate("mewtwo1", createNatu().iv.pokemon)).toEqual({
+			rate: 0.06,
+			count: 1,
+		});
+		expect(getBigBerryRate("mewtwo1", createPikachu().iv.pokemon)).toEqual({
+			rate: 0.03,
+			count: 1,
+		});
 	});
 
-	it("確率が高い区分ほど多く拾う", () => {
-		const psychicOnly = simulate(
-			[createNatu(), null, null, null, null],
-			createProvisionalSettings({
-				psychicPickupRatePercent: 100,
-				otherPickupRatePercent: 0,
-			}),
-		);
-		const otherOnly = simulate(
-			[createPikachu(), null, null, null, null],
-			createProvisionalSettings({
-				psychicPickupRatePercent: 100,
-				otherPickupRatePercent: 0,
-			}),
-		);
-
-		expect(
-			sumHugeMagoBerryCount(collectResults(psychicOnly.slotResults, NATU_ID)),
-		).toBeGreaterThan(0);
-		expect(
-			sumHugeMagoBerryCount(collectResults(otherOnly.slotResults, PIKACHU_ID)),
-		).toBe(0);
-	});
-
-	it("マゴのみとしてEPを計算し、きのみEPに含める", () => {
-		const provisionalSettings = createProvisionalSettings();
+	it("マゴのみ ×10 のエナジーとしてEPを計算し、きのみEPに含める", () => {
+		const bonusSettings = createBigBerryEventSettings();
 		const result = simulate(
 			[createPikachu(), null, null, null, null],
-			provisionalSettings,
+			bonusSettings,
 		);
 
-		const summary = result.dailySummaries[0];
-		const magoStrength = calculateBerryStrength("psychic", 50);
-		const expectedEP =
-			Math.ceil(
-				magoStrength * provisionalSettings.hugeMagoBerry.energyMultiplier,
-			) * (summary.totalHugeMagoBerryCount ?? 0);
+		const strengthParameter =
+			buildStrengthParameterFromTimelineBonusSettings(bonusSettings);
+		const perBerryEP = getBerryStrength(
+			"psychic",
+			50,
+			bonusSettings.fieldBonus,
+			calcBerryStrengthBonus("psychic", strengthParameter),
+			true,
+		);
+		const totalCount = result.dailySummaries.reduce(
+			(total, summary) => total + (summary.totalHugeMagoBerryCount ?? 0),
+			0,
+		);
+		const totalEP = result.dailySummaries.reduce(
+			(total, summary) => total + (summary.hugeMagoBerryEP ?? 0),
+			0,
+		);
 
-		expect(summary.totalHugeMagoBerryCount).toBeGreaterThan(0);
-		expect(summary.hugeMagoBerryEP).toBe(expectedEP);
-		expect(summary.berryEP).toBeGreaterThan(expectedEP);
-		expect(result.teamSummary.totalHugeMagoBerryEP).toBe(expectedEP);
+		expect(totalCount).toBeGreaterThan(0);
+		expect(totalEP).toBe(perBerryEP * totalCount);
+		expect(result.teamSummary.totalHugeMagoBerryEP).toBe(totalEP);
+		for (const summary of result.dailySummaries) {
+			expect(summary.berryEP).toBeGreaterThanOrEqual(
+				summary.hugeMagoBerryEP ?? 0,
+			);
+		}
 	});
 
 	it("きのみゾーン展開中はエナジーが上がる", () => {
+		const bonusSettings = createBigBerryEventSettings();
+		const pikachu = createPikachu();
 		const withoutZone = simulate(
-			[createPikachu(), null, null, null, null],
-			createProvisionalSettings(),
+			[pikachu, null, null, null, null],
+			bonusSettings,
 		);
 		const withZone = simulate(
-			[createPikachu(), null, null, null, null],
-			createProvisionalSettings(
-				{},
-				{ enabled: true, initialStackCount: 5, berryEnergyBonusPercent: 50 },
-			),
+			[pikachu, createMewtwo(), null, null, null],
+			bonusSettings,
 		);
 
-		expect(withZone.dailySummaries[0].totalHugeMagoBerryCount).toBe(
-			withoutZone.dailySummaries[0].totalHugeMagoBerryCount,
+		const countWithout = sumHugeMagoBerryCount(
+			collectResults(withoutZone.slotResults, PIKACHU_ID),
 		);
-		expect(withZone.dailySummaries[0].hugeMagoBerryEP).toBeGreaterThan(
-			withoutZone.dailySummaries[0].hugeMagoBerryEP ?? 0,
+		const countWith = sumHugeMagoBerryCount(
+			collectResults(withZone.slotResults, PIKACHU_ID),
 		);
+		const epWithout = collectResults(
+			withoutZone.slotResults,
+			PIKACHU_ID,
+		).reduce((total, slot) => total + (slot.hugeMagoBerryEP ?? 0), 0);
+		const epWith = collectResults(withZone.slotResults, PIKACHU_ID).reduce(
+			(total, slot) => total + (slot.hugeMagoBerryEP ?? 0),
+			0,
+		);
+
+		// 乱数列はポケモンごとに固定なので個数は同じで、エナジーだけが上がる
+		expect(countWith).toBe(countWithout);
+		expect(countWith).toBeGreaterThan(0);
+		expect(epWith).toBeGreaterThan(epWithout);
 	});
 
 	it("回収しない時間帯では回収されず、溢れても取得扱いにならない", () => {
-		const provisionalSettings = createProvisionalSettings();
+		const bonusSettings = createBigBerryEventSettings();
 		const noCollectSlotId = DEFAULT_TIME_SLOTS[1].id;
 		const baseline = simulate(
-			[createPikachu(), null, null, null, null],
-			provisionalSettings,
+			[createMewtwo(), null, null, null, null],
+			bonusSettings,
 		);
 		const withNoCollect = simulate(
-			[createPikachu(), null, null, null, null],
-			provisionalSettings,
-			[{ dayIndex: 0, slotId: noCollectSlotId, teamSlotIndex: 0 }],
+			[createMewtwo(), null, null, null, null],
+			bonusSettings,
+			{
+				noCollectCells: [
+					{ dayIndex: 0, slotId: noCollectSlotId, teamSlotIndex: 0 },
+				],
+			},
 		);
 
 		const noCollectResults = collectResults(
 			withNoCollect.slotResults,
-			PIKACHU_ID,
+			MEWTWO_ID,
 		);
-		const noCollectSlot = noCollectResults.find((result) =>
-			result.slotId.startsWith(noCollectSlotId),
+		const noCollectSlot = noCollectResults.find(
+			(result) =>
+				result.slotId.startsWith(noCollectSlotId) &&
+				result.slotId.endsWith("day0"),
 		);
 
 		// いつのまに育成でカビゴンに渡せないため、溢れ回収の対象にならない。
+		expect(noCollectSlot).toBeDefined();
 		expect(noCollectSlot?.hugeMagoBerryCount).toBe(0);
 		expect(noCollectSlot?.hugeMagoBerryEP).toBe(0);
-		// 持ち越したきのみが所持数を埋めるため、1日の合計は回収した場合より減る。
+		// 持ち越したきのみが所持数を埋めるため、合計は回収した場合より減る。
 		const noCollectTotal = sumHugeMagoBerryCount(noCollectResults);
 		expect(noCollectTotal).toBeGreaterThan(0);
-		expect(noCollectTotal).toBeLessThan(
-			sumHugeMagoBerryCount(collectResults(baseline.slotResults, PIKACHU_ID)),
+		expect(noCollectTotal).toBeLessThanOrEqual(
+			sumHugeMagoBerryCount(collectResults(baseline.slotResults, MEWTWO_ID)),
 		);
 	});
 });

@@ -6,7 +6,6 @@ import type {
 	InitialIngredientsSettings,
 } from "./CookingTypes";
 import type { TrialSummary } from "./MultiTrialTypes";
-import type { ProvisionalSettings } from "./ProvisionalSettingsTypes";
 import type {
 	TimelineBonusSettings,
 	TimelineFavoriteTypes,
@@ -116,8 +115,6 @@ export interface TeamTimelineState {
 	cookingSettings: CookingSimulationSettings;
 	/** 自動シミュ用の初期食材。詳細シミュとは別に保持する */
 	quickSimInitialIngredients: InitialIngredientsSettings;
-	/** 仮設定（公式未公開パラメータ） */
-	provisionalSettings: ProvisionalSettings;
 	/** 個体値計算機設定との連動フラグ */
 	syncWithIvParameter: boolean;
 }
@@ -229,9 +226,7 @@ export type TeamTimelineAction =
 	| {
 			type: "loadQuickSimInitialIngredients";
 			settings: InitialIngredientsSettings;
-	  }
-	| { type: "setProvisionalSettings"; settings: ProvisionalSettings }
-	| { type: "loadProvisionalSettings"; settings: ProvisionalSettings };
+	  };
 
 /**
  * チームの最大メンバー数

@@ -15,7 +15,6 @@ import {
 } from "../../../../util/StrengthParameter";
 import type { CookingSimulationSettings } from "../types/CookingTypes";
 import type { TrialSummary } from "../types/MultiTrialTypes";
-import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import {
 	type NoCollectCellSetting,
@@ -55,7 +54,6 @@ export interface SerializedTrialSimulationInput {
 	swaps?: PokemonSwap[];
 	noCollectCells?: NoCollectCellSetting[];
 	cookingSettings?: CookingSimulationSettings;
-	provisionalSettings?: ProvisionalSettings;
 	analysisOptions?: SimulationAnalysisOptions;
 	/** Display names resolved on the main thread (needs i18n), by box item id. */
 	pokemonNames: [number, string][];
@@ -141,7 +139,6 @@ export function serializeTrialSimulationInput(
 		swaps: input.swaps,
 		noCollectCells: input.noCollectCells,
 		cookingSettings: input.cookingSettings,
-		provisionalSettings: input.provisionalSettings,
 		analysisOptions: input.analysisOptions,
 		pokemonNames: boxItems.map((item) => [item.id, resolvePokemonName(item)]),
 	};
@@ -175,7 +172,6 @@ export function deserializeTrialSimulationInput(
 		noCollectCells: serialized.noCollectCells,
 		box: new PokemonBox(items),
 		cookingSettings: serialized.cookingSettings,
-		provisionalSettings: serialized.provisionalSettings,
 		analysisOptions: serialized.analysisOptions,
 		strengthParameter: deserializeStrengthParameter(
 			JSON.parse(serialized.strengthParameter),

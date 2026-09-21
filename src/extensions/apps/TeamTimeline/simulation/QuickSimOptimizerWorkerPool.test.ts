@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
-import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { QuickSimOptimizerMember } from "../types/QuickSimOptimizerTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
@@ -163,7 +162,6 @@ function createContext(): QuickSimEvaluatorContext {
 			enabled: true,
 			category: "curry",
 		},
-		provisionalSettings: createDefaultProvisionalSettings(),
 		strengthParameter:
 			buildStrengthParameterFromTimelineBonusSettings(bonusSettings),
 	};

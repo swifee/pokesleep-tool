@@ -513,6 +513,7 @@ describe("HelpCalculator とてもおおきなマゴのみ", () => {
 		pokemon: PokemonBoxItem,
 		overrides: {
 			hugeMagoBerryPickupRate?: number;
+			hugeMagoBerryPickupCount?: number;
 			currentInventory?: number;
 			maxInventory?: number;
 		} = {},
@@ -539,6 +540,7 @@ describe("HelpCalculator とてもおおきなマゴのみ", () => {
 				isMainBerry: false,
 				isNonFavoriteBerry: false,
 				hugeMagoBerryPickupRate: overrides.hugeMagoBerryPickupRate ?? 0,
+				hugeMagoBerryPickupCount: overrides.hugeMagoBerryPickupCount ?? 1,
 			},
 		};
 	}
@@ -571,6 +573,57 @@ describe("HelpCalculator とてもおおきなマゴのみ", () => {
 
 		expect(output.berryCount).toBe(output.helpCount * 3);
 		expect(output.hugeMagoBerryCount).toBe(output.helpCount);
+	});
+
+	it("ミュウ / ミュウツーのように1回2個拾う設定なら2個ずつ拾う", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 1);
+
+		const output = calculateHelp(
+			createHelpInput(pokemon, {
+				hugeMagoBerryPickupRate: 1,
+				hugeMagoBerryPickupCount: 2,
+				maxInventory: 1000,
+			}),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(0);
+		expect(output.hugeMagoBerryCount).toBe(output.helpCount * 2);
+	});
+
+	it("個数が0なら確率があっても拾わない", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 1);
+
+		const output = calculateHelp(
+			createHelpInput(pokemon, {
+				hugeMagoBerryPickupRate: 1,
+				hugeMagoBerryPickupCount: 0,
+				maxInventory: 1000,
+			}),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(0);
+		expect(output.hugeMagoBerryCount).toBe(0);
+	});
+
+	it("所持数の空きを超える分は持ち帰らない", () => {
+		const pokemon = createTestPokemon();
+		mockBerryOnlyHelps(pokemon, 1);
+
+		// 1回目のおてつだい: きのみ1個で空き1 → 2個拾う設定でも1個だけ
+		const output = calculateHelp(
+			createHelpInput(pokemon, {
+				hugeMagoBerryPickupRate: 1,
+				hugeMagoBerryPickupCount: 2,
+				currentInventory: 0,
+				maxInventory: 2,
+			}),
+		);
+
+		expect(output.helpCount).toBeGreaterThan(1);
+		expect(output.hugeMagoBerryCount).toBe(1);
+		expect(output.newInventory).toBeGreaterThanOrEqual(2);
 	});
 
 	it("所持数が満タンなら拾わない（いつのまに育成では取得できない）", () => {

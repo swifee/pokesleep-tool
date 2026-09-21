@@ -294,7 +294,7 @@ export interface TimeSlotResult {
 	skillTriggerCount: number;
 	/** きのみ個数 */
 	berryCount: number;
-	/** とてもおおきなマゴのみの個数（イベント仮設定が有効なときのみ） */
+	/** とてもおおきなマゴのみの個数（イベントのきのみボーナスが有効なときのみ） */
 	hugeMagoBerryCount?: number;
 	/** とてもおおきなマゴのみのEP（きのみEPに含まれる） */
 	hugeMagoBerryEP?: number;
@@ -387,8 +387,8 @@ export interface TimeSlotResult {
 	 * 未指定または 1 のときは効果なし。
 	 */
 	berryZoneMultiplier?: number;
-	/** この時間帯の開始時点で展開されていた「きのみゾーン」の重ねがけ数 */
-	berryZoneStackCount?: number;
+	/** この時間帯の開始時点で展開されていた「きのみゾーン」の増加率(%) */
+	berryZoneRatePercent?: number;
 }
 
 /**

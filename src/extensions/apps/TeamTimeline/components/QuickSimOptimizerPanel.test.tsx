@@ -13,7 +13,6 @@ import {
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
-import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type {
 	QuickSimIngredientSearchSettings,
 	QuickSimOptimizerProgress,
@@ -169,7 +168,6 @@ function renderPanel(
 		simulationConfig: { ...DEFAULT_SIMULATION_CONFIG, seed: 777 },
 		bonusSettings: createDefaultTimelineBonusSettings(),
 		cookingSettings: createDefaultCookingSettings(),
-		provisionalSettings: createDefaultProvisionalSettings(),
 		seedMode: "fixed",
 		hasSleepSlot: true,
 		onApply,
