@@ -1,20 +1,40 @@
 /**
  * BerryZoneUtils.ts
- * 「きのみゾーン」（サイコブレイク）の仮パラメータを解決するための純粋関数群。
+ * 「きのみゾーン」（サイコブレイク）の効果を解決するための純粋関数群。
  *
- * 公式に数値が公開されていないため、値はすべて仮設定
- * （{@link BerryZoneProvisionalSettings}）から取得する。
- * 仮設定が無効なときは、どの関数も「効果なし」を返す。
+ * 公式仕様:
+ * - カビゴンのエナジーを増やすとともに、フィールドに「きのみゾーン」を展開する
+ * - 展開中はマゴのみ（エスパータイプ）から得られるエナジーが増加率(%)ぶん UP する
+ * - 発動のたびに増加率が上がり、上限（+24%）に達するまで重ねがけされる
+ * - 一度展開したゾーンはフィールドを移動するまで持続する
+ *
+ * 発動1回あたりのカビゴンエナジーと増加率は上流の `MainSkill` から取得する。
  */
 
 import type { PokemonType } from "../../../../data/pokemons";
 import {
-	BERRY_ZONE_SKILL_NAMES,
-	type BerryZoneProvisionalSettings,
-} from "../types/ProvisionalSettingsTypes";
+	getSkillSubValue,
+	getSkillValue,
+	type MainSkillName,
+} from "../../../../util/MainSkill";
+
+/** きのみゾーンを展開するメインスキル */
+export const BERRY_ZONE_SKILL_NAMES: readonly MainSkillName[] = [
+	"Berry Zone",
+	"Berry Zone (Psystrike)",
+];
+
+/**
+ * 発動値を持つきのみゾーンスキル。
+ * "Berry Zone" 単体は上流のスキル分類用の名前で、数値を持たない。
+ */
+const BERRY_ZONE_VALUED_SKILL: MainSkillName = "Berry Zone (Psystrike)";
 
 /** きのみゾーンで強化されるきのみのタイプ（マゴのみ = エスパー） */
 export const BERRY_ZONE_BOOSTED_BERRY_TYPE: PokemonType = "psychic";
+
+/** きのみゾーン増加率の上限(%)（公式: エナジー効果上限 +24%） */
+export const BERRY_ZONE_MAX_RATE_PERCENT = 24;
 
 /** 効果なしを表すきのみエナジー倍率 */
 const NO_BERRY_ZONE_MULTIPLIER = 1;
@@ -24,98 +44,63 @@ export function isBerryZoneSkill(skillName: string): boolean {
 	return BERRY_ZONE_SKILL_NAMES.some((name) => name === skillName);
 }
 
-/** きのみゾーンの仮パラメータが有効かどうか */
-export function isBerryZoneEnabled(
-	settings: BerryZoneProvisionalSettings | undefined,
-): settings is BerryZoneProvisionalSettings {
-	return settings?.enabled === true;
+/** 発動1回あたりのカビゴンエナジー */
+export function getBerryZoneStrengthPerTrigger(
+	skillName: MainSkillName,
+	skillLevel: number,
+): number {
+	if (skillName !== BERRY_ZONE_VALUED_SKILL) {
+		return 0;
+	}
+	return getSkillValue(skillName, skillLevel);
 }
 
-/** 重ねがけ数を 0〜上限に収める */
-export function clampBerryZoneStackCount(
-	stackCount: number,
-	settings: BerryZoneProvisionalSettings | undefined,
+/** 発動1回あたりのきのみゾーン増加率(%) */
+export function getBerryZoneRateGainPercent(
+	skillName: MainSkillName,
+	skillLevel: number,
 ): number {
-	if (!isBerryZoneEnabled(settings)) {
+	if (skillName !== BERRY_ZONE_VALUED_SKILL) {
 		return 0;
 	}
-	if (!Number.isFinite(stackCount)) {
-		return 0;
-	}
-	return Math.max(
-		0,
-		Math.min(Math.floor(stackCount), Math.max(0, settings.maxStackCount)),
-	);
+	return getSkillSubValue(skillName, skillLevel);
 }
 
-/** シミュレーション開始時点の重ねがけ数 */
-export function getInitialBerryZoneStackCount(
-	settings: BerryZoneProvisionalSettings | undefined,
-): number {
-	if (!isBerryZoneEnabled(settings)) {
+/** 増加率(%)を 0〜上限に収める */
+export function clampBerryZoneRatePercent(ratePercent: number): number {
+	if (!Number.isFinite(ratePercent)) {
 		return 0;
 	}
-	return clampBerryZoneStackCount(settings.initialStackCount, settings);
+	return Math.max(0, Math.min(ratePercent, BERRY_ZONE_MAX_RATE_PERCENT));
 }
 
-/** 発動による重ねがけを適用した後の重ねがけ数 */
-export function addBerryZoneStacks(
-	currentStackCount: number,
-	gainedStackCount: number,
-	settings: BerryZoneProvisionalSettings | undefined,
+/** 発動による増加を適用した後の増加率(%) */
+export function addBerryZoneRate(
+	currentRatePercent: number,
+	gainPercent: number,
 ): number {
-	if (!isBerryZoneEnabled(settings)) {
-		return 0;
-	}
-	const gained = Number.isFinite(gainedStackCount)
-		? Math.max(0, Math.floor(gainedStackCount))
-		: 0;
-	return clampBerryZoneStackCount(
-		clampBerryZoneStackCount(currentStackCount, settings) + gained,
-		settings,
+	const gain = Number.isFinite(gainPercent) ? Math.max(0, gainPercent) : 0;
+	return clampBerryZoneRatePercent(
+		clampBerryZoneRatePercent(currentRatePercent) + gain,
 	);
 }
 
 /** 展開中のきのみエナジー倍率（マゴのみに適用） */
-export function getBerryZoneBerryMultiplier(
-	settings: BerryZoneProvisionalSettings | undefined,
-	stackCount: number,
-): number {
-	if (!isBerryZoneEnabled(settings)) {
+export function getBerryZoneBerryMultiplier(ratePercent: number): number {
+	const rate = clampBerryZoneRatePercent(ratePercent);
+	if (rate === 0) {
 		return NO_BERRY_ZONE_MULTIPLIER;
 	}
-	const stacks = clampBerryZoneStackCount(stackCount, settings);
-	if (stacks === 0) {
-		return NO_BERRY_ZONE_MULTIPLIER;
-	}
-	const bonusPercent = Math.max(0, settings.berryEnergyBonusPercent);
-	return NO_BERRY_ZONE_MULTIPLIER + (stacks * bonusPercent) / 100;
+	return NO_BERRY_ZONE_MULTIPLIER + rate / 100;
 }
 
 /** タイプ別のきのみエナジー倍率（マゴのみ以外は効果なし） */
 export function getBerryZoneMultiplierForType(
 	type: PokemonType,
-	settings: BerryZoneProvisionalSettings | undefined,
-	stackCount: number,
+	ratePercent: number,
 ): number {
 	if (type !== BERRY_ZONE_BOOSTED_BERRY_TYPE) {
 		return NO_BERRY_ZONE_MULTIPLIER;
 	}
-	return getBerryZoneBerryMultiplier(settings, stackCount);
-}
-
-/** 発動1回あたりのカビゴンエナジー */
-export function getBerryZoneSnorlaxEnergy(
-	settings: BerryZoneProvisionalSettings | undefined,
-	skillLevel: number,
-): number {
-	if (!isBerryZoneEnabled(settings)) {
-		return 0;
-	}
-	const levelIndex = Math.floor(skillLevel) - 1;
-	const energy = settings.snorlaxEnergyByLevel[levelIndex];
-	if (energy === undefined || !Number.isFinite(energy)) {
-		return 0;
-	}
-	return Math.max(0, energy);
+	return getBerryZoneBerryMultiplier(ratePercent);
 }

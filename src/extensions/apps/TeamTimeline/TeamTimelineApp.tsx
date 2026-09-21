@@ -26,7 +26,6 @@ import CookingSettingsPanel from "./components/CookingSettingsPanel";
 import DailySummaryRow from "./components/DailySummaryRow";
 import InitialIngredientsPanel from "./components/InitialIngredientsPanel";
 import NoCollectSupplementBar from "./components/NoCollectSupplementBar";
-import ProvisionalSettingsPanel from "./components/ProvisionalSettingsPanel";
 import QuickSimTab from "./components/QuickSimTab";
 import type { ResimulationDeltaSummary } from "./components/ResimulationNoticeBar";
 import ResimulationNoticeBar from "./components/ResimulationNoticeBar";
@@ -94,7 +93,6 @@ import {
 	withInitialIngredientsSettings,
 } from "./types/CookingTypes";
 import type { TrialSummary } from "./types/MultiTrialTypes";
-import type { ProvisionalSettings } from "./types/ProvisionalSettingsTypes";
 import type {
 	TeamSetSimulationSnapshot,
 	TeamSetState,
@@ -139,10 +137,6 @@ import {
 	buildNoCollectSupplementEntries,
 	countActiveNoCollectCells,
 } from "./utils/NoCollectSupplementUtils";
-import {
-	loadProvisionalSettingsFromStorage,
-	saveProvisionalSettingsToStorage,
-} from "./utils/ProvisionalSettingsStorage";
 import { buildSimulationContextHash } from "./utils/SimulationContextHash";
 import { collectTimelineSpecialPokemonConflicts } from "./utils/SpecialPokemonUtils";
 import type { SummaryValueMode } from "./utils/SummaryValueModeUtils";
@@ -219,6 +213,10 @@ const TIMELINE_WIPE_REVEAL_EASING_OUT_QUAD =
 const TIMELINE_DETAILS_FADE_DURATION_MS = 450;
 const TIMELINE_PAGE_BOTTOM_PADDING = "3em";
 const TEAM_TIMELINE_CONTENT_WIDTH_PX = 540;
+/** 2026-09-21 に削除した仮設定パネルが使っていた localStorage キー */
+const LEGACY_STORAGE_KEY_PROVISIONAL_SETTINGS =
+	"PstTeamTimelineProvisionalSettings";
+
 const TIME_SLOT_SETTINGS_SECTION_ID = "team-timeline-time-slot-settings";
 const EMPTY_SIMULATION_RESULT: SimulationResult = {
 	slotResults: new Map(),
@@ -574,12 +572,10 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				pityProc: state.simulationConfig.pityProc,
 				startDayOfWeek: state.simulationConfig.startDayOfWeek,
 				timeSlots: state.timeSlots,
-				provisionalSettings: state.provisionalSettings,
 			}),
 		[
 			state.bonusSettings,
 			state.cookingSettings,
-			state.provisionalSettings,
 			state.simulationConfig.initialEnergy,
 			state.simulationConfig.simulationDays,
 			state.simulationConfig.pityProc,
@@ -644,10 +640,8 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			settings: loadQuickSimInitialIngredientsFromStorage(cookingSettings),
 		});
 
-		dispatch({
-			type: "loadProvisionalSettings",
-			settings: loadProvisionalSettingsFromStorage(),
-		});
+		// 仮設定（未確定パラメータ）は公式値に置き換わったため、保存データを片付ける
+		localStorage.removeItem(LEGACY_STORAGE_KEY_PROVISIONAL_SETTINGS);
 
 		// ロード完了をマーク
 		setIsInitialized(true);
@@ -695,12 +689,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 		if (!isInitialized) return;
 		saveQuickSimInitialIngredientsToStorage(state.quickSimInitialIngredients);
 	}, [state.quickSimInitialIngredients, isInitialized]);
-
-	// 仮設定の永続化（初期化完了後のみ）
-	useEffect(() => {
-		if (!isInitialized) return;
-		saveProvisionalSettingsToStorage(state.provisionalSettings);
-	}, [state.provisionalSettings, isInitialized]);
 
 	// 個体値計算機連動フラグの永続化（初期化完了後のみ）
 	useEffect(() => {
@@ -875,7 +863,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				noCollectCells: state.noCollectCells,
 				box: timelineRuntimeBoxRef.current || undefined,
 				cookingSettings: state.cookingSettings,
-				provisionalSettings: state.provisionalSettings,
 				resolvePokemonName,
 			});
 			dispatch({ type: "setSimulationResult", result });
@@ -916,7 +903,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			state.swaps,
 			state.noCollectCells,
 			state.cookingSettings,
-			state.provisionalSettings,
 			currentSimulationContextHash,
 			resolvePokemonName,
 		],
@@ -937,7 +923,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				config: state.simulationConfig,
 				bonusSettings: state.bonusSettings,
 				cookingSettings: state.cookingSettings,
-				provisionalSettings: state.provisionalSettings,
 				swaps: state.swaps,
 				noCollectCells: state.noCollectCells,
 				box: timelineRuntimeBoxRef.current || undefined,
@@ -993,7 +978,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 				noCollectCells: state.noCollectCells,
 				box: timelineRuntimeBoxRef.current || undefined,
 				cookingSettings: state.cookingSettings,
-				provisionalSettings: state.provisionalSettings,
 				resolvePokemonName,
 			});
 			dispatch({ type: "setSimulationResult", result: fullResult });
@@ -1038,7 +1022,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			state.noCollectCells,
 			state.multiTrialCount,
 			state.cookingSettings,
-			state.provisionalSettings,
 			currentSimulationContextHash,
 			resolvePokemonName,
 		],
@@ -1317,7 +1300,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 					noCollectCells: state.noCollectCells,
 					box: timelineRuntimeBoxRef.current || undefined,
 					cookingSettings: state.cookingSettings,
-					provisionalSettings: state.provisionalSettings,
 					resolvePokemonName,
 				});
 				dispatch({ type: "setSimulationResult", result });
@@ -1334,7 +1316,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			state.swaps,
 			state.noCollectCells,
 			state.cookingSettings,
-			state.provisionalSettings,
 			resolvePokemonName,
 		],
 	);
@@ -1610,13 +1591,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			pickInitialIngredientsSettings(state.cookingSettings),
 		);
 	}, [handleQuickSimInitialIngredientsChange, state.cookingSettings]);
-
-	const handleProvisionalSettingsChange = useCallback(
-		(settings: ProvisionalSettings) => {
-			dispatch({ type: "setProvisionalSettings", settings });
-		},
-		[],
-	);
 
 	const handleFieldIndexChange = useCallback(
 		(fieldIndex: number) => {
@@ -2136,7 +2110,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 					noCollectCells: state.noCollectCells,
 					box: timelineRuntimeBoxRef.current || undefined,
 					cookingSettings: state.cookingSettings,
-					provisionalSettings: state.provisionalSettings,
 					analysisOptions: {
 						disabledPokemonIds: options.disabledPokemonIds,
 						keepDisabledPokemonTargetable: true,
@@ -2173,7 +2146,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 			state.swaps,
 			state.noCollectCells,
 			state.cookingSettings,
-			state.provisionalSettings,
 		],
 	);
 
@@ -3178,7 +3150,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 							simulationConfig={state.simulationConfig}
 							bonusSettings={state.bonusSettings}
 							cookingSettings={quickSimCookingSettings}
-							provisionalSettings={state.provisionalSettings}
 							seedMode={state.seedMode}
 							multiTrialCount={state.multiTrialCount}
 							onInitialIngredientsChange={
@@ -3698,10 +3669,6 @@ export default function TeamTimelineApp({ onAppChange }: TeamTimelineAppProps) {
 							onReset={handleResetTimeSlots}
 						/>
 					</Box>
-					<ProvisionalSettingsPanel
-						settings={state.provisionalSettings}
-						onChange={handleProvisionalSettingsChange}
-					/>
 				</Box>
 			)}
 

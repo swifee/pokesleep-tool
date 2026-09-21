@@ -23,12 +23,11 @@ import {
 	superLuckShardRate,
 } from "../../../../util/MainSkill";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
-import type { BerryZoneProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { IngredientResult } from "../types/TimeSlotTypes";
 import {
 	getBerryZoneMultiplierForType,
-	getBerryZoneSnorlaxEnergy,
-	isBerryZoneEnabled,
+	getBerryZoneRateGainPercent,
+	getBerryZoneStrengthPerTrigger,
 	isBerryZoneSkill,
 } from "../utils/BerryZoneUtils";
 import { getEffectiveMainSkillName } from "../utils/TimelinePokemonUtils";
@@ -138,10 +137,8 @@ export interface PokemonSkillBonusContext {
 export interface TeamSkillBonusContext {
 	fieldBonus: number;
 	byPokemonId: ReadonlyMap<number, PokemonSkillBonusContext>;
-	/** 「きのみゾーン」の仮パラメータ（公式未公開のため仮設定から取得） */
-	berryZone?: BerryZoneProvisionalSettings;
-	/** 現時点で展開されている「きのみゾーン」の重ねがけ数 */
-	berryZoneStackCount?: number;
+	/** 現時点で展開されている「きのみゾーン」の増加率(%) */
+	berryZoneRatePercent?: number;
 }
 
 /**
@@ -158,8 +155,7 @@ function resolveBerryStrengthBonus(
 		baseBonus *
 		getBerryZoneMultiplierForType(
 			member.iv.pokemon.type,
-			bonusContext?.berryZone,
-			bonusContext?.berryZoneStackCount ?? 0,
+			bonusContext?.berryZoneRatePercent ?? 0,
 		)
 	);
 }
@@ -396,8 +392,8 @@ export interface SkillEffectResult {
 	badDreamsHitCount: number;
 	/** Charge Strength M (Bad Dreams): 与えた減少量合計 */
 	badDreamsTotalDamage: number;
-	/** Berry Zone (Psystrike): この時間帯で増えた「きのみゾーン」の重ねがけ数 */
-	berryZoneStackGain: number;
+	/** Berry Zone (Psystrike): この時間帯の発動で増えた「きのみゾーン」増加率(%)（上限適用前） */
+	berryZoneRateGainPercent: number;
 	/** Moonlightチームメイトターゲット: Map<pokemonId, 回復量> */
 	moonlightTargets: Map<number, number>;
 	/** Energizing Cheer Sターゲット: Map<pokemonId, 回復量> */
@@ -685,7 +681,7 @@ export function processSkillTriggers(
 	let badDreamsDamagePerTarget = 0;
 	let badDreamsHitCount = 0;
 	let badDreamsTotalDamage = 0;
-	let berryZoneStackGain = 0;
+	let berryZoneRateGainPercent = 0;
 	const skillIngredientMap = new Map<IngredientName, number>();
 	let energy = currentEnergy;
 	const moonlightTargets = new Map<number, number>();
@@ -727,7 +723,7 @@ export function processSkillTriggers(
 			badDreamsDamagePerTarget: 0,
 			badDreamsHitCount: 0,
 			badDreamsTotalDamage: 0,
-			berryZoneStackGain: 0,
+			berryZoneRateGainPercent: 0,
 			moonlightTargets,
 			energizingCheerTargets,
 			energizingCheerEvents,
@@ -879,16 +875,15 @@ export function processSkillTriggers(
 				);
 			}
 		} else if (isBerryZoneSkill(skillName)) {
-			// Berry Zone (Psystrike): 公式未公開のため仮設定の値を使う。
-			// カビゴンのエナジーを増やしつつ、発動ごとに「きのみゾーン」を重ねがけする。
-			const epPerTrigger = getBerryZoneSnorlaxEnergy(
-				bonusContext?.berryZone,
+			// Berry Zone (Psystrike): カビゴンのエナジーを増やしつつ、
+			// 発動ごとに「きのみゾーン」の増加率を上げる（上限は呼び出し側で適用）。
+			const epPerTrigger = getBerryZoneStrengthPerTrigger(
+				skillName,
 				skillLevel,
 			);
 			totalDirectEP = epPerTrigger * skillTriggerCount;
-			berryZoneStackGain = isBerryZoneEnabled(bonusContext?.berryZone)
-				? skillTriggerCount
-				: 0;
+			berryZoneRateGainPercent =
+				getBerryZoneRateGainPercent(skillName, skillLevel) * skillTriggerCount;
 		} else {
 			// 固定EP（Charge Strength S / M）
 			const epPerTrigger = getSkillValue(skillName, skillLevel);
@@ -1074,7 +1069,7 @@ export function processSkillTriggers(
 						badDreamsDamagePerTarget += nestedResult.badDreamsDamagePerTarget;
 						badDreamsHitCount += nestedResult.badDreamsHitCount;
 						badDreamsTotalDamage += nestedResult.badDreamsTotalDamage;
-						berryZoneStackGain += nestedResult.berryZoneStackGain;
+						berryZoneRateGainPercent += nestedResult.berryZoneRateGainPercent;
 
 						for (const ing of nestedResult.skillIngredients) {
 							addIngredientCount(skillIngredientMap, ing.name, ing.count);
@@ -1563,7 +1558,7 @@ export function processSkillTriggers(
 			badDreamsDamagePerTarget += nestedResult.badDreamsDamagePerTarget;
 			badDreamsHitCount += nestedResult.badDreamsHitCount;
 			badDreamsTotalDamage += nestedResult.badDreamsTotalDamage;
-			berryZoneStackGain += nestedResult.berryZoneStackGain;
+			berryZoneRateGainPercent += nestedResult.berryZoneRateGainPercent;
 			energy = nestedResult.energyAfterSelfRecovery;
 
 			for (const ing of nestedResult.skillIngredients) {
@@ -1636,7 +1631,7 @@ export function processSkillTriggers(
 		badDreamsDamagePerTarget,
 		badDreamsHitCount,
 		badDreamsTotalDamage,
-		berryZoneStackGain,
+		berryZoneRateGainPercent,
 		moonlightTargets,
 		energizingCheerTargets,
 		energizingCheerEvents,

@@ -1,5 +1,4 @@
 import type { CookingSimulationSettings } from "../types/CookingTypes";
-import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import type { TimeSlot, Weekday } from "../types/TimeSlotTypes";
 
@@ -13,8 +12,6 @@ interface SimulationContextHashInput {
 	/** 集計期間の開始曜日 */
 	startDayOfWeek: Weekday;
 	timeSlots: TimeSlot[];
-	/** 仮設定（未指定ならハッシュに含めない） */
-	provisionalSettings?: ProvisionalSettings;
 }
 
 type StableValue =
@@ -76,7 +73,6 @@ export function buildSimulationContextHash(
 			pityProc: input.pityProc,
 			startDayOfWeek: input.startDayOfWeek,
 			timeSlots: input.timeSlots,
-			provisionalSettings: input.provisionalSettings,
 		}),
 	);
 }

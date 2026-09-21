@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
-import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { QuickSimOptimizerMember } from "../types/QuickSimOptimizerTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
@@ -50,7 +49,6 @@ function createContext(
 		simulationConfig: { ...DEFAULT_SIMULATION_CONFIG, simulationDays: 1 },
 		bonusSettings,
 		cookingSettings: createDefaultCookingSettings(),
-		provisionalSettings: createDefaultProvisionalSettings(),
 		strengthParameter:
 			buildStrengthParameterFromTimelineBonusSettings(bonusSettings),
 		...overrides,
@@ -182,7 +180,6 @@ describe("QuickSimEvaluator", () => {
 			noCollectCells: timeline.noCollectCells,
 			box: context.box,
 			cookingSettings: createDefaultCookingSettings(),
-			provisionalSettings: context.provisionalSettings,
 			strengthParameter: context.strengthParameter,
 			analysisOptions: { perPokemonRandomStreams: true },
 		}).teamSummary.grandTotalEP;
@@ -226,7 +223,6 @@ describe("QuickSimEvaluator", () => {
 				noCollectCells: timeline.noCollectCells,
 				box: context.box,
 				cookingSettings: context.cookingSettings,
-				provisionalSettings: context.provisionalSettings,
 				strengthParameter: context.strengthParameter,
 				analysisOptions: { perPokemonRandomStreams: true },
 			}).teamSummary.grandTotalEP;

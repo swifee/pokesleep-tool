@@ -6,7 +6,6 @@ import {
 	type CookingSimulationSettings,
 	createDefaultCookingSettings,
 } from "../types/CookingTypes";
-import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { QuickSimOptimizerMember } from "../types/QuickSimOptimizerTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
@@ -66,7 +65,6 @@ function createContext(
 		simulationConfig: { ...DEFAULT_SIMULATION_CONFIG, simulationDays: 2 },
 		bonusSettings,
 		cookingSettings: createCookingSettings(),
-		provisionalSettings: createDefaultProvisionalSettings(),
 		strengthParameter:
 			buildStrengthParameterFromTimelineBonusSettings(bonusSettings),
 		...overrides,
@@ -111,7 +109,6 @@ describe("QuickSimEvaluator.evaluateIngredients", () => {
 						...context.cookingSettings,
 						initialIngredients: stockToInitialIngredients(stock),
 					},
-					provisionalSettings: context.provisionalSettings,
 					strengthParameter: context.strengthParameter,
 					analysisOptions: { perPokemonRandomStreams: true },
 				}).teamSummary.grandTotalEP;

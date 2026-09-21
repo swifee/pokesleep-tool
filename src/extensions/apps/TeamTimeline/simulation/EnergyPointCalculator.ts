@@ -1,4 +1,5 @@
 import type { IngredientName, PokemonType } from "../../../../data/pokemons";
+import { getBerryStrength } from "../../../../util/Berry";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import { recipeLevelBonus } from "../../../../util/PokemonStrength";
 import { MAX_RECIPE_LEVEL, MIN_RECIPE_LEVEL } from "../types/CookingTypes";
@@ -145,31 +146,33 @@ function calculateEnergyPerBerry(
 /**
  * 「とてもおおきなマゴのみ」のEPを計算する。
  *
- * 通常のマゴのみ（エスパータイプ）1個分のエナジーに、仮設定の倍率を掛けたもの。
+ * 1個あたりのエナジーは上流 `getBerryStrength(..., isBig = true)` と同じ
+ * （マゴのみの強度 ×10 にエリアボーナスと好みのきのみ補正を掛けたもの）。
  * `bonusContext` にはマゴのみとしての好みのきのみ補正を渡すこと
  * （拾ったポケモン自身のきのみタイプではない）。
  *
  * @param level - 拾ったポケモンのレベル
  * @param count - とてもおおきなマゴのみの個数
- * @param energyMultiplier - 通常のマゴのみに対するエナジー倍率
  * @param bonusContext - ボーナスコンテキスト
  * @returns とてもおおきなマゴのみのEP
  */
 export function calculateHugeMagoBerryEP(
 	level: number,
 	count: number,
-	energyMultiplier: number,
 	bonusContext?: DailySummaryBonusContext,
 ): number {
-	if (count <= 0 || energyMultiplier <= 0) {
+	if (count <= 0) {
 		return 0;
 	}
-	const perBerryStrength = calculateEnergyPerBerry(
+	const normalized = normalizeDailySummaryBonusContext(bonusContext);
+	const perBerryStrength = getBerryStrength(
 		HUGE_MAGO_BERRY_TYPE,
 		level,
-		bonusContext,
+		normalized.fieldBonus,
+		normalized.berryStrengthBonus,
+		true,
 	);
-	return Math.ceil(perBerryStrength * energyMultiplier) * count;
+	return perBerryStrength * count;
 }
 
 /**

@@ -14,10 +14,6 @@ import {
 } from "../../../../util/MainSkill";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
-import {
-	type BerryZoneProvisionalSettings,
-	createDefaultBerryZoneSettings,
-} from "../types/ProvisionalSettingsTypes";
 import SeededRandom from "./SeededRandom";
 import {
 	classifySkill,
@@ -2143,7 +2139,6 @@ describe("上流で追加されたメインスキルの分類", () => {
 	});
 
 	it("Berry Zone はカビゴンのエナジーを増やす直接EPスキルとして扱う", () => {
-		// 数値は上流未実装のため、仮設定から与える。
 		expect(classifySkill("Berry Zone")).toBe("directEP");
 		expect(classifySkill("Berry Zone (Psystrike)")).toBe("directEP");
 		expect(isNonEPSkill("Berry Zone")).toBe(false);
@@ -2159,21 +2154,14 @@ describe("Berry Zone (Psystrike)", () => {
 
 	function createBerryZoneBonusContext(
 		members: PokemonBoxItem[],
-		berryZone: Partial<BerryZoneProvisionalSettings>,
-		berryZoneStackCount = 0,
+		berryZoneRatePercent = 0,
 	): TeamSkillBonusContext {
 		return {
 			fieldBonus: 0,
 			byPokemonId: new Map<number, PokemonSkillBonusContext>(
 				members.map((member) => [member.id, createPokemonBonusContext()]),
 			),
-			berryZone: {
-				...createDefaultBerryZoneSettings(),
-				enabled: true,
-				snorlaxEnergyByLevel: [100, 200, 300, 400, 500, 600],
-				...berryZone,
-			},
-			berryZoneStackCount,
+			berryZoneRatePercent,
 		};
 	}
 
@@ -2199,33 +2187,40 @@ describe("Berry Zone (Psystrike)", () => {
 		);
 	}
 
-	it("仮設定がない場合はエナジーもゾーン展開も発生しない", () => {
-		const result = triggerBerryZone(createMewtwo(3), 2);
+	it("発動回数分のカビゴンエナジー（公式値）を獲得し、増加率を積み上げる", () => {
+		const caster = createMewtwo(3);
 
-		expect(result.directEP).toBe(0);
-		expect(result.berryZoneStackGain).toBe(0);
+		const result = triggerBerryZone(
+			caster,
+			2,
+			createBerryZoneBonusContext([caster]),
+		);
+
+		// Lv3: 2762 エナジー / +1.0% per trigger
+		expect(result.directEP).toBe(2762 * 2);
+		expect(result.berryZoneRateGainPercent).toBe(1 * 2);
 	});
 
-	it("仮設定が無効な場合は効果なしとして扱う", () => {
-		const caster = createMewtwo(3);
-		const bonusContext = createBerryZoneBonusContext(caster ? [caster] : [], {
-			enabled: false,
-		});
+	it("ボーナスコンテキストが無くても公式値で計算する", () => {
+		const result = triggerBerryZone(createMewtwo(6), 3);
 
-		const result = triggerBerryZone(caster, 2, bonusContext);
-
-		expect(result.directEP).toBe(0);
-		expect(result.berryZoneStackGain).toBe(0);
+		expect(result.directEP).toBe(7274 * 3);
+		expect(result.berryZoneRateGainPercent).toBeCloseTo(2 * 3, 10);
 	});
 
-	it("発動回数分のカビゴンエナジーを獲得し、同じ回数だけ重ねがけする", () => {
-		const caster = createMewtwo(3);
-		const bonusContext = createBerryZoneBonusContext([caster], {});
+	it("スキルレベルボーナスは発動値と増加率の両方に反映される", () => {
+		const caster = createMewtwo(1);
+		const bonusContext: TeamSkillBonusContext = {
+			fieldBonus: 0,
+			byPokemonId: new Map<number, PokemonSkillBonusContext>([
+				[caster.id, { ...createPokemonBonusContext(), skillLevelBonus: 5 }],
+			]),
+		};
 
-		const result = triggerBerryZone(caster, 2, bonusContext);
+		const result = triggerBerryZone(caster, 1, bonusContext);
 
-		expect(result.directEP).toBe(300 * 2);
-		expect(result.berryZoneStackGain).toBe(2);
+		expect(result.directEP).toBe(7274);
+		expect(result.berryZoneRateGainPercent).toBe(2);
 	});
 
 	it("ゾーン展開中はマゴのみ由来のスキルEPが上がる", () => {
@@ -2235,14 +2230,8 @@ describe("Berry Zone (Psystrike)", () => {
 			3,
 		);
 		expect(caster.iv.pokemon.type).toBe("psychic");
-		const withoutZone = createBerryZoneBonusContext([caster], {
-			berryEnergyBonusPercent: 20,
-		});
-		const withZone = createBerryZoneBonusContext(
-			[caster],
-			{ berryEnergyBonusPercent: 20 },
-			2,
-		);
+		const withoutZone = createBerryZoneBonusContext([caster]);
+		const withZone = createBerryZoneBonusContext([caster], 24);
 
 		const baseResult = triggerBerryZone(caster, 1, withoutZone);
 		const zoneResult = triggerBerryZone(caster, 1, withZone);
@@ -2254,8 +2243,8 @@ describe("Berry Zone (Psystrike)", () => {
 	it("マゴのみ以外のきのみ由来のスキルEPは変わらない", () => {
 		const caster = createBerryBurstPokemon(3);
 		expect(caster.iv.pokemon.type).not.toBe("psychic");
-		const withoutZone = createBerryZoneBonusContext([caster], {});
-		const withZone = createBerryZoneBonusContext([caster], {}, 3);
+		const withoutZone = createBerryZoneBonusContext([caster]);
+		const withZone = createBerryZoneBonusContext([caster], 24);
 
 		expect(triggerBerryZone(caster, 1, withZone).directEP).toBe(
 			triggerBerryZone(caster, 1, withoutZone).directEP,

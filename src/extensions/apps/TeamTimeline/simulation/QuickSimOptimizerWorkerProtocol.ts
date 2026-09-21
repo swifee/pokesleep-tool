@@ -12,7 +12,6 @@ import {
 	serializeStrengthParameter,
 } from "../../../../util/StrengthParameter";
 import type { CookingSimulationSettings } from "../types/CookingTypes";
-import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type {
 	QuickSimCandidateEvaluation,
 	QuickSimIngredientEvaluation,
@@ -37,7 +36,6 @@ export interface SerializedQuickSimEvaluatorContext {
 	simulationConfig: SimulationConfig;
 	bonusSettings: TimelineBonusSettings;
 	cookingSettings: CookingSimulationSettings;
-	provisionalSettings: ProvisionalSettings;
 	/** serializeStrengthParameter の JSON をパースしたもの */
 	strengthParameter: unknown;
 }
@@ -106,7 +104,6 @@ export function serializeQuickSimEvaluatorContext(
 		simulationConfig: { ...context.simulationConfig },
 		bonusSettings: context.bonusSettings,
 		cookingSettings: context.cookingSettings,
-		provisionalSettings: context.provisionalSettings,
 		strengthParameter: JSON.parse(
 			serializeStrengthParameter(context.strengthParameter),
 		),
@@ -135,7 +132,6 @@ export function deserializeQuickSimEvaluatorContext(
 		simulationConfig: serialized.simulationConfig,
 		bonusSettings: serialized.bonusSettings,
 		cookingSettings: serialized.cookingSettings,
-		provisionalSettings: serialized.provisionalSettings,
 		strengthParameter: deserializeStrengthParameter(
 			serialized.strengthParameter,
 		),

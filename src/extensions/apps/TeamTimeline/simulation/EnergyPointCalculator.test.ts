@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import pokemons from "../../../../data/pokemons";
+import { getBerryStrength } from "../../../../util/Berry";
 import { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import type {
@@ -1153,23 +1154,41 @@ describe("とてもおおきなマゴのみのEP", () => {
 		dishBonus: 1,
 	};
 
-	it("通常のマゴのみエナジーに倍率を掛ける", () => {
+	it("1個あたりのエナジーは上流の「おおきなきのみ」（マゴのみ ×10）と同じ", () => {
 		const magoStrength = calculateBerryStrength("psychic", 50);
 
-		expect(calculateHugeMagoBerryEP(50, 4, 3, bonusContext)).toBe(
-			Math.ceil(magoStrength * 3) * 4,
+		expect(calculateHugeMagoBerryEP(50, 4, bonusContext)).toBe(
+			magoStrength * 10 * 4,
+		);
+		expect(calculateHugeMagoBerryEP(50, 1, bonusContext)).toBe(
+			getBerryStrength("psychic", 50, 0, 1, true),
 		);
 	});
 
 	it("拾ったポケモンのタイプではなくマゴのみの強度を使う", () => {
-		expect(calculateHugeMagoBerryEP(50, 1, 1, bonusContext)).toBe(
-			calculateBerryStrength("psychic", 50),
+		expect(calculateHugeMagoBerryEP(50, 1, bonusContext)).toBe(
+			calculateBerryStrength("psychic", 50) * 10,
 		);
 	});
 
-	it("個数か倍率が0なら0になる", () => {
-		expect(calculateHugeMagoBerryEP(50, 0, 3, bonusContext)).toBe(0);
-		expect(calculateHugeMagoBerryEP(50, 5, 0, bonusContext)).toBe(0);
+	it("個数が0なら0になる", () => {
+		expect(calculateHugeMagoBerryEP(50, 0, bonusContext)).toBe(0);
+	});
+
+	it("エリアボーナスと好みのきのみ補正は ×10 の後に掛ける", () => {
+		const magoStrength = calculateBerryStrength("psychic", 50);
+		const withBonus = {
+			...bonusContext,
+			fieldBonus: 25,
+			berryStrengthBonus: 2,
+		};
+
+		expect(calculateHugeMagoBerryEP(50, 1, withBonus)).toBe(
+			Math.ceil(Math.ceil(magoStrength * 10 * 1.25) * 2),
+		);
+		expect(calculateHugeMagoBerryEP(50, 1, withBonus)).toBe(
+			getBerryStrength("psychic", 50, 25, 2, true),
+		);
 	});
 
 	it("きのみゾーンの倍率を重ねて適用できる", () => {
@@ -1179,10 +1198,9 @@ describe("とてもおおきなマゴのみのEP", () => {
 			calculateHugeMagoBerryEP(
 				50,
 				1,
-				3,
-				applyBerryZoneMultiplier(bonusContext, 1.5),
+				applyBerryZoneMultiplier(bonusContext, 1.24),
 			),
-		).toBe(Math.ceil(Math.ceil(magoStrength * 1.5) * 3));
+		).toBe(Math.ceil(magoStrength * 10 * 1.24));
 	});
 
 	it("一日合計のきのみEPに含まれ、個数も集計される", () => {

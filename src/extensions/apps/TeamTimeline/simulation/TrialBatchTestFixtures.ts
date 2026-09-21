@@ -7,7 +7,6 @@
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
-import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { QuickSimMember } from "../types/QuickSimTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
@@ -74,7 +73,6 @@ export function createSwapTrialInput(days = 2): TrialSimulationInput {
 		noCollectCells: timeline.noCollectCells,
 		box,
 		cookingSettings: { ...createDefaultCookingSettings(), enabled: true },
-		provisionalSettings: createDefaultProvisionalSettings(),
 		resolvePokemonName: (pokemon) => `name:${pokemon.id}`,
 	};
 }
