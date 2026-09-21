@@ -5,6 +5,11 @@ import { ingredientStrength } from "../PokemonRp";
 import type { IngredientStrength, StrengthParameter } from "../PokemonStrength";
 import { buildMemberProfiles } from "./MemberProfile";
 import { runIteration } from "./SimulateIteration";
+import {
+	addSkillMetrics,
+	avgSkillMetrics,
+	zeroSkillMetrics,
+} from "./SkillMetrics";
 import { createTeamContext, resetTeamContext } from "./TeamContext";
 import type {
 	IterationResult,
@@ -79,19 +84,11 @@ function initializeIterationResult(
 	profiles: MemberProfile[],
 ): IterationResult[] {
 	const accumulated: IterationResult[] = profiles.map(() => ({
-		berryTotalStrength: 0,
+		berryStrength: 0,
+		bigBerryHelpCount: 0,
+		bigBerryCount: 0,
 		ingCounts: new Map<IngredientName, number>(),
-		skillCount: 0,
-		skillStrength: 0,
-		skillExtraHelp: 0,
-		skillHelperBoost: 0,
-		skillEnergizingCheer: 0,
-		skillEnergyForEveryone: 0,
-		skillDreamShards: 0,
-		skillPotExtended: 0,
-		skillExtraTastyRate: 0,
-		skillCandy: 0,
-		skillBerryZone: 0,
+		...zeroSkillMetrics(),
 	}));
 
 	return accumulated;
@@ -106,18 +103,10 @@ function addResultToIterationResult(
 		const acc = accumulated[i];
 		const result = results[i];
 
-		acc.berryTotalStrength += result.berryTotalStrength;
-		acc.skillCount += result.skillCount;
-		acc.skillStrength += result.skillStrength;
-		acc.skillEnergizingCheer += result.skillEnergizingCheer;
-		acc.skillEnergyForEveryone += result.skillEnergyForEveryone;
-		acc.skillExtraHelp += result.skillExtraHelp;
-		acc.skillHelperBoost += result.skillHelperBoost;
-		acc.skillDreamShards += result.skillDreamShards;
-		acc.skillPotExtended += result.skillPotExtended;
-		acc.skillExtraTastyRate += result.skillExtraTastyRate;
-		acc.skillCandy += result.skillCandy;
-		acc.skillBerryZone += result.skillBerryZone;
+		acc.berryStrength += result.berryStrength;
+		acc.bigBerryHelpCount += result.bigBerryHelpCount;
+		acc.bigBerryCount += result.bigBerryCount;
+		addSkillMetrics(acc, result);
 
 		for (const [name, count] of result.ingCounts) {
 			acc.ingCounts.set(name, (acc.ingCounts.get(name) ?? 0) + count);
@@ -139,8 +128,11 @@ function buildMemberStrengthResult(
 		if (!profile) return undefined;
 
 		const acc = accumulated[profiles.indexOf(profile)];
-		const avgBerryTotalStrength = acc.berryTotalStrength / iterations;
-		const avgSkillStrength = acc.skillStrength / iterations;
+		const avgBerryStrength = acc.berryStrength / iterations;
+		const avgBigBerryCount = acc.bigBerryCount / iterations;
+		const bigBerryStrength = profile.bigBerry1Strength * avgBigBerryCount;
+		const berryTotalStrength = avgBerryStrength + bigBerryStrength;
+		const avgMetrics = avgSkillMetrics(acc, iterations);
 
 		const ingredients: IngredientStrength[] = Array.from(
 			acc.ingCounts.entries(),
@@ -160,29 +152,23 @@ function buildMemberStrengthResult(
 		const ingStrength = ingredients.reduce((p, c) => p + c.strength, 0);
 
 		const totalStrength =
-			(param.totalFlags[0] ? avgBerryTotalStrength : 0) +
+			(param.totalFlags[0] ? berryTotalStrength : 0) +
 			(param.totalFlags[1] ? ingStrength : 0) +
-			(param.totalFlags[2] ? avgSkillStrength : 0);
+			(param.totalFlags[2] ? avgMetrics.skillStrength : 0);
 
 		return {
 			iv: profile.iv,
 			bonus: profile.bonus,
-			berryRawStrength: profile.berryRawStrength,
-			berryStrength: profile.berryStrength,
-			berryTotalStrength: avgBerryTotalStrength,
+			berry1Strength: profile.berry1Strength,
+			berryStrength: avgBerryStrength,
+			bigBerry1Strength: profile.bigBerry1Strength,
+			bigBerryStrength,
+			berryTotalStrength,
+			bigBerryHelpCount: acc.bigBerryHelpCount / iterations,
+			bigBerryCount: avgBigBerryCount,
 			ingStrength,
 			ingredients,
-			skillCount: acc.skillCount / iterations,
-			skillStrength: avgSkillStrength,
-			skillExtraHelp: acc.skillExtraHelp / iterations,
-			skillHelperBoost: acc.skillHelperBoost / iterations,
-			skillEnergizingCheer: acc.skillEnergizingCheer / iterations,
-			skillEnergyForEveryone: acc.skillEnergyForEveryone / iterations,
-			skillDreamShards: acc.skillDreamShards / iterations,
-			skillPotExtended: acc.skillPotExtended / iterations,
-			skillExtraTastyRate: acc.skillExtraTastyRate / iterations,
-			skillCandy: acc.skillCandy / iterations,
-			skillBerryZone: acc.skillBerryZone / iterations,
+			...avgMetrics,
 			totalStrength: totalStrength,
 		};
 	});

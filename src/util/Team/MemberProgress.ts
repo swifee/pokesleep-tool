@@ -1,4 +1,5 @@
 import type { IngredientName } from "../../data/pokemons";
+import { zeroSkillMetrics } from "./SkillMetrics";
 import type { MemberProfile, MemberProgress, TeamMember } from "./Types";
 
 /**
@@ -19,20 +20,12 @@ export function createMemberProgress(): MemberProgress {
 			normal: 0,
 			sneakySnacking: 0,
 		},
-		berryTotalStrength: 0,
+		berryStrength: 0,
+		bigBerryHelpCount: 0,
+		bigBerryCount: 0,
 		ingCounts: new Map<IngredientName, number>(),
-		skillCount: 0,
 		skillStockCount: 0,
-		skillStrength: 0,
-		skillExtraHelp: 0,
-		skillHelperBoost: 0,
-		skillEnergizingCheer: 0,
-		skillEnergyForEveryone: 0,
-		skillDreamShards: 0,
-		skillPotExtended: 0,
-		skillExtraTastyRate: 0,
-		skillCandy: 0,
-		skillBerryZone: 0,
+		...zeroSkillMetrics(),
 		pendingHelp: 0,
 		pendingEnergy: 0,
 		pendingExtraHelp: 0,
