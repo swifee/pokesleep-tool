@@ -13,7 +13,6 @@ import type {
 	InitialIngredientsSettings,
 } from "../types/CookingTypes";
 import type { TrialSummary } from "../types/MultiTrialTypes";
-import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import {
 	DEFAULT_QUICK_SIM_USAGE_MODE,
 	QUICK_SIM_MAX_USAGE_PERCENT,
@@ -82,7 +81,6 @@ interface QuickSimTabProps {
 	bonusSettings: TimelineBonusSettings;
 	/** 料理設定。初期食材の項目は自動シミュ用の値に差し替え済みのものを渡す */
 	cookingSettings: CookingSimulationSettings;
-	provisionalSettings: ProvisionalSettings;
 	seedMode: "random" | "fixed";
 	multiTrialCount: number;
 	/** 自動シミュ用の初期食材を変更する */
@@ -158,7 +156,6 @@ function buildQuickSimInputSignature(input: {
 	simulationConfig: SimulationConfig;
 	bonusSettings: TimelineBonusSettings;
 	cookingSettings: CookingSimulationSettings;
-	provisionalSettings: ProvisionalSettings;
 	seedMode: "random" | "fixed";
 	multiTrialCount: number;
 }): string {
@@ -168,7 +165,6 @@ function buildQuickSimInputSignature(input: {
 		simulationConfig: { ...input.simulationConfig, seed: 0 },
 		bonusSettings: input.bonusSettings,
 		cookingSettings: input.cookingSettings,
-		provisionalSettings: input.provisionalSettings,
 		seedMode: input.seedMode,
 		multiTrialCount: input.multiTrialCount,
 	});
@@ -198,7 +194,6 @@ export default function QuickSimTab({
 	simulationConfig,
 	bonusSettings,
 	cookingSettings,
-	provisionalSettings,
 	seedMode,
 	multiTrialCount,
 	onInitialIngredientsChange,
@@ -296,7 +291,6 @@ export default function QuickSimTab({
 				simulationConfig,
 				bonusSettings,
 				cookingSettings,
-				provisionalSettings,
 				seedMode,
 				multiTrialCount,
 			}),
@@ -306,7 +300,6 @@ export default function QuickSimTab({
 			simulationConfig,
 			bonusSettings,
 			cookingSettings,
-			provisionalSettings,
 			seedMode,
 			multiTrialCount,
 		],
@@ -420,7 +413,6 @@ export default function QuickSimTab({
 				noCollectCells: timeline.noCollectCells,
 				box: runtimeBox,
 				cookingSettings,
-				provisionalSettings,
 				resolvePokemonName,
 			}),
 		[
@@ -428,7 +420,6 @@ export default function QuickSimTab({
 			bonusSettings,
 			runtimeBox,
 			cookingSettings,
-			provisionalSettings,
 			resolvePokemonName,
 		],
 	);
@@ -479,7 +470,6 @@ export default function QuickSimTab({
 				config: simulationConfig,
 				bonusSettings,
 				cookingSettings,
-				provisionalSettings,
 				swaps: timeline.swaps,
 				noCollectCells: timeline.noCollectCells,
 				box: runtimeBox,
@@ -525,7 +515,6 @@ export default function QuickSimTab({
 			resolvePokemonName,
 			bonusSettings,
 			cookingSettings,
-			provisionalSettings,
 			runtimeBox,
 			onSeedChange,
 			t,
@@ -717,7 +706,6 @@ export default function QuickSimTab({
 				simulationConfig={simulationConfig}
 				bonusSettings={bonusSettings}
 				cookingSettings={cookingSettings}
-				provisionalSettings={provisionalSettings}
 				seedMode={seedMode}
 				hasSleepSlot={
 					scheduleResult.ok || scheduleResult.error !== "noSleepSlot"

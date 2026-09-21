@@ -7,7 +7,6 @@ import {
 	pickInitialIngredientsSettings,
 } from "./types/CookingTypes";
 import { TRIAL_COUNT_OPTIONS } from "./types/MultiTrialTypes";
-import { createDefaultProvisionalSettings } from "./types/ProvisionalSettingsTypes";
 import {
 	MAX_TEAM_SIZE,
 	type SerializedTeam,
@@ -317,7 +316,6 @@ export function createInitialState(): TeamTimelineState {
 		syncWithIvParameter: true,
 		cookingSettings: createDefaultCookingSettings(),
 		quickSimInitialIngredients: createDefaultInitialIngredientsSettings(),
-		provisionalSettings: createDefaultProvisionalSettings(),
 	};
 }
 
@@ -1048,17 +1046,6 @@ export function teamTimelineReducer(
 				quickSimInitialIngredients: pickInitialIngredientsSettings(
 					action.settings,
 				),
-			};
-		case "setProvisionalSettings":
-			return {
-				...state,
-				...getResetSimulationFields(),
-				provisionalSettings: action.settings,
-			};
-		case "loadProvisionalSettings":
-			return {
-				...state,
-				provisionalSettings: action.settings,
 			};
 		default:
 			return state;

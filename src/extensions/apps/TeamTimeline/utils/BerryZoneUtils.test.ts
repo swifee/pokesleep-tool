@@ -1,126 +1,89 @@
 import { describe, expect, it } from "vitest";
+import { getSkillSubValue, getSkillValue } from "../../../../util/MainSkill";
 import {
-	type BerryZoneProvisionalSettings,
-	createDefaultBerryZoneSettings,
-} from "../types/ProvisionalSettingsTypes";
-import {
-	addBerryZoneStacks,
-	clampBerryZoneStackCount,
+	addBerryZoneRate,
+	BERRY_ZONE_MAX_RATE_PERCENT,
+	clampBerryZoneRatePercent,
 	getBerryZoneBerryMultiplier,
 	getBerryZoneMultiplierForType,
-	getBerryZoneSnorlaxEnergy,
-	getInitialBerryZoneStackCount,
+	getBerryZoneRateGainPercent,
+	getBerryZoneStrengthPerTrigger,
 	isBerryZoneSkill,
 } from "./BerryZoneUtils";
 
-function createSettings(
-	overrides: Partial<BerryZoneProvisionalSettings> = {},
-): BerryZoneProvisionalSettings {
-	return {
-		...createDefaultBerryZoneSettings(),
-		enabled: true,
-		maxStackCount: 5,
-		berryEnergyBonusPercent: 20,
-		snorlaxEnergyByLevel: [100, 200, 300, 400, 500, 600],
-		...overrides,
-	};
-}
-
-describe("BerryZoneUtils スキル判定", () => {
-	it("きのみゾーンを展開するスキルを判定する", () => {
-		expect(isBerryZoneSkill("Berry Zone")).toBe(true);
+describe("BerryZoneUtils", () => {
+	it("きのみゾーン系のスキルだけを判定する", () => {
 		expect(isBerryZoneSkill("Berry Zone (Psystrike)")).toBe(true);
+		expect(isBerryZoneSkill("Berry Zone")).toBe(true);
 		expect(isBerryZoneSkill("Charge Strength S")).toBe(false);
-	});
-});
-
-describe("BerryZoneUtils 重ねがけ", () => {
-	it("重ねがけ数は 0〜上限に収まる", () => {
-		const settings = createSettings();
-
-		expect(clampBerryZoneStackCount(-1, settings)).toBe(0);
-		expect(clampBerryZoneStackCount(3, settings)).toBe(3);
-		expect(clampBerryZoneStackCount(9, settings)).toBe(5);
-		expect(clampBerryZoneStackCount(Number.NaN, settings)).toBe(0);
+		expect(isBerryZoneSkill("Berry Burst")).toBe(false);
 	});
 
-	it("発動回数だけ重ねがけし、上限で頭打ちになる", () => {
-		const settings = createSettings();
-
-		expect(addBerryZoneStacks(0, 2, settings)).toBe(2);
-		expect(addBerryZoneStacks(2, 2, settings)).toBe(4);
-		expect(addBerryZoneStacks(4, 3, settings)).toBe(5);
-	});
-
-	it("開始時の重ねがけ数は上限でクランプされる", () => {
-		expect(
-			getInitialBerryZoneStackCount(
-				createSettings({ initialStackCount: 3, maxStackCount: 5 }),
-			),
-		).toBe(3);
-		expect(
-			getInitialBerryZoneStackCount(
-				createSettings({ initialStackCount: 9, maxStackCount: 5 }),
-			),
-		).toBe(5);
-	});
-
-	it("仮設定が無効なら重ねがけは発生しない", () => {
-		const settings = createSettings({ enabled: false, initialStackCount: 3 });
-
-		expect(getInitialBerryZoneStackCount(settings)).toBe(0);
-		expect(addBerryZoneStacks(3, 2, settings)).toBe(0);
-		expect(getInitialBerryZoneStackCount(undefined)).toBe(0);
-	});
-});
-
-describe("BerryZoneUtils きのみエナジー倍率", () => {
-	it("重ねがけ数に比例して倍率が上がる", () => {
-		const settings = createSettings();
-
-		expect(getBerryZoneBerryMultiplier(settings, 0)).toBe(1);
-		expect(getBerryZoneBerryMultiplier(settings, 1)).toBeCloseTo(1.2, 10);
-		expect(getBerryZoneBerryMultiplier(settings, 5)).toBeCloseTo(2, 10);
-	});
-
-	it("マゴのみ（エスパータイプ）以外には適用されない", () => {
-		const settings = createSettings();
-
-		expect(getBerryZoneMultiplierForType("psychic", settings, 2)).toBeCloseTo(
-			1.4,
-			10,
+	it("発動1回あたりのカビゴンエナジーは上流の公式値を使う", () => {
+		// 公式: 1408 / 2002 / 2762 / 3813 / 5264 / 7274
+		expect(getBerryZoneStrengthPerTrigger("Berry Zone (Psystrike)", 1)).toBe(
+			1408,
 		);
-		expect(getBerryZoneMultiplierForType("fire", settings, 2)).toBe(1);
+		expect(getBerryZoneStrengthPerTrigger("Berry Zone (Psystrike)", 6)).toBe(
+			7274,
+		);
+		for (let level = 1; level <= 6; level += 1) {
+			expect(
+				getBerryZoneStrengthPerTrigger("Berry Zone (Psystrike)", level),
+			).toBe(getSkillValue("Berry Zone (Psystrike)", level));
+		}
 	});
 
-	it("仮設定が無効なら倍率は 1 のまま", () => {
-		expect(
-			getBerryZoneMultiplierForType(
-				"psychic",
-				createSettings({ enabled: false }),
-				5,
-			),
-		).toBe(1);
-		expect(getBerryZoneMultiplierForType("psychic", undefined, 5)).toBe(1);
-	});
-});
-
-describe("BerryZoneUtils カビゴンエナジー", () => {
-	it("スキルレベルに対応する仮の値を返す", () => {
-		const settings = createSettings();
-
-		expect(getBerryZoneSnorlaxEnergy(settings, 1)).toBe(100);
-		expect(getBerryZoneSnorlaxEnergy(settings, 6)).toBe(600);
+	it("発動1回あたりの増加率は上流の公式値を使う", () => {
+		// 公式: 0.6 / 0.8 / 1.0 / 1.2 / 1.6 / 2.0 (%)
+		expect(getBerryZoneRateGainPercent("Berry Zone (Psystrike)", 1)).toBe(0.6);
+		expect(getBerryZoneRateGainPercent("Berry Zone (Psystrike)", 6)).toBe(2);
+		for (let level = 1; level <= 6; level += 1) {
+			expect(getBerryZoneRateGainPercent("Berry Zone (Psystrike)", level)).toBe(
+				getSkillSubValue("Berry Zone (Psystrike)", level),
+			);
+		}
 	});
 
-	it("範囲外のスキルレベルや無効時は 0 を返す", () => {
-		const settings = createSettings();
+	it("数値を持たないスキル名には 0 を返す", () => {
+		expect(getBerryZoneStrengthPerTrigger("Berry Zone", 6)).toBe(0);
+		expect(getBerryZoneRateGainPercent("Berry Zone", 6)).toBe(0);
+		expect(getBerryZoneStrengthPerTrigger("Charge Strength S", 6)).toBe(0);
+		expect(getBerryZoneRateGainPercent("Charge Strength S", 6)).toBe(0);
+	});
 
-		expect(getBerryZoneSnorlaxEnergy(settings, 7)).toBe(0);
-		expect(getBerryZoneSnorlaxEnergy(settings, 0)).toBe(0);
-		expect(
-			getBerryZoneSnorlaxEnergy(createSettings({ enabled: false }), 3),
-		).toBe(0);
-		expect(getBerryZoneSnorlaxEnergy(undefined, 3)).toBe(0);
+	it("増加率は 0〜上限(24%) に収める", () => {
+		expect(BERRY_ZONE_MAX_RATE_PERCENT).toBe(24);
+		expect(clampBerryZoneRatePercent(-1)).toBe(0);
+		expect(clampBerryZoneRatePercent(12.4)).toBe(12.4);
+		expect(clampBerryZoneRatePercent(24)).toBe(24);
+		expect(clampBerryZoneRatePercent(30)).toBe(24);
+		expect(clampBerryZoneRatePercent(Number.NaN)).toBe(0);
+		expect(clampBerryZoneRatePercent(Number.POSITIVE_INFINITY)).toBe(0);
+	});
+
+	it("発動による増加は上限で止まる", () => {
+		expect(addBerryZoneRate(0, 2)).toBe(2);
+		expect(addBerryZoneRate(10, 0.6)).toBeCloseTo(10.6, 10);
+		// Lv6 (2%) は 12 回で上限に達し、それ以上は増えない
+		expect(addBerryZoneRate(22, 2)).toBe(24);
+		expect(addBerryZoneRate(24, 2)).toBe(24);
+		expect(addBerryZoneRate(23, 4)).toBe(24);
+		// 負の増加や NaN は無視する
+		expect(addBerryZoneRate(10, -5)).toBe(10);
+		expect(addBerryZoneRate(10, Number.NaN)).toBe(10);
+	});
+
+	it("きのみエナジー倍率は 1 + 増加率/100", () => {
+		expect(getBerryZoneBerryMultiplier(0)).toBe(1);
+		expect(getBerryZoneBerryMultiplier(2)).toBeCloseTo(1.02, 10);
+		expect(getBerryZoneBerryMultiplier(24)).toBeCloseTo(1.24, 10);
+		expect(getBerryZoneBerryMultiplier(50)).toBeCloseTo(1.24, 10);
+	});
+
+	it("倍率はマゴのみ（エスパー）にのみ適用される", () => {
+		expect(getBerryZoneMultiplierForType("psychic", 24)).toBeCloseTo(1.24, 10);
+		expect(getBerryZoneMultiplierForType("electric", 24)).toBe(1);
+		expect(getBerryZoneMultiplierForType("psychic", 0)).toBe(1);
 	});
 });

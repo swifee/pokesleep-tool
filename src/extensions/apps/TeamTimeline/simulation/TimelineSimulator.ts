@@ -22,7 +22,6 @@ import type {
 	CookingSimulationResult,
 	CookingSimulationSettings,
 } from "../types/CookingTypes";
-import type { ProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import type { TimelineBonusSettings } from "../types/TimelineBonusSettingsTypes";
 import {
 	type DailySummary,
@@ -40,25 +39,16 @@ import {
 	type Weekday,
 } from "../types/TimeSlotTypes";
 import {
-	addBerryZoneStacks,
+	addBerryZoneRate,
 	getBerryZoneMultiplierForType,
-	getInitialBerryZoneStackCount,
 } from "../utils/BerryZoneUtils";
-import {
-	getHugeMagoBerryEnergyMultiplier,
-	getHugeMagoBerryPickupRate,
-	HUGE_MAGO_BERRY_TYPE,
-} from "../utils/HugeMagoBerryUtils";
+import { HUGE_MAGO_BERRY_TYPE } from "../utils/HugeMagoBerryUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
 import {
 	buildExpandedTimeline,
 	type ExpandedTimelineSlot,
 } from "../utils/TimelineDayExpansion";
-import {
-	getProvisionalBaseFrequencySeconds,
-	getTimelineCarryLimit,
-	normalizeTimelinePokemon,
-} from "../utils/TimelinePokemonUtils";
+import { normalizeTimelinePokemon } from "../utils/TimelinePokemonUtils";
 import { calculateDuration, isSleepingSlot } from "../utils/TimeSlotUtils";
 import { isSundayForDayIndex } from "../utils/WeekdayUtils";
 import {
@@ -210,8 +200,6 @@ export interface SimulationInput {
 	analysisOptions?: SimulationAnalysisOptions;
 	/** 料理シミュレーション設定（オプショナル） */
 	cookingSettings?: CookingSimulationSettings;
-	/** 仮設定（公式未公開パラメータ、オプショナル） */
-	provisionalSettings?: ProvisionalSettings;
 	/**
 	 * ボーナス設定から構築済みの StrengthParameter（オプショナル）。
 	 * 省略時は個体値計算機の保存設定（localStorage）とボーナス設定から構築する。
@@ -351,7 +339,6 @@ function buildPokemonBonusContext(
 	pokemon: PokemonBoxItem,
 	bonusSettings: TimelineBonusSettings,
 	strengthParameter: StrengthParameter,
-	provisionalSettings?: ProvisionalSettings,
 ): PokemonBonusContext {
 	const strength = new PokemonStrength(pokemon.iv, strengthParameter);
 	const bonus = strength.bonusEffects;
@@ -374,14 +361,9 @@ function buildPokemonBonusContext(
 			isMainBerry,
 			isNonFavoriteBerry: isExpertMode && !isFavoriteBerry,
 			fieldIndex: strengthParameter.fieldIndex,
-			baseFrequencySecondsOverride: getProvisionalBaseFrequencySeconds(
-				pokemon.iv,
-				provisionalSettings?.placeholderPokemon,
-			),
-			hugeMagoBerryPickupRate: getHugeMagoBerryPickupRate(
-				pokemon.iv.pokemon,
-				provisionalSettings?.hugeMagoBerry,
-			),
+			// とてもおおきなマゴのみは選択中のイベントの bigBerry から上流が解決する
+			hugeMagoBerryPickupRate: bonus.bigBerryRate,
+			hugeMagoBerryPickupCount: bonus.bigBerryCount,
 		},
 		skill: {
 			skillTriggerBonus: bonus.skillTrigger,
@@ -725,13 +707,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		noCollectCells = [],
 		box,
 		analysisOptions,
-		provisionalSettings,
 	} = input;
-	const berryZoneSettings = provisionalSettings?.berryZone;
-	const hugeMagoBerryEnergyMultiplier = getHugeMagoBerryEnergyMultiplier(
-		provisionalSettings?.hugeMagoBerry,
-	);
-	const placeholderStats = provisionalSettings?.placeholderPokemon;
 	const disabledPokemonIds = new Set<number>(
 		analysisOptions?.disabledPokemonIds ?? [],
 	);
@@ -768,7 +744,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		if (cached) {
 			return cached;
 		}
-		const normalized = normalizeTimelinePokemon(pokemon, placeholderStats);
+		const normalized = normalizeTimelinePokemon(pokemon);
 		normalizedPokemonById.set(pokemon.id, normalized);
 		return normalized;
 	};
@@ -818,7 +794,6 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			pokemon,
 			bonusSettings,
 			strengthParameter,
-			provisionalSettings,
 		);
 		bonusContextByPokemonId.set(pokemon.id, built);
 		return built;
@@ -895,7 +870,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			bankedTimeSeconds: 0,
 			helpsSinceLastSkill: 0,
 			maxSkillStock: getMaxSkillStock(pokemon.iv.pokemon.specialty),
-			maxInventory: getTimelineCarryLimit(pokemon.iv, placeholderStats),
+			maxInventory: pokemon.iv.carryLimit,
 			stockpileCount: 0,
 			berryBurstDisguiseLocked: false,
 		});
@@ -905,8 +880,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 	const slotResults = new Map<string, TimeSlotResult[]>();
 	const pokemonResults = new Map<number, TimeSlotResult[]>(); // pokemonId -> results
 
-	// 7.5. 「きのみゾーン」の展開状況（フィールド単位の状態のため、チーム全体で共有する）
-	let berryZoneStackCount = getInitialBerryZoneStackCount(berryZoneSettings);
+	// 7.5. 「きのみゾーン」の増加率(%)（フィールド単位の状態のため、チーム全体で共有する）
+	// フィールド移動でリセットされるため、シミュレーション開始時点は未展開とする。
+	let berryZoneRatePercent = 0;
 
 	// 8. 時間帯ループ
 	let activeDayIndex = -1;
@@ -972,12 +948,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		const teamSkillBonusContext: TeamSkillBonusContext = {
 			fieldBonus: bonusSettings.fieldBonus,
 			byPokemonId: teamSkillBonusByPokemonId,
-			berryZone: berryZoneSettings,
-			berryZoneStackCount,
+			berryZoneRatePercent,
 		};
-		// この時間帯に回収するきのみへ適用する重ねがけ数。
-		// 発動による重ねがけは次の時間帯から反映する。
-		const berryZoneStackCountAtSlotStart = berryZoneStackCount;
+		// この時間帯に回収するきのみへ適用する増加率。
+		// 発動による増加は次の時間帯から反映する。
+		const berryZoneRatePercentAtSlotStart = berryZoneRatePercent;
 
 		// 睡眠開始を追跡
 		if (getDisplayLabel(slot) === "sleep") {
@@ -1236,15 +1211,14 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			}
 		}
 
-		// 「きのみゾーン」の重ねがけを反映（効果は次の時間帯から）
-		let berryZoneStackGain = 0;
+		// 「きのみゾーン」の増加率を反映（効果は次の時間帯から、上限あり）
+		let berryZoneRateGainPercent = 0;
 		skillResults.forEach((skillResult) => {
-			berryZoneStackGain += skillResult.berryZoneStackGain;
+			berryZoneRateGainPercent += skillResult.berryZoneRateGainPercent;
 		});
-		berryZoneStackCount = addBerryZoneStacks(
-			berryZoneStackCount,
-			berryZoneStackGain,
-			berryZoneSettings,
+		berryZoneRatePercent = addBerryZoneRate(
+			berryZoneRatePercent,
+			berryZoneRateGainPercent,
 		);
 
 		// Phase 2: 各ポケモンのげんき更新と結果生成
@@ -1381,13 +1355,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				hugeMagoBerryEP: calculateHugeMagoBerryEP(
 					state.pokemon.iv.level,
 					collectedHugeMagoBerryCount,
-					hugeMagoBerryEnergyMultiplier,
 					applyBerryZoneMultiplier(
 						getPokemonBonusContext(state.pokemon).hugeMagoBerry,
 						getBerryZoneMultiplierForType(
 							HUGE_MAGO_BERRY_TYPE,
-							berryZoneSettings,
-							berryZoneStackCountAtSlotStart,
+							berryZoneRatePercentAtSlotStart,
 						),
 					),
 				),
@@ -1516,11 +1488,10 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				badDreamsHitCount: skillResult.badDreamsHitCount,
 				badDreamsTotalDamageGiven: skillResult.badDreamsTotalDamage,
 				badDreamsDamageTaken: actualBadDreamsDamage,
-				berryZoneStackCount: berryZoneStackCountAtSlotStart,
+				berryZoneRatePercent: berryZoneRatePercentAtSlotStart,
 				berryZoneMultiplier: getBerryZoneMultiplierForType(
 					state.pokemon.iv.pokemon.type,
-					berryZoneSettings,
-					berryZoneStackCountAtSlotStart,
+					berryZoneRatePercentAtSlotStart,
 				),
 			};
 
@@ -1618,10 +1589,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				// 入れ替えで投入されたポケモンの天井カウンタは0から
 				helpsSinceLastSkill: 0,
 				maxSkillStock: getMaxSkillStock(simulationPokemon.iv.pokemon.specialty),
-				maxInventory: getTimelineCarryLimit(
-					simulationPokemon.iv,
-					placeholderStats,
-				),
+				maxInventory: simulationPokemon.iv.carryLimit,
 				stockpileCount: 0,
 				berryBurstDisguiseLocked: false,
 			};

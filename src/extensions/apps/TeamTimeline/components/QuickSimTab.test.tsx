@@ -5,7 +5,6 @@ import PokemonIv from "../../../../util/PokemonIv";
 import type { SimulationInput } from "../simulation/TimelineSimulator";
 import type { ParallelMultiTrialInput } from "../simulation/TrialBatchRunner";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
-import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import { STORAGE_KEY_QUICK_SIM } from "../types/QuickSimTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
@@ -271,7 +270,6 @@ function renderTab(
 			simulationConfig={{ ...DEFAULT_SIMULATION_CONFIG }}
 			bonusSettings={createDefaultTimelineBonusSettings()}
 			cookingSettings={createDefaultCookingSettings()}
-			provisionalSettings={createDefaultProvisionalSettings()}
 			seedMode="random"
 			multiTrialCount={3}
 			onInitialIngredientsChange={onInitialIngredientsChange}

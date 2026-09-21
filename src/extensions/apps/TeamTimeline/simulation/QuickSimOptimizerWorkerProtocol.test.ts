@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import PokemonBox, { PokemonBoxItem } from "../../../../util/PokemonBox";
 import PokemonIv from "../../../../util/PokemonIv";
 import { createDefaultCookingSettings } from "../types/CookingTypes";
-import { createDefaultProvisionalSettings } from "../types/ProvisionalSettingsTypes";
 import {
 	DEFAULT_SIMULATION_CONFIG,
 	DEFAULT_TIME_SLOTS,
@@ -48,7 +47,6 @@ describe("QuickSimOptimizerWorkerProtocol", () => {
 			simulationConfig: { ...DEFAULT_SIMULATION_CONFIG, simulationDays: 3 },
 			bonusSettings,
 			cookingSettings: { ...createDefaultCookingSettings(), enabled: true },
-			provisionalSettings: createDefaultProvisionalSettings(),
 			strengthParameter:
 				buildStrengthParameterFromTimelineBonusSettings(bonusSettings),
 		};
@@ -70,7 +68,6 @@ describe("QuickSimOptimizerWorkerProtocol", () => {
 		expect(restored.simulationConfig).toEqual(context.simulationConfig);
 		expect(restored.cookingSettings.enabled).toBe(true);
 		expect(restored.bonusSettings).toEqual(context.bonusSettings);
-		expect(restored.provisionalSettings).toEqual(context.provisionalSettings);
 		expect(restored.strengthParameter).toEqual(context.strengthParameter);
 		expect(restored.strengthParameter.fieldBonus).toBe(35);
 	});
@@ -84,7 +81,6 @@ describe("QuickSimOptimizerWorkerProtocol", () => {
 			simulationConfig: DEFAULT_SIMULATION_CONFIG,
 			bonusSettings,
 			cookingSettings: createDefaultCookingSettings(),
-			provisionalSettings: createDefaultProvisionalSettings(),
 			strengthParameter:
 				buildStrengthParameterFromTimelineBonusSettings(bonusSettings),
 		};

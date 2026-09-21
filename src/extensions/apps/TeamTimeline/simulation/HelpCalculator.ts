@@ -8,11 +8,7 @@ import type { IngredientName } from "../../../../data/pokemons";
 import { getSkillValue, type MainSkillName } from "../../../../util/MainSkill";
 import type { PokemonBoxItem } from "../../../../util/PokemonBox";
 import type { IngredientResult } from "../types/TimeSlotTypes";
-import { HUGE_MAGO_BERRY_COUNT_PER_PICKUP } from "../utils/HugeMagoBerryUtils";
-import {
-	getEffectiveMainSkillName,
-	resolveBaseFrequency,
-} from "../utils/TimelinePokemonUtils";
+import { getEffectiveMainSkillName } from "../utils/TimelinePokemonUtils";
 import { calculateWeightedEfficiency } from "./EnergyCalculator";
 import type SeededRandom from "./SeededRandom";
 
@@ -42,15 +38,12 @@ export interface HelpBonusContext {
 	 */
 	fieldIndex?: number;
 	/**
-	 * データ未公開ポケモンに適用するおてつだいスピード(秒)の仮値。
-	 * 種族データが入るまでの仮設定で、通常のポケモンには影響しない。
-	 */
-	baseFrequencySecondsOverride?: number;
-	/**
 	 * おてつだい1回あたりに「とてもおおきなマゴのみ」を拾ってくる確率（0〜1）。
 	 * 0 のときは判定そのものを行わない（乱数を消費しない）。
 	 */
 	hugeMagoBerryPickupRate?: number;
+	/** 1回の取得で拾ってくる「とてもおおきなマゴのみ」の個数 */
+	hugeMagoBerryPickupCount?: number;
 }
 
 /**
@@ -319,19 +312,22 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 		0,
 		bonusContext?.hugeMagoBerryPickupRate ?? 0,
 	);
+	const hugeMagoBerryPickupCount = Math.max(
+		0,
+		Math.floor(bonusContext?.hugeMagoBerryPickupCount ?? 0),
+	);
 	const isMainBerry = bonusContext?.isMainBerry ?? false;
 	const isNonFavoriteBerry = bonusContext?.isNonFavoriteBerry ?? false;
 	const fieldIndex = bonusContext?.fieldIndex ?? ggexFieldIndex;
 
 	// 基礎おてつだい間隔
-	const baseFrequency = resolveBaseFrequency(pokemon.iv, {
-		helpBonusCount: Math.max(0, teamHelpingBonusCount),
+	const baseFrequency = pokemon.iv.getBaseFrequency(
+		Math.max(0, teamHelpingBonusCount),
 		isGoodCampTicketSet,
 		isMainBerry,
 		isNonFavoriteBerry,
 		fieldIndex,
-		baseFrequencySecondsOverride: bonusContext?.baseFrequencySecondsOverride,
-	});
+	);
 
 	// 加重平均効率
 	const efficiency = calculateWeightedEfficiency(startEnergy, durationMinutes);
@@ -425,14 +421,21 @@ export function calculateHelp(input: HelpInput): HelpOutput {
 				inventory += berryCountForHelp;
 			}
 
-			// とてもおおきなマゴのみの追加取得判定。
-			// 所持数が満タンのときは拾えないため、通常状態のみ判定する。
+			// とてもおおきなマゴのみの追加取得判定（上流 Help.ts と同じ扱い）。
+			// 所持数に空きがあるときだけ判定し、空きを超える分は持ち帰らない。
+			const remainingInventorySpace = effectiveMaxInventory - inventory;
 			if (
 				hugeMagoBerryPickupRate > 0 &&
+				hugeMagoBerryPickupCount > 0 &&
+				remainingInventorySpace > 0 &&
 				random.chance(hugeMagoBerryPickupRate)
 			) {
-				totalHugeMagoBerryCount += HUGE_MAGO_BERRY_COUNT_PER_PICKUP;
-				inventory += HUGE_MAGO_BERRY_COUNT_PER_PICKUP;
+				const pickedCount = Math.min(
+					hugeMagoBerryPickupCount,
+					remainingInventorySpace,
+				);
+				totalHugeMagoBerryCount += pickedCount;
+				inventory += pickedCount;
 			}
 
 			// スキル発動判定
