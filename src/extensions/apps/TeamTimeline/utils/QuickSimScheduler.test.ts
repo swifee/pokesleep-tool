@@ -1090,3 +1090,285 @@ describe("buildQuickSimSchedule with exclusions", () => {
 		}
 	});
 });
+
+/** 各日・各枠の空き区間（pokemonId が null の区間） */
+function emptySegments(schedule: QuickSimSchedule): {
+	dayIndex: number;
+	laneIndex: number;
+	startMinute: number;
+	endMinute: number;
+}[] {
+	return schedule.dayLanes.flatMap((lanes, dayIndex) =>
+		lanes.flatMap((lane, laneIndex) =>
+			lane
+				.filter((segment) => segment.pokemonId === null)
+				.map((segment) => ({
+					dayIndex,
+					laneIndex,
+					startMinute: segment.startMinute,
+					endMinute: segment.endMinute,
+				})),
+		),
+	);
+}
+
+/** 期間中に誰かが入る枠に残った空き区間（期間中ずっと空きの枠は除く） */
+function emptySegmentsInUsedLanes(
+	schedule: QuickSimSchedule,
+): ReturnType<typeof emptySegments> {
+	const usedLanes = new Set<number>();
+	for (const lanes of schedule.dayLanes) {
+		lanes.forEach((lane, laneIndex) => {
+			if (lane.some((segment) => segment.pokemonId !== null)) {
+				usedLanes.add(laneIndex);
+			}
+		});
+	}
+	return emptySegments(schedule).filter((gap) => usedLanes.has(gap.laneIndex));
+}
+
+/** 期間全体で各メンバーが編成に入っている分数 */
+function totalMinutesById(schedule: QuickSimSchedule): Map<number, number> {
+	const totals = new Map<number, number>();
+	for (const lanes of schedule.dayLanes) {
+		for (const lane of lanes) {
+			for (const segment of lane) {
+				if (segment.pokemonId === null) {
+					continue;
+				}
+				totals.set(
+					segment.pokemonId,
+					(totals.get(segment.pokemonId) ?? 0) +
+						segment.endMinute -
+						segment.startMinute,
+				);
+			}
+		}
+	}
+	return totals;
+}
+
+describe("buildQuickSimSchedule with fillEmptyLanes", () => {
+	const buildFilled = (
+		list: QuickSimMember[],
+		days: number,
+		exclusions?: QuickSimExclusionMap,
+	): QuickSimSchedule => {
+		const result = buildQuickSimSchedule(
+			list,
+			DEFAULT_TIME_SLOTS,
+			days,
+			exclusions,
+			true,
+		);
+		if (!result.ok) {
+			throw new Error(`schedule failed: ${result.error}`);
+		}
+		return result.schedule;
+	};
+
+	it("keeps the previous member in the lane until the next one arrives", () => {
+		// 4 匹が 100%、5 匹目は 10% と 73%（残り）で 17% 分の空きが出る
+		const list = modeMembers(
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[100, "even"],
+			[10, "even"],
+			[73, "remainder"],
+		);
+		const schedule = buildFilled(list, 2);
+
+		expect(emptySegments(schedule)).toEqual([]);
+		expect(schedule.unmetPokemonIds).toEqual([]);
+		// 空きは「残り」のメンバーが居続けて埋まり、10% のメンバーはそのまま
+		const totals = totalMinutesById(schedule);
+		expect(totals.get(204)).toBe(2 * usagePercentToMinutes(10));
+		expect(totals.get(205)).toBe(
+			2 * (MINUTES_PER_DAY - usagePercentToMinutes(10)),
+		);
+		expect(countLaneChanges(schedule)).toBe(0);
+	});
+
+	it("does not change a schedule that already has no gaps", () => {
+		const list = members(100, 100, 100, 100, 60, 40);
+		const plain = buildMultiOrThrow(list, 3);
+		const filled = buildFilled(list, 3);
+		expect(filled.dayLanes).toEqual(plain.dayLanes);
+	});
+
+	it("lets the next member start from the beginning when the lane starts empty", () => {
+		// 後半のメンバーだけなので、埋めなければ期間の前半が空きになる
+		const list = modeMembers([40, "secondHalf"]);
+		const plain = buildMultiOrThrow(list, 2);
+		expect(emptySegments(plain).length).toBeGreaterThan(0);
+
+		const schedule = buildFilled(list, 2);
+		expect(emptySegmentsInUsedLanes(schedule)).toEqual([]);
+		expect(schedule.dayLanes[0][0]).toEqual(fullLane(200));
+		expect(schedule.dayLanes[1][0]).toEqual(fullLane(200));
+	});
+
+	it("leaves a lane empty when no member can fill it", () => {
+		// 100% のメンバーは別の枠にいるので、5 つ目の枠は誰も埋められない
+		const list = members(100, 100, 100, 100);
+		const schedule = buildFilled(list, 1);
+		expect(emptySegments(schedule)).toEqual([
+			{ dayIndex: 0, laneIndex: 4, startMinute: 0, endMinute: MINUTES_PER_DAY },
+		]);
+	});
+
+	it("never puts a member into two lanes or next to an excluded member", () => {
+		// 200 と 201 は同時に編成できない。201 は 200 が抜けた後にしか入れない
+		const list = modeMembers([70, "even"], [30, "even"]);
+		const exclusions = exclusionsOf([200, 201]);
+		const schedule = buildFilled(list, 2, exclusions);
+
+		expectNoExcludedOverlap(schedule, exclusions);
+		expect(
+			validateQuickSimMultiDaySchedule(
+				schedule,
+				totalMinutesById(schedule),
+				exclusions,
+			),
+		).toEqual([]);
+		// 空きは 200 か 201 のどちらかが居続けて埋まる
+		expect(emptySegmentsInUsedLanes(schedule)).toEqual([]);
+	});
+
+	it("reports unmet members from the schedule before filling", () => {
+		// 201 は 200 と同時に編成できず、200 が一日中いるので一度も入れない
+		const list = modeMembers([100, "even"], [50, "even"]);
+		const exclusions = exclusionsOf([200, 201]);
+		const schedule = buildFilled(list, 1, exclusions);
+		expect(schedule.unmetPokemonIds).toEqual([201]);
+	});
+
+	it("fills every gap that a neighbour can take across many random cases", () => {
+		let seed = 424242;
+		const random = (): number => {
+			seed = (seed * 1103515245 + 12345) % 2147483648;
+			return seed / 2147483648;
+		};
+		for (let trial = 0; trial < 40; trial++) {
+			const count = 1 + Math.floor(random() * 8);
+			const entries: [number, QuickSimUsageMode][] = [];
+			let remaining = 500;
+			for (let index = 0; index < count; index++) {
+				const usage = Math.min(remaining, Math.floor(random() * 101));
+				const mode =
+					QUICK_SIM_USAGE_MODES[
+						Math.floor(random() * QUICK_SIM_USAGE_MODES.length)
+					];
+				entries.push([usage, mode]);
+				remaining -= usage;
+			}
+			const list = modeMembers(...entries);
+			const days = 1 + Math.floor(random() * 7);
+			const result = buildQuickSimSchedule(
+				list,
+				DEFAULT_TIME_SLOTS,
+				days,
+				undefined,
+				true,
+			);
+			if (!result.ok) {
+				expect(result.error).toBe("noMembers");
+				continue;
+			}
+			const schedule = result.schedule;
+			// 枠の整合性（隙間なし・同じメンバーが同時に 2 枠にいない）は保つ
+			expect(
+				validateQuickSimMultiDaySchedule(schedule, totalMinutesById(schedule)),
+			).toEqual([]);
+			expect(countLaneChanges(schedule)).toBe(0);
+			// 埋めた後の起用時間は設定を下回らない
+			const totals = totalMinutesById(schedule);
+			for (const member of list) {
+				if (schedule.unmetPokemonIds.includes(member.pokemonId)) {
+					continue;
+				}
+				expect(totals.get(member.pokemonId) ?? 0).toBeGreaterThanOrEqual(
+					usagePercentToMinutes(member.usagePercent) * days,
+				);
+			}
+			// 残った空きは、前後に誰もいないか、前後のメンバーがその時刻に別の枠にいる場合だけ
+			for (const gap of emptySegments(schedule)) {
+				const previous = occupantBefore(schedule, gap);
+				const next = occupantAfter(schedule, gap);
+				if (previous !== null) {
+					expect(
+						isPresentElsewhere(
+							schedule,
+							gap.dayIndex,
+							gap.startMinute,
+							previous,
+						),
+					).toBe(true);
+				}
+				if (next !== null) {
+					expect(
+						isPresentElsewhere(schedule, gap.dayIndex, gap.endMinute - 1, next),
+					).toBe(true);
+				}
+			}
+		}
+	});
+});
+
+interface GapPosition {
+	dayIndex: number;
+	laneIndex: number;
+	startMinute: number;
+	endMinute: number;
+}
+
+/** 空き区間の直前にいたメンバー（前日の末尾も見る）。誰もいなければ null */
+function occupantBefore(
+	schedule: QuickSimSchedule,
+	gap: GapPosition,
+): number | null {
+	const lane = schedule.dayLanes[gap.dayIndex][gap.laneIndex];
+	const index = lane.findIndex(
+		(segment) => segment.startMinute === gap.startMinute,
+	);
+	if (index > 0) {
+		return lane[index - 1].pokemonId;
+	}
+	const previousLane = schedule.dayLanes[gap.dayIndex - 1]?.[gap.laneIndex];
+	return previousLane?.[previousLane.length - 1]?.pokemonId ?? null;
+}
+
+/** 空き区間の直後に入るメンバー（翌日の先頭も見る）。誰もいなければ null */
+function occupantAfter(
+	schedule: QuickSimSchedule,
+	gap: GapPosition,
+): number | null {
+	const lane = schedule.dayLanes[gap.dayIndex][gap.laneIndex];
+	const index = lane.findIndex(
+		(segment) => segment.startMinute === gap.startMinute,
+	);
+	if (index < lane.length - 1) {
+		return lane[index + 1].pokemonId;
+	}
+	return (
+		schedule.dayLanes[gap.dayIndex + 1]?.[gap.laneIndex]?.[0]?.pokemonId ?? null
+	);
+}
+
+/** その時刻に、そのメンバーがどこかの枠に入っているか */
+function isPresentElsewhere(
+	schedule: QuickSimSchedule,
+	dayIndex: number,
+	minute: number,
+	pokemonId: number,
+): boolean {
+	return schedule.dayLanes[dayIndex].some((lane) =>
+		lane.some(
+			(segment) =>
+				segment.pokemonId === pokemonId &&
+				segment.startMinute <= minute &&
+				minute < segment.endMinute,
+		),
+	);
+}

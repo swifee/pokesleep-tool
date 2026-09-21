@@ -27,6 +27,10 @@
  *    入っているか」だけを決めるものとみなし、続投するメンバーは同じ枠に居続け、
  *    入れ替わるメンバーは抜けたメンバーの枠に入るように枠を付け替える。
  *    これで続投中のポケモンの列が変わることはなくなる。
+ * 5. 自動シミュの表示・実行では、最後に残った枠の空きをその前後にいるメンバーで埋める
+ *    （`fillEmptyLanes`）。空き枠を作っても得るものはないので、直前まで入っていた
+ *    メンバーは次のメンバーが入るまで居続け、期間の先頭の空きは次のメンバーが先頭から
+ *    入る。埋めた分だけ起用時間は設定より増える。
  *
  * 同時に編成できないメンバーの組（とくべつなポケモンのルール。`QuickSimExclusionMap`）が
  * あるときは、どの手順でも「相手が別の枠にいる時刻」を自分がいる時刻と同じく避けて
@@ -602,6 +606,80 @@ class PeriodGrid {
 				}
 			}
 		}
+	}
+
+	/**
+	 * 枠の空きを、その前後にいるメンバーで埋める（`rethreadLanes` の後に呼ぶ）。
+	 * 空き枠を作っても得るものはないので、直前まで入っていたメンバーは次のメンバーが
+	 * 入るまで居続け、期間の先頭の空きは次のメンバーが先頭から入る。
+	 * 自分が別の枠にいる、または同時に編成できないメンバーがいる時刻は埋めない。
+	 * 1 分でも埋めたら true を返す。
+	 *
+	 * 埋めた結果、別の枠にある自分の区間と時刻がつながることがある（居続けた先で
+	 * 自分が別の枠に入る）。その場合は `rethreadLanes` でひとつの枠にまとめ直し、
+	 * 空いた枠をまた埋める（`fillAndRethreadLanes`）。
+	 */
+	fillEmptyLanes(): boolean {
+		const totalMinutes = this.totalMinutes;
+		let filled = false;
+		for (const laneIndex of allLaneIndexes()) {
+			let minute = 0;
+			while (minute < totalMinutes) {
+				if (this.occupantAt(laneIndex, minute) !== FREE) {
+					minute++;
+					continue;
+				}
+				const start = minute;
+				while (
+					minute < totalMinutes &&
+					this.occupantAt(laneIndex, minute) === FREE
+				) {
+					minute++;
+				}
+				const end = minute;
+				const previous = this.occupantAt(laneIndex, start - 1);
+				const next = this.occupantAt(laneIndex, end);
+				let cursor = start;
+				if (previous !== FREE) {
+					while (cursor < end && this.tryOccupy(laneIndex, cursor, previous)) {
+						cursor++;
+						filled = true;
+					}
+				}
+				if (next !== FREE) {
+					let tail = end - 1;
+					while (tail >= cursor && this.tryOccupy(laneIndex, tail, next)) {
+						tail--;
+						filled = true;
+					}
+				}
+			}
+		}
+		return filled;
+	}
+
+	/**
+	 * 空きがなくなる（または埋められなくなる）まで、空きを埋めては枠を引き直す。
+	 * 埋めるたびに空き分数は減るので必ず終わる。
+	 */
+	fillAndRethreadLanes(): void {
+		while (this.fillEmptyLanes()) {
+			this.rethreadLanes();
+		}
+	}
+
+	/** その時刻に置けるなら 1 分だけ配置する */
+	private tryOccupy(
+		laneIndex: number,
+		minute: number,
+		pokemonId: number,
+	): boolean {
+		const { day, minuteInDay } = this.split(minute);
+		if (day.isBlocked(pokemonId, minuteInDay)) {
+			return false;
+		}
+		day.lanes[laneIndex][minuteInDay] = pokemonId;
+		return true;
 	}
 
 	countMinutesById(): Map<number, number> {
@@ -1323,12 +1401,19 @@ export function getQuickSimTotalTargetMinutesById(
 /**
  * 起用率・起用方法から、集計期間全体の自動入れ替えスケジュールを生成する。
  * `exclusions` に挙げた同時に編成できないメンバーの組は、同じ時刻に別の枠へ入れない。
+ *
+ * `fillEmptyLanes` を指定すると、配置後に残った枠の空きをその前後にいるメンバーで
+ * 埋める（`PeriodGrid.fillEmptyLanes`）。空き枠を作っても得るものはないので、
+ * 自動シミュの表示・実行ではこれを使う。埋めた分だけ起用時間は設定より増えるため、
+ * 起用率どおりの時間が必要な評価（起用率最適化の単体 EP 表など）では使わない。
+ * 起用率を満たせないメンバー（`unmetPokemonIds`）の判定は埋める前の時間で行う。
  */
 export function buildQuickSimSchedule(
 	members: readonly QuickSimMember[],
 	timeSlots: readonly TimeSlot[],
 	simulationDays: number,
 	exclusions: QuickSimExclusionMap = EMPTY_QUICK_SIM_EXCLUSION_MAP,
+	fillEmptyLanes = false,
 ): QuickSimScheduleResult {
 	const structure = resolveQuickSimDayStructure(timeSlots);
 	if (!structure) {
@@ -1354,6 +1439,9 @@ export function buildQuickSimSchedule(
 			(job) => (actualById.get(job.pokemonId) ?? 0) < job.minutes * dayCount,
 		)
 		.map((job) => job.pokemonId);
+	if (fillEmptyLanes) {
+		grid.fillAndRethreadLanes();
+	}
 	const dayLanes = grid.days.map((day) => day.toLaneSegments());
 
 	return {
@@ -1377,8 +1465,15 @@ export function buildQuickSimDaySchedule(
 	members: readonly QuickSimMember[],
 	timeSlots: readonly TimeSlot[],
 	exclusions: QuickSimExclusionMap = EMPTY_QUICK_SIM_EXCLUSION_MAP,
+	fillEmptyLanes = false,
 ): QuickSimDayScheduleResult {
-	const result = buildQuickSimSchedule(members, timeSlots, 1, exclusions);
+	const result = buildQuickSimSchedule(
+		members,
+		timeSlots,
+		1,
+		exclusions,
+		fillEmptyLanes,
+	);
 	if (!result.ok) {
 		return result;
 	}

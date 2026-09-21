@@ -261,6 +261,7 @@ export default function QuickSimTab({
 			),
 		[members, runtimeBox],
 	);
+	// 枠の空きは前後のメンバーで埋める（空き枠を作っても得るものはない）
 	const scheduleResult = useMemo(
 		() =>
 			buildQuickSimSchedule(
@@ -268,6 +269,7 @@ export default function QuickSimTab({
 				timeSlots,
 				simulationConfig.simulationDays,
 				specialExclusions,
+				true,
 			),
 		[members, timeSlots, simulationConfig.simulationDays, specialExclusions],
 	);
@@ -825,7 +827,7 @@ export default function QuickSimTab({
 				>
 					{t(
 						"TeamTimeline.quick schedule note",
-						"起用率に合わせて入れ替えを自動設定します。就寝中は入れ替えず、設定を満たせないときだけ就寝中にも入れ替えます。入れ替え時刻の前後30分以内に時間帯設定があればその時間帯で入れ替え、なければ10分刻みの時刻に時間帯をその日だけ追加し、入れ替え元のポケモンだけを回収（清算）します。",
+						"起用率に合わせて入れ替えを自動設定します。就寝中は入れ替えず、設定を満たせないときだけ就寝中にも入れ替えます。入れ替え時刻の前後30分以内に時間帯設定があればその時間帯で入れ替え、なければ10分刻みの時刻に時間帯をその日だけ追加し、入れ替え元のポケモンだけを回収（清算）します。枠が空く時間は、直前まで入っていたポケモンがそのまま居続けます（起用率は設定より増えます）。",
 					)}
 				</Typography>
 				{specialExclusions.size > 0 && (
