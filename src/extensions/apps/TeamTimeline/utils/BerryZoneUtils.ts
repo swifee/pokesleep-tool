@@ -104,3 +104,77 @@ export function getBerryZoneMultiplierForType(
 	}
 	return getBerryZoneBerryMultiplier(ratePercent);
 }
+
+/**
+ * きのみゾーンの展開状態。
+ * 増加率に加えて、どのポケモンの発動で何 % 上がったかを持つ。
+ * 上昇分のエナジーを「ゾーンを展開したポケモンが得たもの」として集計するときに使う。
+ */
+export interface BerryZoneState {
+	/** 現在の増加率(%)（上限適用後） */
+	ratePercent: number;
+	/** 発動したポケモンごとの増加率への寄与分(%)（上限で切り捨てられた分は含まない） */
+	contributionByPokemonId: ReadonlyMap<number, number>;
+}
+
+/** 未展開のきのみゾーン */
+export const INITIAL_BERRY_ZONE_STATE: BerryZoneState = {
+	ratePercent: 0,
+	contributionByPokemonId: new Map<number, number>(),
+};
+
+/**
+ * 発動による増加をポケモンごとに順に反映した新しい状態を返す。
+ * 上限に達して反映されなかった分は寄与に数えない。
+ */
+export function applyBerryZoneRateGains(
+	state: BerryZoneState,
+	gainPercentByPokemonId: ReadonlyMap<number, number>,
+): BerryZoneState {
+	let ratePercent = clampBerryZoneRatePercent(state.ratePercent);
+	const contributionByPokemonId = new Map(state.contributionByPokemonId);
+	for (const [pokemonId, gainPercent] of gainPercentByPokemonId) {
+		const nextRatePercent = addBerryZoneRate(ratePercent, gainPercent);
+		const appliedPercent = nextRatePercent - ratePercent;
+		if (appliedPercent <= 0) {
+			continue;
+		}
+		contributionByPokemonId.set(
+			pokemonId,
+			(contributionByPokemonId.get(pokemonId) ?? 0) + appliedPercent,
+		);
+		ratePercent = nextRatePercent;
+	}
+	return { ratePercent, contributionByPokemonId };
+}
+
+/**
+ * きのみゾーンで上がった分のエナジーを、増加率への寄与分に比例して発動したポケモンへ配分する。
+ * 寄与がないときは空の Map を返す。
+ */
+export function distributeBerryZoneBonusEP(
+	totalBonusEP: number,
+	contributionByPokemonId: ReadonlyMap<number, number>,
+): Map<number, number> {
+	const distributed = new Map<number, number>();
+	if (!Number.isFinite(totalBonusEP) || totalBonusEP <= 0) {
+		return distributed;
+	}
+	let totalContribution = 0;
+	for (const contribution of contributionByPokemonId.values()) {
+		totalContribution += Math.max(0, contribution);
+	}
+	if (totalContribution <= 0) {
+		return distributed;
+	}
+	for (const [pokemonId, contribution] of contributionByPokemonId) {
+		if (contribution <= 0) {
+			continue;
+		}
+		distributed.set(
+			pokemonId,
+			totalBonusEP * (contribution / totalContribution),
+		);
+	}
+	return distributed;
+}

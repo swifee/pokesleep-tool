@@ -46,6 +46,27 @@ Lv6 なら 12 回の発動で上限に達する。
 - 上流の個体値計算機は増加率を統計値として積算するだけで、きのみエナジーへの反映は行っていない
   （`mewtwo warning`）。TeamTimeline のほうが先行している点に注意。
 
+### 上昇分の集計先（きのみゾーン EP）
+
+2026-09-21 から、きのみゾーンで上がった分のエナジーは**ゾーンを展開したポケモン（ミュウツー）が得たもの**として集計する。
+
+- 受け取った側（マゴのみを拾ったポケモン / スキルでマゴのみを配られたポケモン）の
+  `DailySummary.berryEP` / `skillEP` からは上昇分を差し引き、展開したポケモンの `DailySummary.berryZoneEP` に付け替える。
+  合計 EP（`totalEP` / `grandTotalEP`）はきのみ + スキル + 食材（料理） + きのみゾーンで、付け替え前と同じ値になる。
+- 時間帯ごとの内訳は `TimeSlotResult.berryZoneBerryBonusEP`（おてつだいのきのみ + とてもおおきなマゴのみ）と
+  `berryZoneSkillBonusEP`（Berry Burst / Lunar Blessing / Extra Helpful S / Helper Boost のきのみ）に持つ。
+  どちらも「その時間帯の倍率で計算した EP − 倍率なしの EP」で、`runSimulation` が時間帯ごとに算出する
+  （スキル分は `SkillEffectProcessor` が `berryZoneBonusEP` として返す）。
+  既存の `hugeMagoBerryEP` / `directSkillEP` は倍率込みのままなので、タイムライン表の累計 EP は変わらない。
+- 誰に付け替えるかは、その時間帯の開始時点の増加率への**寄与分に比例**して決める
+  （`BerryZoneUtils.applyBerryZoneRateGains` / `distributeBerryZoneBonusEP`）。
+  上限で切り捨てられた発動は寄与に数えない。通常はミュウツー 1 匹なので全額がミュウツーに入る。
+  入れ替えでミュウツーが抜けたあとの上昇分も、展開したミュウツーの `berryZoneEP` に入る。
+- 表示は個別成績・チーム合計の EP 欄で、きのみ / スキル / 料理（食材）の下に
+  `berry_zone` アイコン（ゾーンの楕円の上にカーブしたひし形）付きで出す。**値が 1 以上のときだけ**表示する。
+  再シミュレーションの差分バーにも、差分の絶対値が 1 以上のときだけ同じアイコンで出す。
+- 複数回試行の平均（`MultiTrialSimulator`）も `berryZoneEP` / `totalBerryZoneEP` を平均する。
+
 ## 2. とてもおおきなマゴのみ（イベント）
 
 「ミュウツーをおいかけて」（2026-09-14 / 09-21 の週）のイベント要素。上流の「おおきなきのみ」（big berry）に対応する。

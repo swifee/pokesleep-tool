@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { getSkillSubValue, getSkillValue } from "../../../../util/MainSkill";
 import {
 	addBerryZoneRate,
+	applyBerryZoneRateGains,
 	BERRY_ZONE_MAX_RATE_PERCENT,
 	clampBerryZoneRatePercent,
+	distributeBerryZoneBonusEP,
 	getBerryZoneBerryMultiplier,
 	getBerryZoneMultiplierForType,
 	getBerryZoneRateGainPercent,
 	getBerryZoneStrengthPerTrigger,
+	INITIAL_BERRY_ZONE_STATE,
 	isBerryZoneSkill,
 } from "./BerryZoneUtils";
 
@@ -85,5 +88,77 @@ describe("BerryZoneUtils", () => {
 		expect(getBerryZoneMultiplierForType("psychic", 24)).toBeCloseTo(1.24, 10);
 		expect(getBerryZoneMultiplierForType("electric", 24)).toBe(1);
 		expect(getBerryZoneMultiplierForType("psychic", 0)).toBe(1);
+	});
+
+	describe("applyBerryZoneRateGains", () => {
+		it("発動したポケモンごとに増加率への寄与を積み上げる", () => {
+			const first = applyBerryZoneRateGains(
+				INITIAL_BERRY_ZONE_STATE,
+				new Map([[1, 4]]),
+			);
+			expect(first.ratePercent).toBe(4);
+			expect(first.contributionByPokemonId.get(1)).toBe(4);
+
+			const second = applyBerryZoneRateGains(first, new Map([[1, 2]]));
+			expect(second.ratePercent).toBe(6);
+			expect(second.contributionByPokemonId.get(1)).toBe(6);
+			// 元の状態は変えない
+			expect(first.ratePercent).toBe(4);
+			expect(first.contributionByPokemonId.get(1)).toBe(4);
+		});
+
+		it("上限で切り捨てられた分は寄与に数えない", () => {
+			const state = applyBerryZoneRateGains(
+				INITIAL_BERRY_ZONE_STATE,
+				new Map([
+					[1, 20],
+					[2, 10],
+				]),
+			);
+			expect(state.ratePercent).toBe(BERRY_ZONE_MAX_RATE_PERCENT);
+			expect(state.contributionByPokemonId.get(1)).toBe(20);
+			expect(state.contributionByPokemonId.get(2)).toBe(4);
+
+			const capped = applyBerryZoneRateGains(state, new Map([[3, 2]]));
+			expect(capped.ratePercent).toBe(BERRY_ZONE_MAX_RATE_PERCENT);
+			expect(capped.contributionByPokemonId.has(3)).toBe(false);
+		});
+
+		it("増加がなければ状態は変わらない", () => {
+			const state = applyBerryZoneRateGains(
+				INITIAL_BERRY_ZONE_STATE,
+				new Map([[1, 0]]),
+			);
+			expect(state.ratePercent).toBe(0);
+			expect(state.contributionByPokemonId.size).toBe(0);
+		});
+	});
+
+	describe("distributeBerryZoneBonusEP", () => {
+		it("寄与が1匹なら全額をそのポケモンに配分する", () => {
+			const distributed = distributeBerryZoneBonusEP(500, new Map([[1, 6]]));
+			expect(distributed.get(1)).toBe(500);
+			expect(distributed.size).toBe(1);
+		});
+
+		it("寄与が複数なら寄与分に比例して配分する", () => {
+			const distributed = distributeBerryZoneBonusEP(
+				300,
+				new Map([
+					[1, 20],
+					[2, 4],
+				]),
+			);
+			expect(distributed.get(1)).toBeCloseTo(250, 10);
+			expect(distributed.get(2)).toBeCloseTo(50, 10);
+		});
+
+		it("上昇分がない、または寄与がないときは空になる", () => {
+			expect(distributeBerryZoneBonusEP(0, new Map([[1, 6]])).size).toBe(0);
+			expect(distributeBerryZoneBonusEP(100, new Map()).size).toBe(0);
+			expect(
+				distributeBerryZoneBonusEP(Number.NaN, new Map([[1, 6]])).size,
+			).toBe(0);
+		});
 	});
 });

@@ -2238,6 +2238,11 @@ describe("Berry Zone (Psystrike)", () => {
 
 		expect(baseResult.directEP).toBeGreaterThan(0);
 		expect(zoneResult.directEP).toBeGreaterThan(baseResult.directEP);
+		// 上がった分は berryZoneBonusEP として分かる（directEP に含まれる）
+		expect(baseResult.berryZoneBonusEP).toBe(0);
+		expect(zoneResult.berryZoneBonusEP).toBe(
+			zoneResult.directEP - baseResult.directEP,
+		);
 	});
 
 	it("マゴのみ以外のきのみ由来のスキルEPは変わらない", () => {
@@ -2246,8 +2251,53 @@ describe("Berry Zone (Psystrike)", () => {
 		const withoutZone = createBerryZoneBonusContext([caster]);
 		const withZone = createBerryZoneBonusContext([caster], 24);
 
-		expect(triggerBerryZone(caster, 1, withZone).directEP).toBe(
+		const zoneResult = triggerBerryZone(caster, 1, withZone);
+		expect(zoneResult.directEP).toBe(
 			triggerBerryZone(caster, 1, withoutZone).directEP,
 		);
+		expect(zoneResult.berryZoneBonusEP).toBe(0);
+	});
+
+	it("Extra Helpful S でマゴのみのポケモンを手伝った分もきのみゾーンの上昇分として分かる", () => {
+		const caster = createPokemonBySkill("Extra Helpful S", 3);
+		const natu = new PokemonBoxItem(
+			new PokemonIv({ pokemonName: "Natu", level: 30 }),
+			undefined,
+			9001,
+		);
+		expect(natu.iv.pokemon.type).toBe("psychic");
+		const members = [caster, natu];
+		const trigger = (bonusContext: TeamSkillBonusContext) =>
+			processSkillTriggers(
+				caster,
+				3,
+				50,
+				new SeededRandom(777),
+				[natu],
+				0,
+				members,
+				undefined,
+				false,
+				undefined,
+				undefined,
+				false,
+				bonusContext,
+			);
+
+		const baseResult = trigger(createBerryZoneBonusContext(members));
+		const zoneResult = trigger(createBerryZoneBonusContext(members, 24));
+
+		// 乱数列は同じなので手伝う相手と回数は同じ
+		expect(zoneResult.supportSkillBerryCount).toBe(
+			baseResult.supportSkillBerryCount,
+		);
+		expect(zoneResult.berryZoneBonusEP).toBe(
+			zoneResult.directEP - baseResult.directEP,
+		);
+		const natuBerryCount = zoneResult.supportHelpEvents
+			.filter((event) => event.targetPokemonId === natu.id)
+			.reduce((total, event) => total + event.berryCount, 0);
+		expect(natuBerryCount).toBeGreaterThan(0);
+		expect(zoneResult.berryZoneBonusEP).toBeGreaterThan(0);
 	});
 });

@@ -183,6 +183,7 @@ interface ResimulationMetricSummary {
 	berryEP: number;
 	skillEP: number;
 	cookingEP: number;
+	berryZoneEP: number;
 }
 
 interface ResimulationUndoSnapshot {
@@ -252,6 +253,7 @@ function toResimulationMetricSummary(
 		berryEP: teamSummary.totalBerryEP,
 		skillEP: teamSummary.totalSkillEP,
 		cookingEP: teamSummary.totalCookingEP ?? 0,
+		berryZoneEP: teamSummary.totalBerryZoneEP ?? 0,
 	};
 }
 
@@ -265,6 +267,7 @@ function toResimulationDeltaSummary(
 		berryDeltaEP: next.berryEP - baseline.berryEP,
 		skillDeltaEP: next.skillEP - baseline.skillEP,
 		cookingDeltaEP: next.cookingEP - baseline.cookingEP,
+		berryZoneDeltaEP: next.berryZoneEP - baseline.berryZoneEP,
 	};
 }
 

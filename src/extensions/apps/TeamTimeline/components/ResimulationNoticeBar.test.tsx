@@ -58,6 +58,9 @@ describe("ResimulationNoticeBar", () => {
 		expect(
 			screen.getByTestId("resimulation-result-item-cooking").textContent,
 		).toContain("+5,000");
+		expect(
+			screen.queryByTestId("resimulation-result-item-berry-zone"),
+		).toBeNull();
 		expect(screen.getByTestId("resimulation-result-icon-berry")).toBeDefined();
 		expect(screen.getByTestId("resimulation-result-icon-skill")).toBeDefined();
 		expect(
@@ -69,5 +72,42 @@ describe("ResimulationNoticeBar", () => {
 
 		expect(onUndo).toHaveBeenCalledTimes(1);
 		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+
+	it("shows the berry zone delta only when its rounded value is at least 1", () => {
+		const baseDelta = {
+			averageTotalEP: 100000,
+			totalDeltaEP: 10000,
+			berryDeltaEP: 2000,
+			skillDeltaEP: 3000,
+			cookingDeltaEP: 5000,
+		};
+		const { rerender } = render(
+			<ResimulationNoticeBar
+				open
+				mode="result"
+				deltaSummary={{ ...baseDelta, berryZoneDeltaEP: -1500 }}
+				onResimulate={vi.fn()}
+			/>,
+		);
+
+		expect(
+			screen.getByTestId("resimulation-result-item-berry-zone").textContent,
+		).toContain("-1,500");
+		expect(
+			screen.getByTestId("resimulation-result-icon-berry-zone"),
+		).toBeDefined();
+
+		rerender(
+			<ResimulationNoticeBar
+				open
+				mode="result"
+				deltaSummary={{ ...baseDelta, berryZoneDeltaEP: 0.3 }}
+				onResimulate={vi.fn()}
+			/>,
+		);
+		expect(
+			screen.queryByTestId("resimulation-result-item-berry-zone"),
+		).toBeNull();
 	});
 });

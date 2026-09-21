@@ -171,6 +171,38 @@ describe("runMultiTrialSimulation", () => {
 		).toBe(30);
 	});
 
+	it("averages berry zone EP for pokemon and team summaries", () => {
+		runSimulationMock
+			.mockReturnValueOnce(
+				createSimulationResult(
+					[{ ...createDailySummary(1, 10, 100), berryZoneEP: 300 }],
+					{ ...createTeamSummary(1000), totalBerryZoneEP: 300 },
+				),
+			)
+			.mockReturnValueOnce(
+				createSimulationResult(
+					[{ ...createDailySummary(1, 10, 100), berryZoneEP: 100 }],
+					{ ...createTeamSummary(1000), totalBerryZoneEP: 100 },
+				),
+			);
+
+		const result = runMultiTrialSimulation({
+			team: [],
+			timeSlots: [],
+			config: {
+				...DEFAULT_SIMULATION_CONFIG,
+				initialEnergy: 50,
+				simulationDays: 1,
+			},
+			bonusSettings: defaultBonusSettings,
+			trialCount: 2,
+			initialSeed: 500,
+		});
+
+		expect(result.averageDailySummaries[0]?.berryZoneEP).toBe(200);
+		expect(result.averageTeamSummary.totalBerryZoneEP).toBe(200);
+	});
+
 	it("includes swapped-in pokemon in average summaries and keeps first-seen order", () => {
 		runSimulationMock
 			.mockReturnValueOnce(

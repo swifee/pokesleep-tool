@@ -314,9 +314,14 @@ export function aggregateOverflowIngredients(
  * 1ポケモンの一日合計を計算
  * 時間帯ごとの結果を集計し、各EPを計算して DailySummary を生成
  *
+ * きのみゾーンで上がった分のEPは、受け取ったポケモンのきのみEP・スキルEPから差し引き、
+ * ゾーンを展開したポケモンの `berryZoneEP` として計上する。
+ *
  * @param pokemonId - ポケモンID
  * @param pokemon - ポケモンボックスアイテム
  * @param results - 時間帯結果の配列
+ * @param bonusContext - ボーナスコンテキスト
+ * @param berryZoneEP - このポケモンが展開したきのみゾーンで上がった分のEP（付け替え分）
  * @returns 一日合計
  */
 export function calculateDailySummary(
@@ -324,6 +329,7 @@ export function calculateDailySummary(
 	pokemon: PokemonBoxItem,
 	results: TimeSlotResult[],
 	bonusContext?: DailySummaryBonusContext,
+	berryZoneEP = 0,
 ): DailySummary {
 	// 時間帯ごとの結果を集計
 	let totalHelpCount = 0;
@@ -337,6 +343,8 @@ export function calculateDailySummary(
 	let totalCookingPotCapacityIncrease = 0;
 	let totalTastyChanceIncreasePercent = 0;
 	let totalDreamShardCount = 0;
+	let berryZoneBerryBonusEP = 0;
+	let berryZoneSkillBonusEP = 0;
 
 	for (const result of results) {
 		totalHelpCount += result.helpCount;
@@ -350,6 +358,8 @@ export function calculateDailySummary(
 		totalCookingPotCapacityIncrease += result.cookingPotCapacityIncrease ?? 0;
 		totalTastyChanceIncreasePercent += result.tastyChanceIncreasePercent ?? 0;
 		totalDreamShardCount += result.dreamShardCount ?? 0;
+		berryZoneBerryBonusEP += result.berryZoneBerryBonusEP ?? 0;
+		berryZoneSkillBonusEP += result.berryZoneSkillBonusEP ?? 0;
 	}
 
 	// 食材を集計（通常 + スキル）
@@ -362,6 +372,7 @@ export function calculateDailySummary(
 	// 各EPを計算
 	// きのみゾーンの倍率は時間帯ごとに変わるため、時間帯単位で計算して合計する。
 	// とてもおおきなマゴのみのEPはシミュレーション時に算出済みのため、ここでは加算のみ行う。
+	// きのみゾーンで上がった分はゾーンを展開したポケモンへ付け替えるため差し引く。
 	const berryEP =
 		results.reduce(
 			(total, result) =>
@@ -372,13 +383,15 @@ export function calculateDailySummary(
 					applyBerryZoneMultiplier(bonusContext, result.berryZoneMultiplier),
 				),
 			0,
-		) + hugeMagoBerryEP;
+		) +
+		hugeMagoBerryEP -
+		berryZoneBerryBonusEP;
 	const ingredientEP = calculateIngredientEP(totalIngredients, bonusContext);
 
-	// スキルEPの計算: 直接エナジー獲得値のみを集計
-	const skillEP = totalDirectSkillEP;
+	// スキルEPの計算: 直接エナジー獲得値からきのみゾーンで上がった分を除いて集計
+	const skillEP = totalDirectSkillEP - berryZoneSkillBonusEP;
 
-	const totalEP = berryEP + ingredientEP + skillEP;
+	const totalEP = berryEP + ingredientEP + skillEP + berryZoneEP;
 
 	return {
 		pokemonId,
@@ -392,6 +405,7 @@ export function calculateDailySummary(
 		berryEP,
 		ingredientEP,
 		skillEP,
+		berryZoneEP,
 		totalEP,
 		totalSkillOverflowCount,
 		totalOverflowIngredients,
@@ -419,6 +433,7 @@ export function calculateTeamSummary(
 	let totalHugeMagoBerryEP = 0;
 	let totalIngredientEP = 0;
 	let totalSkillEP = 0;
+	let totalBerryZoneEP = 0;
 	let totalPresentCandyCount = 0;
 	let totalCookingPotCapacityIncrease = 0;
 	let totalTastyChanceIncreasePercent = 0;
@@ -432,6 +447,7 @@ export function calculateTeamSummary(
 		totalHugeMagoBerryEP += summary.hugeMagoBerryEP ?? 0;
 		totalIngredientEP += summary.ingredientEP;
 		totalSkillEP += summary.skillEP;
+		totalBerryZoneEP += summary.berryZoneEP ?? 0;
 		totalPresentCandyCount += summary.totalPresentCandyCount;
 		totalCookingPotCapacityIncrease += summary.totalCookingPotCapacityIncrease;
 		totalTastyChanceIncreasePercent += summary.totalTastyChanceIncreasePercent;
@@ -453,7 +469,8 @@ export function calculateTeamSummary(
 		}),
 	);
 
-	const grandTotalEP = totalBerryEP + totalIngredientEP + totalSkillEP;
+	const grandTotalEP =
+		totalBerryEP + totalIngredientEP + totalSkillEP + totalBerryZoneEP;
 
 	return {
 		totalIngredients,
@@ -462,6 +479,7 @@ export function calculateTeamSummary(
 		totalHugeMagoBerryEP,
 		totalIngredientEP,
 		totalSkillEP,
+		totalBerryZoneEP,
 		grandTotalEP,
 		totalPresentCandyCount,
 		totalCookingPotCapacityIncrease,

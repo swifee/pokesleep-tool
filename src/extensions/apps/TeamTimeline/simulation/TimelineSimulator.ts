@@ -39,8 +39,11 @@ import {
 	type Weekday,
 } from "../types/TimeSlotTypes";
 import {
-	addBerryZoneRate,
+	applyBerryZoneRateGains,
+	type BerryZoneState,
+	distributeBerryZoneBonusEP,
 	getBerryZoneMultiplierForType,
+	INITIAL_BERRY_ZONE_STATE,
 } from "../utils/BerryZoneUtils";
 import { HUGE_MAGO_BERRY_TYPE } from "../utils/HugeMagoBerryUtils";
 import { buildStrengthParameterFromTimelineBonusSettings } from "../utils/TimelineBonusSettingsBridge";
@@ -73,6 +76,7 @@ import {
 } from "./EnergyCalculator";
 import {
 	applyBerryZoneMultiplier,
+	calculateBerryEP,
 	calculateDailySummary,
 	calculateHugeMagoBerryEP,
 	calculateTeamSummary,
@@ -773,6 +777,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				totalBerryEP: 0,
 				totalIngredientEP: 0,
 				totalSkillEP: 0,
+				totalBerryZoneEP: 0,
 				grandTotalEP: 0,
 				totalPresentCandyCount: 0,
 				totalCookingPotCapacityIncrease: 0,
@@ -880,9 +885,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 	const slotResults = new Map<string, TimeSlotResult[]>();
 	const pokemonResults = new Map<number, TimeSlotResult[]>(); // pokemonId -> results
 
-	// 7.5. 「きのみゾーン」の増加率(%)（フィールド単位の状態のため、チーム全体で共有する）
+	// 7.5. 「きのみゾーン」の展開状態（フィールド単位の状態のため、チーム全体で共有する）
 	// フィールド移動でリセットされるため、シミュレーション開始時点は未展開とする。
-	let berryZoneRatePercent = 0;
+	// 上がった分のEPは、増加率への寄与に応じてゾーンを展開したポケモンへ付け替える。
+	let berryZoneState: BerryZoneState = INITIAL_BERRY_ZONE_STATE;
+	const berryZoneEPByPokemonId = new Map<number, number>();
 
 	// 8. 時間帯ループ
 	let activeDayIndex = -1;
@@ -945,14 +952,16 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				getPokemonBonusContext(pokemon).skill,
 			);
 		});
+		// この時間帯に回収するきのみへ適用するきのみゾーン。
+		// 発動による増加は次の時間帯から反映する。
+		const berryZoneStateAtSlotStart = berryZoneState;
+		const berryZoneRatePercentAtSlotStart =
+			berryZoneStateAtSlotStart.ratePercent;
 		const teamSkillBonusContext: TeamSkillBonusContext = {
 			fieldBonus: bonusSettings.fieldBonus,
 			byPokemonId: teamSkillBonusByPokemonId,
-			berryZoneRatePercent,
+			berryZoneRatePercent: berryZoneRatePercentAtSlotStart,
 		};
-		// この時間帯に回収するきのみへ適用する増加率。
-		// 発動による増加は次の時間帯から反映する。
-		const berryZoneRatePercentAtSlotStart = berryZoneRatePercent;
 
 		// 睡眠開始を追跡
 		if (getDisplayLabel(slot) === "sleep") {
@@ -1212,13 +1221,18 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		}
 
 		// 「きのみゾーン」の増加率を反映（効果は次の時間帯から、上限あり）
-		let berryZoneRateGainPercent = 0;
-		skillResults.forEach((skillResult) => {
-			berryZoneRateGainPercent += skillResult.berryZoneRateGainPercent;
+		const berryZoneRateGainByPokemonId = new Map<number, number>();
+		skillResults.forEach((skillResult, pokemonId) => {
+			if (skillResult.berryZoneRateGainPercent > 0) {
+				berryZoneRateGainByPokemonId.set(
+					pokemonId,
+					skillResult.berryZoneRateGainPercent,
+				);
+			}
 		});
-		berryZoneRatePercent = addBerryZoneRate(
-			berryZoneRatePercent,
-			berryZoneRateGainPercent,
+		berryZoneState = applyBerryZoneRateGains(
+			berryZoneState,
+			berryZoneRateGainByPokemonId,
 		);
 
 		// Phase 2: 各ポケモンのげんき更新と結果生成
@@ -1341,6 +1355,46 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				state.inventoryCount = 0;
 			}
 
+			const pokemonBonusContext = getPokemonBonusContext(state.pokemon);
+			const hugeMagoBerryEP = calculateHugeMagoBerryEP(
+				state.pokemon.iv.level,
+				collectedHugeMagoBerryCount,
+				applyBerryZoneMultiplier(
+					pokemonBonusContext.hugeMagoBerry,
+					getBerryZoneMultiplierForType(
+						HUGE_MAGO_BERRY_TYPE,
+						berryZoneRatePercentAtSlotStart,
+					),
+				),
+			);
+			const ownBerryZoneMultiplier = getBerryZoneMultiplierForType(
+				state.pokemon.iv.pokemon.type,
+				berryZoneRatePercentAtSlotStart,
+			);
+			// きのみゾーンで上がった分（ゾーンを展開したポケモンへ付け替える）
+			const berryZoneBerryBonusEP =
+				berryZoneRatePercentAtSlotStart > 0
+					? calculateBerryEP(
+							state.pokemon,
+							collectedBerryCount,
+							applyBerryZoneMultiplier(
+								pokemonBonusContext.dailySummary,
+								ownBerryZoneMultiplier,
+							),
+						) -
+						calculateBerryEP(
+							state.pokemon,
+							collectedBerryCount,
+							pokemonBonusContext.dailySummary,
+						) +
+						hugeMagoBerryEP -
+						calculateHugeMagoBerryEP(
+							state.pokemon.iv.level,
+							collectedHugeMagoBerryCount,
+							pokemonBonusContext.hugeMagoBerry,
+						)
+					: 0;
+
 			// TimeSlotResult を生成
 			const result: TimeSlotResult = {
 				slotId: slot.id,
@@ -1352,17 +1406,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				skillTriggerCount: helpOutput.skillTriggerCount,
 				berryCount: collectedBerryCount,
 				hugeMagoBerryCount: collectedHugeMagoBerryCount,
-				hugeMagoBerryEP: calculateHugeMagoBerryEP(
-					state.pokemon.iv.level,
-					collectedHugeMagoBerryCount,
-					applyBerryZoneMultiplier(
-						getPokemonBonusContext(state.pokemon).hugeMagoBerry,
-						getBerryZoneMultiplierForType(
-							HUGE_MAGO_BERRY_TYPE,
-							berryZoneRatePercentAtSlotStart,
-						),
-					),
-				),
+				hugeMagoBerryEP,
 				ingredients: collectedHelpIngredients,
 				skillIngredients: collectedSkillIngredients,
 				energyStart: state.currentEnergy, // 開始時のげんき（時間減少前）
@@ -1489,10 +1533,9 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 				badDreamsTotalDamageGiven: skillResult.badDreamsTotalDamage,
 				badDreamsDamageTaken: actualBadDreamsDamage,
 				berryZoneRatePercent: berryZoneRatePercentAtSlotStart,
-				berryZoneMultiplier: getBerryZoneMultiplierForType(
-					state.pokemon.iv.pokemon.type,
-					berryZoneRatePercentAtSlotStart,
-				),
+				berryZoneMultiplier: ownBerryZoneMultiplier,
+				berryZoneBerryBonusEP,
+				berryZoneSkillBonusEP: skillResult.berryZoneBonusEP,
 			};
 
 			slotResultsForThisSlot.push(result);
@@ -1515,6 +1558,23 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			state.berryBurstDisguiseLocked =
 				skillResult.berryBurstDisguiseLockedAfter;
 		}
+
+		// きのみゾーンで上がった分を、この時間帯のゾーンを展開したポケモンへ付け替える
+		let slotBerryZoneBonusEP = 0;
+		for (const result of slotResultsForThisSlot) {
+			slotBerryZoneBonusEP +=
+				(result.berryZoneBerryBonusEP ?? 0) +
+				(result.berryZoneSkillBonusEP ?? 0);
+		}
+		distributeBerryZoneBonusEP(
+			slotBerryZoneBonusEP,
+			berryZoneStateAtSlotStart.contributionByPokemonId,
+		).forEach((bonusEP, pokemonId) => {
+			berryZoneEPByPokemonId.set(
+				pokemonId,
+				(berryZoneEPByPokemonId.get(pokemonId) ?? 0) + bonusEP,
+			);
+		});
 
 		// 8.1. この時間帯の入れ替えを適用 (計算後に移動)
 		const slotSwaps =
@@ -1629,6 +1689,7 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 					state.pokemon,
 					results,
 					getPokemonBonusContext(state.pokemon).dailySummary,
+					berryZoneEPByPokemonId.get(pokemonId) ?? 0,
 				),
 			);
 		}
@@ -1643,7 +1704,11 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 			if (summary) {
 				summary.cookingEP = Math.round(attribution.attributedCookingEP);
 				// 料理シミュON時: totalEPにcookingEPを加算し、ingredientEPの代わりにする
-				summary.totalEP = summary.berryEP + summary.cookingEP + summary.skillEP;
+				summary.totalEP =
+					summary.berryEP +
+					summary.cookingEP +
+					summary.skillEP +
+					(summary.berryZoneEP ?? 0);
 			}
 		}
 	}
@@ -1658,7 +1723,8 @@ export function runSimulation(input: SimulationInput): SimulationResult {
 		teamSummary.grandTotalEP =
 			teamSummary.totalBerryEP +
 			cookingResult.totalCookingEP +
-			teamSummary.totalSkillEP;
+			teamSummary.totalSkillEP +
+			(teamSummary.totalBerryZoneEP ?? 0);
 	}
 
 	return {
@@ -1680,7 +1746,9 @@ export interface HelpingSimulationSnapshot {
 	slotResults: Map<string, TimeSlotResult[]>;
 	totalBerryEP: number;
 	totalSkillEP: number;
-	/** 料理なしの総合計 EP（きのみ + 食材 + スキル）。料理 OFF や空の結果のときに返す */
+	/** きのみゾーンで上がった分の EP 合計（ゾーンを展開したポケモンに付け替えた分） */
+	totalBerryZoneEP: number;
+	/** 料理なしの総合計 EP（きのみ + 食材 + スキル + きのみゾーン）。料理 OFF や空の結果のときに返す */
 	grandTotalEPWithoutCooking: number;
 	seed: number;
 	startDayOfWeek: Weekday;
@@ -1713,6 +1781,7 @@ export function runHelpingSimulation(
 		slotResults: result.slotResults,
 		totalBerryEP: result.teamSummary.totalBerryEP,
 		totalSkillEP: result.teamSummary.totalSkillEP,
+		totalBerryZoneEP: result.teamSummary.totalBerryZoneEP ?? 0,
 		grandTotalEPWithoutCooking: result.teamSummary.grandTotalEP,
 		seed: input.config.seed,
 		startDayOfWeek,
@@ -1741,6 +1810,9 @@ export function calculateGrandTotalEPWithCooking(
 		snapshot.startDayOfWeek,
 	);
 	return (
-		snapshot.totalBerryEP + cookingResult.totalCookingEP + snapshot.totalSkillEP
+		snapshot.totalBerryEP +
+		cookingResult.totalCookingEP +
+		snapshot.totalSkillEP +
+		snapshot.totalBerryZoneEP
 	);
 }

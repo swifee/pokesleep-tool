@@ -389,6 +389,16 @@ export interface TimeSlotResult {
 	berryZoneMultiplier?: number;
 	/** この時間帯の開始時点で展開されていた「きのみゾーン」の増加率(%) */
 	berryZoneRatePercent?: number;
+	/**
+	 * きのみゾーンで上がった分のきのみEP（おてつだいのきのみ + とてもおおきなマゴのみ）。
+	 * きのみEPに含まれており、集計時にゾーンを展開したポケモンへ付け替える。
+	 */
+	berryZoneBerryBonusEP?: number;
+	/**
+	 * きのみゾーンで上がった分のスキル由来きのみEP（Berry Burst / Extra Helpful S など）。
+	 * `directSkillEP` に含まれており、集計時にゾーンを展開したポケモンへ付け替える。
+	 */
+	berryZoneSkillBonusEP?: number;
 }
 
 /**
@@ -413,12 +423,17 @@ export interface DailySummary {
 	totalSkillIngredients?: IngredientResult[];
 
 	// EP（エナジーポイント）
-	/** きのみEP */
+	/** きのみEP（きのみゾーンで上がった分は除く） */
 	berryEP: number;
 	/** 食材EP */
 	ingredientEP: number;
-	/** スキルEP */
+	/** スキルEP（きのみゾーンで上がった分は除く） */
 	skillEP: number;
+	/**
+	 * きのみゾーンEP: このポケモンが展開したきのみゾーンでチームのきのみEPが上がった分。
+	 * 受け取った側の `berryEP` / `skillEP` からは差し引かれている。
+	 */
+	berryZoneEP?: number;
 	/** 合計EP */
 	totalEP: number;
 	/** 合計スキル発動失敗回数 */
@@ -445,7 +460,7 @@ export interface DailySummary {
 export interface TeamSummary {
 	/** 合計食材（種類別） */
 	totalIngredients: IngredientResult[];
-	/** 合計きのみEP */
+	/** 合計きのみEP（きのみゾーンで上がった分は除く） */
 	totalBerryEP: number;
 	/** とてもおおきなマゴのみのチーム合計個数 */
 	totalHugeMagoBerryCount?: number;
@@ -453,8 +468,10 @@ export interface TeamSummary {
 	totalHugeMagoBerryEP?: number;
 	/** 合計食材EP */
 	totalIngredientEP: number;
-	/** 合計スキルEP */
+	/** 合計スキルEP（きのみゾーンで上がった分は除く） */
 	totalSkillEP: number;
+	/** きのみゾーンEP合計（ゾーンを展開したポケモンに付け替えた上昇分） */
+	totalBerryZoneEP?: number;
 	/** 総合計EP */
 	grandTotalEP: number;
 	/** Ingredient Magnet S (Present) の合計アメ数 */

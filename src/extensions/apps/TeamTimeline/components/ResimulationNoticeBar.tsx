@@ -9,7 +9,12 @@ export interface ResimulationDeltaSummary {
 	berryDeltaEP: number;
 	skillDeltaEP: number;
 	cookingDeltaEP: number;
+	/** きのみゾーンEPの差分（省略時は 0 扱い） */
+	berryZoneDeltaEP?: number;
 }
+
+/** きのみゾーンEPの差分を表示する最小絶対値（±1 未満は表示しない） */
+const MIN_VISIBLE_BERRY_ZONE_DELTA_EP = 1;
 
 interface ResimulationNoticeBarProps {
 	open: boolean;
@@ -37,6 +42,9 @@ const ResimulationNoticeBar = React.memo(
 	}: ResimulationNoticeBarProps) => {
 		const { t } = useTranslation();
 		const isResultMode = mode === "result" && deltaSummary !== null;
+		const berryZoneDeltaEP = deltaSummary?.berryZoneDeltaEP ?? 0;
+		const shouldShowBerryZoneDelta =
+			Math.abs(Math.round(berryZoneDeltaEP)) >= MIN_VISIBLE_BERRY_ZONE_DELTA_EP;
 
 		return (
 			<Slide direction="up" in={open} mountOnEnter unmountOnExit>
@@ -153,6 +161,24 @@ const ResimulationNoticeBar = React.memo(
 											/>
 											{formatSignedValue(deltaSummary.cookingDeltaEP)}
 										</Box>
+										{shouldShowBerryZoneDelta && (
+											<Box
+												component="span"
+												sx={{
+													display: "inline-flex",
+													alignItems: "center",
+													gap: "2px",
+												}}
+												data-testid="resimulation-result-item-berry-zone"
+												title="きのみゾーン"
+											>
+												<TeamTimelineIcon
+													name="berry_zone"
+													data-testid="resimulation-result-icon-berry-zone"
+												/>
+												{formatSignedValue(berryZoneDeltaEP)}
+											</Box>
+										)}
 									</Typography>
 								</Box>
 								<Box

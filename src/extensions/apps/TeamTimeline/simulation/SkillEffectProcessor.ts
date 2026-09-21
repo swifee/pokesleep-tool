@@ -160,6 +160,25 @@ function resolveBerryStrengthBonus(
 	);
 }
 
+function hasBerryZone(
+	bonusContext?: TeamSkillBonusContext,
+): bonusContext is TeamSkillBonusContext {
+	return (bonusContext?.berryZoneRatePercent ?? 0) > 0;
+}
+
+/**
+ * きのみゾーンを掛けないボーナスコンテキスト。
+ * きのみゾーンで上がった分（= 展開したポケモンへ付け替える分）を差分で求めるために使う。
+ */
+function withoutBerryZone(
+	bonusContext?: TeamSkillBonusContext,
+): TeamSkillBonusContext | undefined {
+	if (!hasBerryZone(bonusContext)) {
+		return bonusContext;
+	}
+	return { ...bonusContext, berryZoneRatePercent: 0 };
+}
+
 export interface SkillAnalysisContext {
 	activeTeamMemberIds?: ReadonlySet<number>;
 	targetableTeamMembers?: readonly PokemonBoxItem[];
@@ -246,6 +265,42 @@ function calculateDistributedBerryEp(
 		}
 	}
 	return totalEp;
+}
+
+/**
+ * `calculateDistributedBerryEp` に加えて、きのみゾーンで上がった分（EP に含まれる）も返す。
+ */
+function calculateDistributedBerryEpWithZoneBonus(
+	activeTeam: readonly PokemonBoxItem[],
+	selfPokemonId: number,
+	selfBerryCount: number,
+	otherBerryCount: number,
+	triggerCount: number,
+	multiplier: number,
+	bonusContext?: TeamSkillBonusContext,
+): { ep: number; berryZoneBonusEP: number } {
+	const ep = calculateDistributedBerryEp(
+		activeTeam,
+		selfPokemonId,
+		selfBerryCount,
+		otherBerryCount,
+		triggerCount,
+		multiplier,
+		bonusContext,
+	);
+	if (!hasBerryZone(bonusContext)) {
+		return { ep, berryZoneBonusEP: 0 };
+	}
+	const epWithoutZone = calculateDistributedBerryEp(
+		activeTeam,
+		selfPokemonId,
+		selfBerryCount,
+		otherBerryCount,
+		triggerCount,
+		multiplier,
+		withoutBerryZone(bonusContext),
+	);
+	return { ep, berryZoneBonusEP: ep - epWithoutZone };
 }
 
 function hasPokemonName(
@@ -394,6 +449,8 @@ export interface SkillEffectResult {
 	badDreamsTotalDamage: number;
 	/** Berry Zone (Psystrike): この時間帯の発動で増えた「きのみゾーン」増加率(%)（上限適用前） */
 	berryZoneRateGainPercent: number;
+	/** きのみゾーンで上がった分のスキル由来きのみEP（`directEP` に含まれる） */
+	berryZoneBonusEP: number;
 	/** Moonlightチームメイトターゲット: Map<pokemonId, 回復量> */
 	moonlightTargets: Map<number, number>;
 	/** Energizing Cheer Sターゲット: Map<pokemonId, 回復量> */
@@ -549,12 +606,18 @@ function simulateSupportHelps(
 	random: SeededRandom,
 	bonusContext?: TeamSkillBonusContext,
 	activeTeamMemberIds?: ReadonlySet<number>,
-): { berryCount: number; berryEP: number; ingredients: IngredientResult[] } {
+): {
+	berryCount: number;
+	berryEP: number;
+	/** きのみゾーンで上がった分（`berryEP` に含まれる） */
+	berryZoneBonusEP: number;
+	ingredients: IngredientResult[];
+} {
 	if (helpCount <= 0) {
-		return { berryCount: 0, berryEP: 0, ingredients: [] };
+		return { berryCount: 0, berryEP: 0, berryZoneBonusEP: 0, ingredients: [] };
 	}
 	if (activeTeamMemberIds && !activeTeamMemberIds.has(target.id)) {
-		return { berryCount: 0, berryEP: 0, ingredients: [] };
+		return { berryCount: 0, berryEP: 0, berryZoneBonusEP: 0, ingredients: [] };
 	}
 
 	const ingredientMap = new Map<IngredientName, number>();
@@ -579,10 +642,24 @@ function simulateSupportHelps(
 		fieldBonus,
 		berryStrengthBonus,
 	);
+	const berryEPWithoutZone = hasBerryZone(bonusContext)
+		? calculateBerryEpWithBonus(
+				target.iv.pokemon.type,
+				target.iv.level,
+				totalBerryCount,
+				fieldBonus,
+				resolveBerryStrengthBonus(target, withoutBerryZone(bonusContext)),
+			)
+		: berryEP;
 	const ingredients = Array.from(ingredientMap.entries()).map(
 		([name, count]) => ({ name, count }),
 	);
-	return { berryCount: totalBerryCount, berryEP, ingredients };
+	return {
+		berryCount: totalBerryCount,
+		berryEP,
+		berryZoneBonusEP: berryEP - berryEPWithoutZone,
+		ingredients,
+	};
 }
 
 function getIngredientDrawPool(pokemon: PokemonBoxItem): IngredientName[] {
@@ -682,6 +759,7 @@ export function processSkillTriggers(
 	let badDreamsHitCount = 0;
 	let badDreamsTotalDamage = 0;
 	let berryZoneRateGainPercent = 0;
+	let totalBerryZoneBonusEP = 0;
 	const skillIngredientMap = new Map<IngredientName, number>();
 	let energy = currentEnergy;
 	const moonlightTargets = new Map<number, number>();
@@ -724,6 +802,7 @@ export function processSkillTriggers(
 			badDreamsHitCount: 0,
 			badDreamsTotalDamage: 0,
 			berryZoneRateGainPercent: 0,
+			berryZoneBonusEP: 0,
 			moonlightTargets,
 			energizingCheerTargets,
 			energizingCheerEvents,
@@ -864,7 +943,7 @@ export function processSkillTriggers(
 					totalBerryBurstGreatSuccessCount += 1;
 				}
 
-				totalDirectEP += calculateDistributedBerryEp(
+				const distributed = calculateDistributedBerryEpWithZoneBonus(
 					activeTeam,
 					pokemon.id,
 					selfBerryCount,
@@ -873,6 +952,8 @@ export function processSkillTriggers(
 					multiplier,
 					bonusContext,
 				);
+				totalDirectEP += distributed.ep;
+				totalBerryZoneBonusEP += distributed.berryZoneBonusEP;
 			}
 		} else if (isBerryZoneSkill(skillName)) {
 			// Berry Zone (Psystrike): カビゴンのエナジーを増やしつつ、
@@ -915,7 +996,7 @@ export function processSkillTriggers(
 					skillLevel,
 					clampedSpeciesCount,
 				);
-				totalDirectEP += calculateDistributedBerryEp(
+				const distributed = calculateDistributedBerryEpWithZoneBonus(
 					activeTeamMembers,
 					pokemon.id,
 					myBerryCount,
@@ -924,6 +1005,8 @@ export function processSkillTriggers(
 					1,
 					bonusContext,
 				);
+				totalDirectEP += distributed.ep;
+				totalBerryZoneBonusEP += distributed.berryZoneBonusEP;
 			}
 		}
 
@@ -972,6 +1055,7 @@ export function processSkillTriggers(
 						totalSupportBerryCount += supportResult.berryCount;
 						totalSupportBerryEP += supportResult.berryEP;
 						totalDirectEP += supportResult.berryEP;
+						totalBerryZoneBonusEP += supportResult.berryZoneBonusEP;
 						for (const ingredient of supportResult.ingredients) {
 							addIngredientCount(
 								skillIngredientMap,
@@ -1070,6 +1154,7 @@ export function processSkillTriggers(
 						badDreamsHitCount += nestedResult.badDreamsHitCount;
 						badDreamsTotalDamage += nestedResult.badDreamsTotalDamage;
 						berryZoneRateGainPercent += nestedResult.berryZoneRateGainPercent;
+						totalBerryZoneBonusEP += nestedResult.berryZoneBonusEP;
 
 						for (const ing of nestedResult.skillIngredients) {
 							addIngredientCount(skillIngredientMap, ing.name, ing.count);
@@ -1136,6 +1221,7 @@ export function processSkillTriggers(
 					totalSupportBerryCount += supportResult.berryCount;
 					totalSupportBerryEP += supportResult.berryEP;
 					totalDirectEP += supportResult.berryEP;
+					totalBerryZoneBonusEP += supportResult.berryZoneBonusEP;
 					for (const ingredient of supportResult.ingredients) {
 						addIngredientCount(
 							skillIngredientMap,
@@ -1182,6 +1268,7 @@ export function processSkillTriggers(
 					totalSupportBerryCount += supportResult.berryCount;
 					totalSupportBerryEP += supportResult.berryEP;
 					totalDirectEP += supportResult.berryEP;
+					totalBerryZoneBonusEP += supportResult.berryZoneBonusEP;
 					for (const ingredient of supportResult.ingredients) {
 						addIngredientCount(
 							skillIngredientMap,
@@ -1559,6 +1646,7 @@ export function processSkillTriggers(
 			badDreamsHitCount += nestedResult.badDreamsHitCount;
 			badDreamsTotalDamage += nestedResult.badDreamsTotalDamage;
 			berryZoneRateGainPercent += nestedResult.berryZoneRateGainPercent;
+			totalBerryZoneBonusEP += nestedResult.berryZoneBonusEP;
 			energy = nestedResult.energyAfterSelfRecovery;
 
 			for (const ing of nestedResult.skillIngredients) {
@@ -1632,6 +1720,7 @@ export function processSkillTriggers(
 		badDreamsHitCount,
 		badDreamsTotalDamage,
 		berryZoneRateGainPercent,
+		berryZoneBonusEP: totalBerryZoneBonusEP,
 		moonlightTargets,
 		energizingCheerTargets,
 		energizingCheerEvents,
