@@ -6667,6 +6667,74 @@
 		}
 	},
 	{
+		"id": 590,
+		"name": "Foongus",
+		"arrival": "2026-10-05",
+		"sleepType": "dozing",
+		"exp": 600,
+		"type": "poison",
+		"specialty": "Ingredients",
+		"skill": "Charge Strength S",
+		"fp": 5,
+		"frequency": 5700,
+		"ingRate": 17.4,
+		"skillRate": 3.5,
+		"ancestor": 590,
+		"evolutionCount": 0,
+		"evolutionLeft": 1,
+		"isFullyEvolved": false,
+		"carryLimit": 12,
+		"ing1": {
+			"name": "mushroom",
+			"c1": 2,
+			"c2": 5,
+			"c3": 7
+		},
+		"ing2": {
+			"name": "egg",
+			"c2": 7,
+			"c3": 10
+		},
+		"ing3": {
+			"name": "tomato",
+			"c3": 11
+		}
+	},
+	{
+		"id": 591,
+		"name": "Amoonguss",
+		"arrival": "2026-10-05",
+		"sleepType": "dozing",
+		"exp": 600,
+		"type": "poison",
+		"specialty": "Ingredients",
+		"skill": "Charge Strength S",
+		"fp": 12,
+		"frequency": 3500,
+		"ingRate": 20.4,
+		"skillRate": 4.7,
+		"ancestor": 590,
+		"evolutionCount": 1,
+		"evolutionLeft": 0,
+		"isFullyEvolved": true,
+		"carryLimit": 14,
+		"ing1": {
+			"name": "mushroom",
+			"c1": 2,
+			"c2": 5,
+			"c3": 7
+		},
+		"ing2": {
+			"name": "egg",
+			"c2": 7,
+			"c3": 10
+		},
+		"ing3": {
+			"name": "tomato",
+			"c3": 11
+		}
+	},
+	{
 		"id": 627,
 		"name": "Rufflet",
 		"arrival": "2025-01-20",
