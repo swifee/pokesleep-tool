@@ -52,6 +52,15 @@ gh pr create --repo swifee/pokesleep-tool --base develop \
 If `git merge upstream/main` reports *Already up to date*, delete the sync branch
 and stop.
 
+The skill's script (`.claude/skills/upstream-sync/scripts/sync-upstream.ps1`)
+automates these steps with these outcomes:
+
+| Exit | Meaning |
+|---|---|
+| `0` | Upstream already contained in `develop` (no sync branch is created), or the merge, verification, push and PR all succeeded. |
+| `1` | A command failed (fetch, pull, `npm run typecheck`, `npm run build`, push, `gh`). Nothing after the failing step ran. |
+| `2` | The merge stopped on conflicts. The merge is left in progress on the sync branch and the conflicted files are listed; resolve them, `git add`, `git commit --no-edit`, then continue from step 3. |
+
 Never `git reset --hard` or `git checkout --theirs` a whole file to get past a
 conflict: every conflicting file below carries fork-only code that upstream does
 not have.
